@@ -234,7 +234,7 @@ function createDataService(db) {
       if (!(profile && teamIds.has(id(profile.teamId || profile.teamCode))) && !occurs) throw error('DATA_FORBIDDEN', '无权查看该球员的数据')
     }
     const matchIds = matches.map(row => row._id)
-    const events = await readByIds(db,'match_events','matchId',matchIds)
+    let events = await readByIds(db,'match_events','matchId',matchIds)
     const lineups = await readByIds(db,'match_lineup_snapshots','matchId',matchIds)
     const lineupByMatchSide = new Map()
     for (const lineup of lineups) {
@@ -259,6 +259,14 @@ function createDataService(db) {
     ])
     const divisionsById = Object.fromEntries(divisions.map(row => [id(row._id || row.id),row]))
     const tournamentsById = Object.fromEntries(tournaments.map(row => [id(row._id || row.id),row]))
+    // 轻量模式赛事是纯工具：比赛/比分/结果不进入数据中心统一统计、生涯与奖项口径。
+    // 只在查询入口按赛事显式标记（tournaments.lightweightMode）过滤，不改 shared 内统计与排名算法本体。
+    const lightweightTournamentIds = new Set(tournaments.filter(row => row.lightweightMode === true).map(row => id(row._id || row.id)))
+    if (lightweightTournamentIds.size) {
+      matches = matches.filter(row => !lightweightTournamentIds.has(id(row.tournamentId)))
+      const keptMatchIds = new Set(matches.map(row => id(row._id)))
+      events = events.filter(row => keptMatchIds.has(id(row.matchId || row.match_id)))
+    }
     const teamsById = Object.fromEntries(matchTeamProfiles.map(row => [id(row._id),row]))
     const participantIds = [...new Set(matches.flatMap(match => [...matchParticipantIds(match,events)]))]
     const matchPlayerProfiles = await readByIds(db,'players','_id',participantIds)

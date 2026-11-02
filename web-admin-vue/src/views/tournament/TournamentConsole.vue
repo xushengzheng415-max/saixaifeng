@@ -172,6 +172,7 @@ import { ArrowRight, Back, Calendar, CircleCheck, DocumentChecked, Grid, Locatio
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction, confirmCompetitionPlan, getFileUrl, queryById, queryList } from '../../utils/cloud'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
+import { isLightweightTournament } from '../../utils/lightweightMode'
 
 const route = useRoute()
 const router = useRouter()
@@ -464,6 +465,12 @@ const PAGE_TARGETS = [
   { keys: ['球队', '参赛'], label: '参赛球队', path: 'teams' },
   { keys: ['赛事信息', '基本信息', '编辑赛事'], label: '编辑赛事', path: 'edit' }
 ]
+// 轻量模式下不提供报名、名单、裁判与补录流程，助手不再把人带到这些窗口。
+const LIGHTWEIGHT_HIDDEN_PAGE_PATHS = ['signups', 'registration', 'claim-reviews', 'staff-results', 'roster-exceptions', 'roster-changes', 'referees']
+const lightweightMode = computed(() => isLightweightTournament(tournament.value))
+const pageTargets = computed(() => lightweightMode.value
+  ? PAGE_TARGETS.filter(item => !LIGHTWEIGHT_HIDDEN_PAGE_PATHS.includes(item.path))
+  : PAGE_TARGETS)
 
 function respond(raw) {
   const text = String(raw || '').trim()
@@ -486,7 +493,7 @@ function respond(raw) {
 
   // 明确表达要去某个模块：直接带入对应窗口
   if (has('去', '打开', '进入', '带我', '怎么去', '入口', '页面', '窗口', '跳转') && !has('场地', '地点', '在哪', '赛区', '身价', '收费')) {
-    const page = PAGE_TARGETS.find(item => item.keys.some(key => text.includes(key)))
+    const page = pageTargets.value.find(item => item.keys.some(key => text.includes(key)))
     if (page) {
       return {
         text: `好的，这就带你去「${page.label}」。${page.path === 'signups' || page.path === 'registration' ? `这届当前有 ${pendingTeams.value.length} 支球队待确认。` : ''}`,

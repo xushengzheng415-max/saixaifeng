@@ -2386,6 +2386,9 @@ function lineupIdentityProgress(lineup) {
 }
 
 async function matchParticipantType(match) {
+  // 轻量模式是赛事级工作流开关，与年龄段解耦：不启用成人开场身份核验等分支
+  const tournament = match.tournamentId ? await getDoc('tournaments', match.tournamentId) : null
+  if (tournament && tournament.lightweightMode === true) return 'youth'
   const division = match.divisionId ? await getDoc('divisions', match.divisionId) : null
   const explicit = String(firstNonEmpty(division && division.participantType, division && division.audienceType, match.participantType, '')).toLowerCase()
   if (['adult','youth'].indexOf(explicit) >= 0) return explicit

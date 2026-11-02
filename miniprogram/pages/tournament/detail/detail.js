@@ -191,6 +191,7 @@ Page({
     quickCard4Title: '',
     quickCard4Desc: '',
     // ★ 信息同步新增字段
+    lightweightMode: false,
     logoUrl: '',
     typeText: '',
     registerDeadline: '',
@@ -706,6 +707,8 @@ Page({
 
     // ★ P1-4: 预计算 && 组合条件字段
     flags['showLoading'] = (!!d.loading && !d.errorMsg)
+    // 轻量模式不需要其他球队报名参与，非主办方不展示「报名参赛」
+    flags['showSignupButton'] = (!d.isOrganizer && !d.lightweightMode)
     flags['showSignupSection'] = (!d.isOrganizer && !!d.signupStatus)
     flags['showRosterTab'] = (!!d.isTabRoster && !!d.isCoach)
     var riCanEdit = !!(ri.canEdit)
@@ -795,7 +798,8 @@ Page({
           location: t.location || '',
           description: t.description || '',
           coverUrl: t.coverUrl || t.coverImage || t.logo || t.logoUrl || '',
-          organizerName: t.organizerName || ''
+          organizerName: t.organizerName || '',
+          lightweightMode: t.lightweightMode === true
         })
 
         // ★ 信息同步：读取网页端有的字段

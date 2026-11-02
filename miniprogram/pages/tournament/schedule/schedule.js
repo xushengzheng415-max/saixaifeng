@@ -27,7 +27,8 @@ Page({
     showContent: false,
     hasNoMatches: false,
     hasResults: false,
-    visualQa: false
+    visualQa: false,
+    lightweightMode: false
   },
 
   onLoad(options) {
@@ -68,7 +69,8 @@ Page({
           tournamentName: t.name || '',
           tournamentType: t.type || '',
           typeText: typeNames[t.type] || t.type || '',
-          formatText: formatNames[t.matchFormat] || t.matchFormat || ''
+          formatText: formatNames[t.matchFormat] || t.matchFormat || '',
+          lightweightMode: t.lightweightMode === true
         })
       }
     })
@@ -168,6 +170,11 @@ Page({
   onMatchTap(e) {
     var id = e.currentTarget.dataset.id
     var isFinished = !!e.currentTarget.dataset.finished
+    // 轻量模式没有比赛详情/裁判流程，直接提示到 PC 后台录入比分，避免进入空详情页
+    if (id && this.data.lightweightMode) {
+      wx.showModal({ title: '轻量模式', content: '轻量模式只记比分：请主办方在电脑后台「比赛管理」点击比赛卡片录入比分。', showCancel: false, confirmText: '知道了', confirmColor: '#197451' })
+      return
+    }
     if (id) {
       var context = workspace.readContext() || {}
       if (workspace.hasPermission('event.manage', context)) {

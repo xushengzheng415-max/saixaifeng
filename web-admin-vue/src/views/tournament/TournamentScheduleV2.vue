@@ -19,10 +19,10 @@
     </section>
 
     <section v-if="view === 'workbench'" ref="workbenchRoot">
-      <PairingResult :rows="matches" :event="tournament" :divisions="divisions" :can-adjust="canAdjustSchedule" :can-assign="canAssignReferee" :state-label="match => managementState(match).label" :focus-id="nextMatchId" @edit="openEdit" @sequence="openSequenceEdit" @referee="match => openRefereeAssignment(match,'referee')" @kit="match => openRefereeAssignment(match,'kit')" @detail="openMatchWorkspace" @reset="load" @navigate="setView" @scope="value => {divisionFilter=value;workbenchDivision=value}" />
+      <PairingResult :rows="matches" :event="tournament" :divisions="divisions" :can-adjust="canAdjustSchedule" :can-assign="canAssignRefereeForMatch" :lightweight="lightweightMode" :state-label="match => managementState(match).label" :focus-id="nextMatchId" @edit="openEdit" @sequence="openSequenceEdit" @referee="match => openRefereeAssignment(match,'referee')" @kit="match => openRefereeAssignment(match,'kit')" @detail="openMatchWorkspace" @reset="load" @navigate="setView" @scope="value => {divisionFilter=value;workbenchDivision=value}" />
     </section>
 
-    <section v-if="view === 'referees'">
+    <section v-if="view === 'referees' && !lightweightMode">
       <RefereeCenter :matches="matches" :event="tournament" :can-assign="canAssignReferee" :config="tournamentRefereeConfig" :assigning="batchAssigning" @navigate="setView" @referee="match => openRefereeAssignment(match,'referee')" @auto-assign="batchAutoAssignReferees" @docs="openRefereePreMatchDocs" />
     </section>
 
@@ -96,11 +96,11 @@
     </template>
 
     <template v-else-if="view === 'map'">
-      <section v-if="!calendarConfigured" class="calendar-empty"><el-icon><Calendar /></el-icon><h2>先创建赛事日历</h2><p>统一设置比赛日、场地和时段，然后再手动、Excel或自动排期。</p><el-button type="success" @click="setView('settings')">进入赛程设置</el-button></section>
+      <section v-if="!calendarConfigured" class="calendar-empty"><template v-if="lightweightMode"><el-icon><Calendar /></el-icon><h2>一键生成赛程</h2><p>轻量模式不需要先配日历：选定组别与比赛日起止，系统按现有赛制直接生成对阵与时间。</p><el-button type="success" @click="openQuickSchedule">一键生成赛程</el-button></template><template v-else><el-icon><Calendar /></el-icon><h2>先创建赛事日历</h2><p>统一设置比赛日、场地和时段，然后再手动、Excel或自动排期。</p><el-button type="success" @click="setView('settings')">进入赛程设置</el-button></template></section>
       <template v-else>
-        <section class="map-summary"><span><b>{{ matches.length }}</b>场比赛</span><span class="played"><b>{{ playedMatches }}</b>场已进行</span><span class="remaining"><b>{{ remainingMatches }}</b>场剩余</span><i /><el-button plain @click="openManualAdd"><el-icon><Plus /></el-icon>场次</el-button><el-button plain @click="setView('settings')"><el-icon><Setting /></el-icon>赛程设置</el-button><el-button plain @click="setView('imports')"><el-icon><Upload /></el-icon>上传赛程</el-button><el-button type="success" :loading="autoScheduling" :disabled="!pendingMatches.length" @click="openAutoSchedule"><el-icon><MagicStick /></el-icon>自动排程</el-button></section>
+        <section class="map-summary"><span><b>{{ matches.length }}</b>场比赛</span><span class="played"><b>{{ playedMatches }}</b>场已进行</span><span class="remaining"><b>{{ remainingMatches }}</b>场剩余</span><i /><el-button plain @click="openManualAdd"><el-icon><Plus /></el-icon>场次</el-button><el-button plain @click="setView('settings')"><el-icon><Setting /></el-icon>赛程设置</el-button><el-button plain @click="setView('imports')"><el-icon><Upload /></el-icon>上传赛程</el-button><el-button v-if="lightweightMode" type="success" plain :loading="quickLoading" @click="openQuickSchedule"><el-icon><MagicStick /></el-icon>一键生成赛程</el-button><el-button type="success" :loading="autoScheduling" :disabled="!pendingMatches.length" @click="openAutoSchedule"><el-icon><MagicStick /></el-icon>自动排程</el-button></section>
 
-        <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="divisionOptionLabel(division)" :value="division.id" /></el-select><el-checkbox v-model="matchDayOnly" class="matchday-toggle">只显比赛日</el-checkbox><div class="date-tabs"><button v-for="day in visibleCalendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }} · {{ day.count }}场</small></button></div><el-button plain :type="pendingDrawerOpen ? 'success' : ''" :aria-expanded="pendingDrawerOpen" @click="pendingDrawerOpen = !pendingDrawerOpen">待排比赛（{{ filteredPendingMatches.length }}）</el-button><el-button plain @click="openRefereePreMatchDocs">裁判赛前文档</el-button><el-button plain @click="viewSchedule">赛程中心</el-button></section>
+        <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="divisionOptionLabel(division)" :value="division.id" /></el-select><el-checkbox v-model="matchDayOnly" class="matchday-toggle">只显比赛日</el-checkbox><div class="date-tabs"><button v-for="day in visibleCalendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }} · {{ day.count }}场</small></button></div><el-button plain :type="pendingDrawerOpen ? 'success' : ''" :aria-expanded="pendingDrawerOpen" @click="pendingDrawerOpen = !pendingDrawerOpen">待排比赛（{{ filteredPendingMatches.length }}）</el-button><el-button v-if="!lightweightMode" plain @click="openRefereePreMatchDocs">裁判赛前文档</el-button><el-button plain @click="viewSchedule">赛程中心</el-button></section>
 
         <section class="calendar-workspace" :class="{ 'without-pending': !pendingDrawerOpen, 'pending-open':pendingDrawerOpen, 'is-dragging':Boolean(draggedMatchId) }">
           <aside v-show="pendingDrawerOpen" class="pending-pool pending-drawer" @dragover.prevent @drop.stop.prevent="dropBackToPending">
@@ -145,6 +145,63 @@
     </el-dialog>
 
     <el-dialog v-model="manualAddVisible" title="手动添加比赛" width="520px"><el-form label-position="top"><el-form-item label="组别" required><el-select v-model="manualForm.divisionId" style="width:100%" @change="loadManualTeams"><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="String(division.id)" /></el-select></el-form-item><el-form-item label="主队" required><el-select v-model="manualForm.homeTeamId" filterable style="width:100%"><el-option v-for="team in manualTeams" :key="team.teamId" :label="team.teamName" :value="team.teamId" /></el-select></el-form-item><el-form-item label="客队" required><el-select v-model="manualForm.awayTeamId" filterable style="width:100%"><el-option v-for="team in manualTeams" :key="team.teamId" :label="team.teamName" :value="team.teamId" /></el-select></el-form-item><el-form-item label="比赛日期"><el-date-picker v-model="manualForm.matchDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item><el-form-item label="开赛时间"><el-time-select v-model="manualForm.matchTime" start="06:00" step="00:15" end="23:00" format="HH:mm" style="width:100%" /></el-form-item><el-form-item label="比赛场地"><el-select v-model="manualForm.venue" filterable allow-create style="width:100%"><el-option v-for="venue in config.venueResources" :key="venue.name" :label="`${venue.name} · ${fieldFormatLabel(venue.fieldFormat)}`" :value="venue.name" /></el-select></el-form-item><el-form-item label="阶段名称"><el-input v-model="manualForm.roundName" placeholder="如：小组赛 A组、友谊交流赛；留空默认“手动添加”" /></el-form-item></el-form><template #footer><el-button @click="manualAddVisible=false">取消</el-button><el-button type="success" :loading="savingManualMatch" @click="saveManualMatch">保存</el-button></template></el-dialog>
+
+    <el-dialog v-model="scoreVisible" title="录入比分" width="440px" class="lightweight-score-dialog" :close-on-click-modal="false">
+      <template v-if="scoreMatch">
+        <div class="light-score-meta"><span>{{ divisionName(scoreMatch.divisionId) }}</span><span>{{ cardStageLabel(scoreMatch) }}</span><span>{{ scoreMatch.matchDate || '日期待定' }} {{ scoreMatch.matchTime || '' }}</span><span>{{ scoreMatch.venue || '场地待定' }}</span></div>
+        <div class="light-score-row">
+          <label><strong :title="teamLabel(scoreMatch,'home')">{{ teamLabel(scoreMatch,'home') }}</strong><el-input-number v-model="scoreForm.homeScore" :min="0" :max="99" :step="1" controls-position="right" /></label>
+          <em>:</em>
+          <label><strong :title="teamLabel(scoreMatch,'away')">{{ teamLabel(scoreMatch,'away') }}</strong><el-input-number v-model="scoreForm.awayScore" :min="0" :max="99" :step="1" controls-position="right" /></label>
+        </div>
+        <el-form label-position="top" class="light-score-form">
+          <el-form-item v-if="scoreKnockout" label="决胜方式">
+            <el-select v-model="scoreForm.winnerSide" clearable placeholder="打平时选择点球胜方" style="width:100%"><el-option label="主队点球胜" value="home" /><el-option label="客队点球胜" value="away" /></el-select>
+          </el-form-item>
+          <el-form-item label="弃权">
+            <el-select v-model="scoreForm.forfeit" clearable placeholder="无（正常完赛）" style="width:100%"><el-option label="主队弃权" value="home" /><el-option label="客队弃权" value="away" /></el-select>
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="scoreForm.remark" maxlength="60" show-word-limit placeholder="可选，例如“雨天提前结束”" />
+          </el-form-item>
+        </el-form>
+        <p class="light-score-hint">保存即写入赛果并刷新本赛事积分排名；比分可随时修改。轻量模式不产生裁判任务、不需要出战阵容或比赛事件。</p>
+      </template>
+      <template #footer><el-button @click="scoreVisible=false">取消</el-button><el-button type="success" :loading="savingScore" @click="saveLightweightScore">保存比分</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="quickVisible" title="一键生成赛程" width="min(560px,94vw)" :close-on-click-modal="false">
+      <el-form label-position="top" class="quick-schedule-form">
+        <el-form-item label="组别" required>
+          <el-select v-model="quickForm.divisionId" style="width:100%" @change="loadQuickTeams"><el-option v-for="division in divisions" :key="division.id" :label="divisionOptionLabel(division)" :value="String(division.id)" /></el-select>
+        </el-form-item>
+        <el-form-item label="比赛日起止" required>
+          <div class="quick-date-range"><el-date-picker v-model="quickForm.startDate" type="date" value-format="YYYY-MM-DD" placeholder="开始" /><span>至</span><el-date-picker v-model="quickForm.endDate" type="date" value-format="YYYY-MM-DD" placeholder="结束" /></div>
+        </el-form-item>
+        <el-form-item label="比赛场地与时段">
+          <div class="quick-venue-row"><el-input v-model="quickForm.venueName" placeholder="如：1号场地" /><el-time-picker v-model="quickForm.startTime" format="HH:mm" value-format="HH:mm" placeholder="08:00" /><span>至</span><el-time-picker v-model="quickForm.endTime" format="HH:mm" value-format="HH:mm" placeholder="18:00" /></div>
+        </el-form-item>
+        <el-form-item label="每队每天最多场次">
+          <el-input-number v-model="quickForm.maxMatchesPerDay" :min="1" :max="6" :step="1" />
+        </el-form-item>
+        <el-form-item label="生成方式">
+          <el-checkbox v-model="quickForm.dropPlaceholderKnockout">只保留可直接录分的对阵（不生成“待定”决赛占位）</el-checkbox>
+        </el-form-item>
+      </el-form>
+      <div class="quick-schedule-summary">
+        <span v-loading="quickTeamsLoading">已选组别球队 <b>{{ quickTeams.length }}</b> 支</span>
+        <span>预计 <b>{{ quickExpectedMatches }}</b> 场</span>
+        <span>比赛日 <b>{{ quickDateList.length }}</b> 天</span>
+      </div>
+      <el-alert v-if="quickIssues.length" type="warning" :closable="false" title="生成前请先补齐以下条件">
+        <p v-for="issue in quickIssues" :key="issue" class="quick-issue">{{ issue }}</p>
+      </el-alert>
+      <el-alert v-if="quickResult" type="success" :closable="false" :title="`已生成 ${quickResult.total} 场，首场 ${quickResult.firstRound || '待定'}`">
+        <p class="quick-issue">新增对阵 {{ quickResult.pairingCount }} 场 · 排定时间 {{ quickResult.scheduledCount }} 场{{ quickResult.pruned ? ` · 未保留待定占位 ${quickResult.pruned} 场` : '' }}</p>
+      </el-alert>
+      <p class="light-score-hint">对阵与时间由现有赛程引擎生成（单组单循环 + 现有淘汰拓扑），不另写赛制算法；生成后可在比赛管理点卡片直接录比分。</p>
+      <template #footer><el-button @click="quickVisible=false">关闭</el-button><el-button type="success" :loading="quickLoading" :disabled="Boolean(quickIssues.length)" @click="runQuickSchedule">生成赛程</el-button></template>
+    </el-dialog>
 
     <el-dialog v-model="assignmentVisible" title="赛前安排" width="660px" :close-on-click-modal="false">
       <div v-if="assignmentMatch" class="assignment-summary"><strong>{{ teamLabel(assignmentMatch,'home') }}　vs　{{ teamLabel(assignmentMatch,'away') }}</strong><span>{{ divisionName(assignmentMatch.divisionId) }} · {{ assignmentMatch.matchDate || '待排' }} {{ assignmentMatch.matchTime || '' }} · {{ assignmentMatch.venue || '场地待定' }}</span></div>
@@ -210,7 +267,7 @@ import JSZip from 'jszip'
 import PairingResult from './PairingResult.vue'
 import RefereeCenter from './RefereeCenter.vue'
 import ScheduleTeamCrest from '../../components/tournament/ScheduleTeamCrest.vue'
-import { addRecord, callFunction, queryById, queryList, rosterExceptionBoard } from '../../utils/cloud'
+import { addRecord, callFunction, deleteRecord, getCurrentUser, queryById, queryList, rosterExceptionBoard, updateRecord } from '../../utils/cloud'
 import { extractScheduleRows, parseDivisionAndPool, recognitionSummary, recognizeScheduleRows } from '../../utils/scheduleWorkbookRecognition'
 import { firstUnfinishedMatchDate } from '../../utils/matchCalendarSelection'
 import { findWorkbenchFocusMatch } from '../../utils/matchScheduleFocus'
@@ -221,6 +278,7 @@ import {parseKickoffTimes,configuredKickoffTimes,kickoffWindows,kickoffPeriod,ha
 import {createScheduleTemplateWorkbook} from '../../utils/scheduleTemplateWorkbook.mjs'
 import { isDemoMode } from '../../utils/demoMode'
 import { calculatePreMatchSuspensions } from '../../utils/refereeSuspension'
+import { isLightweightTournament } from '../../utils/lightweightMode'
 
 const route = useRoute(), router = useRouter(), tournamentId = String(route.params.id || '')
 // The deployed import action validates the actor, scope and conflicts server-side.
@@ -229,6 +287,8 @@ const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(fa
 // 追加纪律处罚（停赛）用于裁判表自动标 S；读取失败时向裁判表提示，不静默当成无处罚。
 const disciplinaryActions = ref([]), disciplinaryLoadFailed = ref(false)
 const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap = ref(new Map()), divisionFilter = ref(String(route.query.divisionId || 'all')), selectedDate = ref(typeof route.query.date === 'string' ? route.query.date : ''), draggedMatchId = ref(''), matchDayOnly = ref(true)
+// 轻量模式唯一判定：赛事级字段 lightweightMode，读取走共享判定函数，页面不再各自猜测。
+const lightweightMode = computed(() => isLightweightTournament(tournament.value))
 const view = ref(['settings','imports','map','workbench','referees'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
 const pendingDrawerOpen=ref(true),hoveredDropSlot=ref(''),dropSaving=ref(false)
 const workbenchDivision = ref(String(route.query.divisionId || 'all')), workbenchStatus = ref('all'), workbenchSearch = ref('')
@@ -281,11 +341,13 @@ watch(allKickoffTimes,times=>{if(!times.length)return; if(!selectedKickoffTimes.
 const viewTitle = computed(() => ({ settings:'赛程设置',imports:'上传赛程',map:'赛事地图',workbench:'赛程中心',referees:'裁判中心' })[view.value] || '赛事地图')
 function goScheduleCenter() { return setView('workbench') }
 watch(()=>route.query.view,value=>{view.value=['settings','imports','map','workbench','referees'].includes(String(value || ''))?String(value):'map'})
-function setView(next, opts) { view.value = next; const query={ ...route.query }; if(next === 'map')delete query.view;else query.view=next;const replaced=router.replace({ path:route.path,query });if(opts && opts.autostart){replaced.then(() => { if(!pendingMatches.value.length){ElMessage.info('当前没有待排比赛，无需自动排程');return} autoSchedule() })}return replaced }
+function setView(next, opts) { if(next==='referees'&&lightweightMode.value){ElMessage.info('轻量模式不启用裁判流程');return Promise.resolve()} view.value = next; const query={ ...route.query }; if(next === 'map')delete query.view;else query.view=next;const replaced=router.replace({ path:route.path,query });if(opts && opts.autostart){replaced.then(() => { if(!pendingMatches.value.length){ElMessage.info('当前没有待排比赛，无需自动排程');return} autoSchedule() })}return replaced }
 async function viewSchedule() { workbenchDivision.value='all';workbenchStatus.value='all';workbenchSearch.value='';await setView('workbench');await focusNextWorkbenchMatch() }
 function sequenceLabel(match) { return match.matchSequence ?? match.matchNo ?? match.matchIndex ?? '—' }
 function canAdjustSchedule(match) { return !match.executionSnapshot && !match.refereeRecordLocked && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase()) }
 function canAssignReferee(match) { return !match.refereeRecordLocked && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase()) }
+// 轻量模式不启用裁判指派与球衣核验：赛程中心相关入口一律不可用，正式赛事保持原判定。
+const canAssignRefereeForMatch = computed(() => lightweightMode.value ? () => false : canAssignReferee)
 const workbenchMatches = computed(() => matches.value.filter(match => {
   if (workbenchDivision.value !== 'all' && String(match.divisionId || 'default') !== workbenchDivision.value) return false
   const status = match.matchDate ? managementState(match).key : 'pending'
@@ -456,7 +518,9 @@ const managementCounts = computed(() => matches.value.reduce((counts,match)=>{co
 const playedMatches = computed(() => matches.value.filter(match => managementState(match).key !== 'scheduled').length)
 const remainingMatches = computed(() => Math.max(0, matches.value.length - playedMatches.value))
 function matchRoute(match,suffix=''){return { path:`/tournaments/${tournamentId}/match/${match._id}${suffix}`,query:{ ...(match.divisionId ? { divisionId:match.divisionId } : {}),listDate:selectedDate.value,listDivision:divisionFilter.value,listView:view.value } }}
-function openMatchWorkspace(match){const state=managementState(match).key;if(state==='live')return router.push(matchRoute(match,'/monitor'));if(state==='supplement')return router.push(matchRoute(match,'/post-match'));if(state==='review')return router.push(matchRoute(match,'/review'));if(state==='archived')return router.push(matchRoute(match,'/archive'));return router.push(matchRoute(match))}
+// 轻量模式不进入完整比赛详情（编辑比赛/开始比赛/阵容/事件/处罚/延期/统计都不可达），
+// 卡片任意位置统一打开「录入比分」面板；正式赛事保持原有分流逻辑。
+function openMatchWorkspace(match){if(lightweightMode.value)return openLightweightScore(match);const state=managementState(match).key;if(state==='live')return router.push(matchRoute(match,'/monitor'));if(state==='supplement')return router.push(matchRoute(match,'/post-match'));if(state==='review')return router.push(matchRoute(match,'/review'));if(state==='archived')return router.push(matchRoute(match,'/archive'));return router.push(matchRoute(match))}
 function pendingCountForDivision(id) { return matches.value.filter(match => String(match.divisionId || 'default') === String(id) && (!match.matchDate || !match.matchTime || !match.venue)).length }
 function matchCountForDivision(id) { return matches.value.filter(match => String(match.divisionId || 'default') === String(id)).length }
 function defaultPolicy(division) { const eleven = matchFormat(division) === '11side'; const onePerDay=config.frequencyPreset === 'daily_one' || config.frequencyPreset === 'adaptive' && eleven; return { turnaroundMinutes:Number(config.defaultTurnaroundMinutes || 10),maxMatchesPerDay:onePerDay ? 1 : 2,maxPerSession:1,minRestMinutes:onePerDay ? 1080 : 120,allowedDates:[],allowedSessions:[],allowedVenues:[] } }
@@ -1074,6 +1138,186 @@ const manualForm=reactive({divisionId:'',homeTeamId:'',awayTeamId:'',matchDate:'
 function openManualAdd(){ if(!divisions.value.length)return ElMessage.info('当前赛事没有组别，请先创建组别'); manualForm.divisionId=String(divisionFilter.value!=='all'?divisionFilter.value:divisions.value[0].id); manualForm.homeTeamId='';manualForm.awayTeamId=''; manualForm.matchDate=selectedDate.value || config.matchDates[0] || ''; manualForm.matchTime='09:00'; manualForm.venue=config.venueResources[0]?.name || ''; manualForm.roundName=''; manualAddVisible.value=true; loadManualTeams() }
 async function loadManualTeams(){ manualTeams.value=[]; if(!manualForm.divisionId)return; try{ const rows=await queryList('tournament_teams',{where:{tournamentId,divisionId:manualForm.divisionId},limit:500,silent:true}); manualTeams.value=(rows||[]).filter(row=>['approved','confirmed'].includes(String(row.status||''))).map(row=>({teamId:String(row.teamId||row._id),teamName:row.teamName||row.name||''})).filter(row=>row.teamId&&row.teamName) }catch(error){ manualTeams.value=[] } }
 async function saveManualMatch(){ const f=manualForm; if(!f.divisionId)return ElMessage.warning('请选择组别'); if(!f.homeTeamId||!f.awayTeamId)return ElMessage.warning('请选择主队和客队'); if(f.homeTeamId===f.awayTeamId)return ElMessage.warning('主队和客队不能相同'); if(!f.venue||!f.venue.trim())return ElMessage.warning('请选择或填写场地'); if(!f.matchDate||!f.matchTime)return ElMessage.warning('请选择比赛日期和开赛时间'); const division=divisions.value.find(item=>String(item.id)===String(f.divisionId))||{}; const home=manualTeams.value.find(item=>item.teamId===f.homeTeamId),away=manualTeams.value.find(item=>item.teamId===f.awayTeamId); savingManualMatch.value=true; try{ await addRecord('matches',{tournamentId,divisionId:f.divisionId,divisionName:division.name||'',matchFormat:matchFormat(division),scheduleType:tournament.value.tournamentType||'',phase:'group',roundName:String(f.roundName||'').trim()||'手动添加',matchDate:f.matchDate,matchTime:f.matchTime,venue:String(f.venue).trim(),homeTeamId:f.homeTeamId,homeTeamName:home?.teamName||'',awayTeamId:f.awayTeamId,awayTeamName:away?.teamName||'',homeScore:0,awayScore:0,status:'scheduled',statusText:'未开始',isBye:false,createTime:new Date(),updateTime:new Date()}); manualAddVisible.value=false; ElMessage.success('比赛已添加'); await load() }catch(error){ ElMessage.error(error.message||'添加比赛失败') } finally{ savingManualMatch.value=false } }
+// ===== 轻量模式：直接在比赛管理录入比分（不生成裁判任务、不走开场核验与签核） =====
+// 落库字段只用比分与状态的最小集合；积分榜（resultCenter → standings.cjs）只依赖
+// homeScore/awayScore + scoreReady + resultStatus，不依赖比赛事件或出战阵容。
+const scoreVisible=ref(false),scoreMatch=ref(null),savingScore=ref(false)
+const scoreForm=reactive({homeScore:0,awayScore:0,forfeit:'',winnerSide:'',remark:''})
+const scoreKnockout=computed(()=>{const match=scoreMatch.value;if(!match)return false;const phase=String(match.phase || match.stage || match.scheduleType || '').toLowerCase();const hint=`${phase} ${String(match.roundName || match.stageName || '')}`.toLowerCase();return ['knockout','cup','final','semifinal','placement'].includes(phase) || /淘汰|决赛|半决赛|排位/.test(hint)})
+function openLightweightScore(match){
+  if(!match)return
+  scoreMatch.value=match
+  scoreForm.homeScore=hasMatchScore(match)?Number(match.homeScore):0
+  scoreForm.awayScore=hasMatchScore(match)?Number(match.awayScore):0
+  scoreForm.forfeit=String(match.resultType || '')==='forfeit'?String(match.forfeitSide || ''):''
+  scoreForm.winnerSide=String(match.winnerSide || '')
+  scoreForm.remark=String(match.resultRemark || '')
+  scoreVisible.value=true
+}
+async function saveLightweightScore(){
+  const match=scoreMatch.value
+  if(!match||!match._id)return
+  const home=Number(scoreForm.homeScore),away=Number(scoreForm.awayScore)
+  if(!Number.isInteger(home)||!Number.isInteger(away)||home<0||away<0||home>99||away>99)return ElMessage.warning('请录入 0 至 99 之间的整数比分')
+  const knockout=scoreKnockout.value
+  if(knockout&&home===away&&!scoreForm.winnerSide)return ElMessage.warning('淘汰/决赛场次打平，请选择点球决胜的胜方')
+  const now=new Date(),user=getCurrentUser()||{}
+  const homeId=String(match.homeTeamId||''),awayId=String(match.awayTeamId||'')
+  const payload={
+    homeScore:home,awayScore:away,scoreHome:home,scoreAway:away,
+    status:'finished',statusText:'已完赛',
+    resultSubmittedAt:now,resultReviewedAt:now,resultReviewStatus:'approved',
+    resultVersionId:`lightweight-${String(match._id)}-${now.getTime()}`,
+    resultType:scoreForm.forfeit?'forfeit':'normal',
+    resultRemark:String(scoreForm.remark||'').trim(),
+    recordedBy:String(user._id||''),recordedByName:String(user.name||user.userName||user.nickname||''),recordedAt:now,
+    updateTime:now
+  }
+  if(scoreForm.forfeit)payload.forfeitSide=scoreForm.forfeit
+  if(knockout){
+    const winner=home===away?scoreForm.winnerSide:(home>away?'home':'away')
+    payload.resolution=home===away?'penalties':'regular'
+    payload.winnerSide=winner
+    payload.winnerTeamId=winner==='home'?homeId:awayId
+  }
+  savingScore.value=true
+  try{
+    await updateRecord('matches',match._id,payload)
+    scoreVisible.value=false
+    ElMessage.success('比分已保存，积分排名已同步')
+    await load()
+  }catch(error){ElMessage.error(error.message||'比分保存失败')}
+  finally{savingScore.value=false}
+}
+
+// ===== 轻量模式：一键生成赛程（复用 generateSchedule 的既有对阵与排程引擎） =====
+// 对阵：action=generatePairings，用 drawAssignments 把当前组别全部球队放入 A 组，
+// 走引擎既有的单组单循环 + 淘汰赛拓扑；排程：action=scheduleExistingPairings 用最小日历配置。
+const quickVisible=ref(false),quickLoading=ref(false),quickResult=ref(null),quickTeams=ref([]),quickTeamsLoading=ref(false)
+const quickForm=reactive({divisionId:'',startDate:'',endDate:'',venueName:'1号场地',startTime:'08:00',endTime:'18:00',maxMatchesPerDay:3,turnaroundMinutes:10,dropPlaceholderKnockout:true})
+function dateRangeList(start,end){
+  const list=[]
+  if(!start||!end)return list
+  const begin=new Date(`${start}T00:00:00`),finish=new Date(`${end}T00:00:00`)
+  if(Number.isNaN(begin.getTime())||Number.isNaN(finish.getTime())||begin>finish)return list
+  for(let day=new Date(begin);day<=finish;day.setDate(day.getDate()+1)){
+    list.push(`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`)
+    if(list.length>=60)break
+  }
+  return list
+}
+const quickDivision=computed(()=>divisions.value.find(item=>String(item.id)===String(quickForm.divisionId))||{})
+const quickDateList=computed(()=>dateRangeList(quickForm.startDate,quickForm.endDate))
+const quickExistingMatches=computed(()=>matches.value.filter(match=>String(match.divisionId||'default')===String(quickForm.divisionId||'default')))
+const quickPendingMatches=computed(()=>quickExistingMatches.value.filter(match=>!match.matchDate||!match.matchTime||!match.venue))
+const quickIssues=computed(()=>{
+  const issues=[]
+  if(!quickForm.divisionId)issues.push('请选择组别')
+  else if(!matchMinutes(quickDivision.value))issues.push('该组别未设置比赛时长（分钟），请先补全竞赛规则')
+  else if(!matchFormat(quickDivision.value))issues.push('该组别未设置几人制，请先补全竞赛规则')
+  if(!quickDateList.value.length)issues.push('请设置有效的起止日期')
+  if(minutes(quickForm.endTime)<=minutes(quickForm.startTime))issues.push('结束时间必须晚于开始时间')
+  if(!String(quickForm.venueName||'').trim())issues.push('请填写比赛场地名称')
+  if(!quickExistingMatches.value.length&&quickTeams.value.length<2)issues.push('该组别至少需要 2 支球队，请先批量添加球队')
+  if(quickExistingMatches.value.length&&!quickPendingMatches.value.length)issues.push('该组别比赛已全部排定时间，无需再生成赛程')
+  return issues
+})
+const quickExpectedMatches=computed(()=>{
+  if(quickExistingMatches.value.length)return quickExistingMatches.value.length
+  const teams=quickTeams.value.length
+  if(teams<2)return 0
+  const roundRobin=teams*(teams-1)/2
+  return quickForm.dropPlaceholderKnockout?roundRobin:roundRobin+1
+})
+async function openQuickSchedule(){
+  const division=divisions.value.find(item=>String(item.id)===String(divisionFilter.value)) || divisions.value[0]
+  quickForm.divisionId=division?String(division.id):''
+  const start=config.startDate || String(tournament.value.startDate||'').slice(0,10) || new Date().toISOString().slice(0,10)
+  quickForm.startDate=start
+  quickForm.endDate=config.endDate || String(tournament.value.endDate||'').slice(0,10) || start
+  quickForm.venueName=config.venueResources[0]?.name || '1号场地'
+  quickForm.startTime='08:00'
+  quickForm.endTime='18:00'
+  quickForm.maxMatchesPerDay=3
+  quickForm.turnaroundMinutes=10
+  quickForm.dropPlaceholderKnockout=division?String(division.formatType||'')!=='league':true
+  quickResult.value=null
+  quickVisible.value=true
+  await loadQuickTeams()
+}
+async function loadQuickTeams(){
+  quickTeams.value=[]
+  if(!quickForm.divisionId)return
+  quickTeamsLoading.value=true
+  try{
+    const rows=await queryList('tournament_teams',{where:{tournamentId,divisionId:quickForm.divisionId},limit:500,silent:true})
+    quickTeams.value=(rows||[]).filter(row=>['approved','confirmed'].includes(String(row.status||'')))
+  }catch(error){quickTeams.value=[]}
+  finally{quickTeamsLoading.value=false}
+}
+function quickScheduleConfig(){
+  const format=matchFormat(quickDivision.value)
+  const window={key:'morning',label:'上午',enabled:true,start:quickForm.startTime,end:quickForm.endTime}
+  return {
+    schemaVersion:2,generationMode:'joint',
+    startDate:quickDateList.value[0],endDate:quickDateList.value[quickDateList.value.length-1],
+    matchDates:[...quickDateList.value],matchDays:[],
+    sessionWindows:[window],
+    venueResources:[{name:String(quickForm.venueName||'').trim(),fieldFormat:format,sessionWindows:[{...window}],kickoffTimes:[]}],
+    venues:[String(quickForm.venueName||'').trim()],
+    timeStepMinutes:15,slotMinutes:15,
+    defaultTurnaroundMinutes:Number(quickForm.turnaroundMinutes||10),
+    frequencyPreset:'adaptive',finalStageExclusive:false,dailyMatchLimit:0,
+    calendarSource:'settings',
+    divisionPolicies:{[String(quickForm.divisionId)]:{turnaroundMinutes:Number(quickForm.turnaroundMinutes||10),maxMatchesPerDay:Number(quickForm.maxMatchesPerDay||3),maxPerSession:Number(quickForm.maxMatchesPerDay||3),minRestMinutes:30,allowedDates:[],allowedSessions:[],allowedVenues:[]}}
+  }
+}
+// 现有引擎在「单组单循环」后按 advanceCount=2 追加淘汰赛占位（球队为“待定”）。
+// 轻量模式没有抽签与晋级流程，保留占位会产生无法录分的场次；默认只保留可直接录分的对阵。
+function isPlaceholderMatch(match){return !String(match?.homeTeamId||'') && !String(match?.awayTeamId||'')}
+async function prunePlaceholderKnockout(divisionId){
+  const rows=matches.value.filter(match=>String(match.divisionId||'default')===String(divisionId||'default')&&isPlaceholderMatch(match))
+  let removed=0
+  for(const row of rows){
+    try{ await deleteRecord('matches',row._id); removed+=1 }catch(error){ console.warn('占位对阵未删除',error) }
+  }
+  return removed
+}
+async function runQuickSchedule(){
+  if(quickIssues.value.length)return ElMessage.warning(quickIssues.value[0])
+  quickLoading.value=true
+  quickResult.value=null
+  try{
+    const divisionId=String(quickForm.divisionId)
+    const existingBefore=quickExistingMatches.value.length
+    let generated=0
+    if(!quickExistingMatches.value.length){
+      const drawAssignments=quickTeams.value.map((row,index)=>({teamId:String(row.teamId||row._id||''),groupIndex:0,position:index+1})).filter(item=>item.teamId)
+      if(drawAssignments.length<2)throw new Error('该组别至少需要 2 支球队')
+      const pairing=await callFunction('generateSchedule',{action:'generatePairings',tournamentId,divisionId,divisionName:quickDivision.value.name||'',drawAssignments},120000)
+      if(!pairing?.success)throw new Error(pairing?.message||'对阵生成失败')
+      generated=Number(pairing.matchCount||0)
+      await load()
+    }
+    let pruned=0
+    if(quickForm.dropPlaceholderKnockout){pruned=await prunePlaceholderKnockout(divisionId);if(pruned)await load()}
+    const result=await callFunction('generateSchedule',{action:'scheduleExistingPairings',tournamentId,divisionIds:[divisionId],scheduleConfig:quickScheduleConfig(),fullReflow:false},120000)
+    if(!result?.success)throw new Error(result?.message||'赛程排定失败')
+    await load()
+    const rows=(result.matches||[]).slice().sort((a,b)=>String(a.matchDate||'').localeCompare(String(b.matchDate||''))||String(a.matchTime||'').localeCompare(String(b.matchTime||'')))
+    const first=rows[0]
+    quickResult.value={
+      pairingCount:generated||existingBefore,
+      scheduledCount:Number(result.matchCount||0),
+      pruned,
+      firstRound:first?`${first.matchDate||''} ${first.matchTime||''}`:'',
+      total:rows.length||Number(result.matchCount||0)
+    }
+    ElMessage.success(`已生成 ${quickResult.value.total} 场比赛，首场 ${quickResult.value.firstRound||'待定'}`)
+  }catch(error){ElMessage.error({message:error.message||'一键生成赛程失败',duration:6500})}
+  finally{quickLoading.value=false}
+}
+
 async function runAutoSchedule() {
   if(!autoScopeDivisionIds.value.length)return ElMessage.warning('请至少勾选一个组别')
   if(!autoScopeDates.value.length)return ElMessage.warning('请至少勾选一个比赛日')
@@ -1386,6 +1630,23 @@ onBeforeUnmount(() => { mapResizeObserver?.disconnect(); endMapPan() })
 .auto-scope-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
 .auto-scope-tip{color:#8a94a3;font-size:12px}
 .auto-dialog-foot{margin-right:auto;color:#8a94a3;font-size:12px}
+/* 轻量模式：直接录入比分面板 + 一键生成赛程 */
+.light-score-meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:12px;color:#65746b;font-size:12px}
+.light-score-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px;padding:16px 6px;border:1px solid #e0e7e2;border-radius:9px;background:#f7faf8}
+.light-score-row label{display:flex;min-width:0;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.light-score-row label strong{max-width:100%;overflow:hidden;color:#12301f;font-size:15px;text-overflow:ellipsis;white-space:nowrap}
+.light-score-row label :deep(.el-input-number){width:132px}
+.light-score-row>em{color:#8b978f;font-size:22px;font-style:normal;font-weight:800}
+.light-score-form{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;margin-top:14px}
+.light-score-form .el-form-item:last-child{grid-column:1/-1}
+.light-score-hint{margin:6px 0 0;color:#7b877f;font-size:12px;line-height:1.7}
+.quick-date-range,.quick-venue-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.quick-venue-row .el-input{width:150px}
+.quick-venue-row .el-time-picker,.quick-date-range .el-date-picker{width:150px}
+.quick-schedule-summary{display:flex;flex-wrap:wrap;gap:8px 20px;padding:10px 12px;border-radius:7px;background:#f3f7f4;color:#5f6f66;font-size:13px}
+.quick-schedule-summary b{color:#087b43;font-variant-numeric:tabular-nums}
+.quick-issue{margin:4px 0 0;font-size:12px}
+@media(max-width:600px){.light-score-form{grid-template-columns:1fr}.light-score-form .el-form-item:last-child{grid-column:auto}}
 </style>
 
 <style scoped>

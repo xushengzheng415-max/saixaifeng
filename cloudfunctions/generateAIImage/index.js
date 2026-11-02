@@ -2,6 +2,16 @@
 const tcb = require("@cloudbase/node-sdk")
 const https = require('https')
 const http = require('http')
+const querystring = require('querystring')
+
+// 队徽 AI 生成：百度通用物体分割（object_segment）用于去底。
+// 环境变量缺失时不阻塞生成，改为返回白底原图并标记 backgroundRemoved=false。
+const BAIDU_API_KEY = process.env.BAIDU_API_KEY || ''
+const BAIDU_SECRET_KEY = process.env.BAIDU_SECRET_KEY || ''
+const BAIDU_TOKEN_URL = '/oauth/2.0/token'
+const BAIDU_OBJECT_SEGMENT_URL = '/rest/2.0/image-classify/v1/object_segment'
+const BAIDU_HOST = 'aip.baidubce.com'
+let baiduTokenCache = { token: '', expireAt: 0 }
 
 /**
  * 下载图片到 Buffer
@@ -57,54 +67,301 @@ async function uploadGeneratedImage(imageUrl, folder = 'ai-generated') {
 }
 
 /**
+ * 上传 Buffer 到应用自己的 COS，返回稳定访问链接
+ */
+async function uploadGeneratedBuffer(buffer, folder = 'ai-generated', extension = 'png') {
+  if (!buffer || !buffer.length) return null
+  try {
+    const cloud = require('wx-server-sdk')
+    cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
+    const cloudPath = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${extension}`
+    const uploadRes = await cloud.uploadFile({ cloudPath, fileContent: buffer })
+    const tempRes = await cloud.getTempFileURL({ fileList: [uploadRes.fileID] })
+    return { url: tempRes.fileList[0]?.tempFileURL || '', fileID: uploadRes.fileID }
+  } catch (err) {
+    console.error('[uploadGeneratedBuffer] 上传失败:', err.message)
+    return null
+  }
+}
+
+/**
+ * 判断是否为限流/并发类错误，用于退避重试
+ */
+function isRateLimitError(message) {
+  return /rate.?limit|throttl|too many|request.?limit|concurren|qps|429|频繁|限流|超出并发/i.test(String(message || ''))
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * 带退避重试的生成调用。
+ * 限流错误先退避；其他错误最多重试一次，避免把长耗时无限放大。
+ */
+async function withBackoffRetry(label, task, options = {}) {
+  const maxAttempts = options.maxAttempts || 3
+  const baseDelay = options.baseDelayMs || 3000
+  let lastError = null
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await task(attempt)
+    } catch (err) {
+      lastError = err
+      const message = err && (err.message || err.errMsg) || ''
+      const rateLimited = isRateLimitError(message)
+      console.warn(`[${label}] 第 ${attempt}/${maxAttempts} 次失败${rateLimited ? '（限流）' : ''}:`, message)
+      if (attempt >= maxAttempts) break
+      if (!rateLimited && attempt >= 2) break
+      await sleep(rateLimited ? baseDelay * attempt : Math.min(baseDelay, 1500))
+    }
+  }
+  throw lastError || new Error(`${label}失败`)
+}
+
+/**
+ * 调用混元生图并抛出明确错误（供重试逻辑使用）
+ */
+async function requestHunyuanImage(event) {
+  const app = tcb.init({ env: tcb.SYMBOL_CURRENT_ENV })
+  const ai = app.ai()
+  const imageModel = ai.createImageModel(process.env.PROVIDER || "hunyuan-image")
+  if (process.env.ENDPOINT_PATH) {
+    imageModel.defaultGenerateImageSubUrl = process.env.ENDPOINT_PATH
+  }
+  const { model = 'hunyuan-image', ...restEvent } = event
+  const res = await imageModel.generateImage({
+    model,
+    ...(/hunyuan-image-v3.0/.test(model) ? {
+      revise: { "value": false },
+      enable_thinking: { "value": false }
+    } : {}),
+    ...restEvent,
+  });
+  const { data, error } = res || {}
+  if (error) throw new Error(error.Message || error.message || error.Code || JSON.stringify(error))
+  const url = data && data[0] && data[0].url
+  if (!url) throw new Error('混元生图未返回图片地址')
+  return url
+}
+
+/**
  * 调用混元生图API（使用官方 SDK）
  * 官方文档：https://developers.weixin.qq.com/miniprogram/dev/wxcloud/guide/ai/create-img.html
  */
 async function generateHunyuanImage(event) {
   try {
     console.log('========== 开始调用混元生图 ==========')
-
-    const app = tcb.init({ env: tcb.SYMBOL_CURRENT_ENV })
-    const ai = app.ai()
-    const imageModel = ai.createImageModel(process.env.PROVIDER || "hunyuan-image");
-
-    if (process.env.ENDPOINT_PATH) {
-      imageModel.defaultGenerateImageSubUrl = process.env.ENDPOINT_PATH;
-    }
-
-    // 提取 model 参数，其他参数透传
-    const { model = 'hunyuan-image', ...restEvent } = event
-
-    console.log('Model:', model)
-    console.log('参数:', JSON.stringify(restEvent).substring(0, 200))
-
-    const res = await imageModel.generateImage({
-      model,
-      ...(/hunyuan-image-v3.0/.test(model) ? {
-        revise: { "value": false },
-        enable_thinking: { "value": false }
-      } : {}),
-      ...restEvent,
-    });
-
-    const { data, error } = res
-
-    if (error) {
-      console.error('混元生图返回错误:', JSON.stringify(error))
-      return null
-    }
-
-    const img = data?.[0] || {}
-    const { url } = img
-
-    console.log('✅ 混元生图成功! URL:', url?.substring(0, 100))
-
-    return url || null
-
+    console.log('参数:', JSON.stringify({ ...event, prompt: String(event.prompt || '').substring(0, 200) }))
+    const url = await requestHunyuanImage(event)
+    console.log('✅ 混元生图成功! URL:', url.substring(0, 100))
+    return url
   } catch (err) {
     console.error('❌ 混元生图调用失败:', err.message || err)
-    console.error('错误详情:', err)
     return null
+  }
+}
+
+/**
+ * 百度智能云表单请求（避免引入 axios 依赖）
+ */
+function baiduFormRequest(apiPath, body) {
+  return new Promise((resolve, reject) => {
+    const payload = String(body || '')
+    const req = https.request({
+      host: BAIDU_HOST,
+      path: apiPath,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    }, res => {
+      let raw = ''
+      res.on('data', chunk => { raw += chunk })
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(raw))
+        } catch (err) {
+          reject(new Error('百度接口返回非 JSON 内容'))
+        }
+      })
+    })
+    req.on('error', reject)
+    req.setTimeout(30000, () => req.destroy(new Error('百度接口请求超时')))
+    req.write(payload)
+    req.end()
+  })
+}
+
+async function getBaiduAccessToken(forceRefresh = false) {
+  const now = Date.now()
+  if (!forceRefresh && baiduTokenCache.token && now < baiduTokenCache.expireAt) return baiduTokenCache.token
+  const body = querystring.stringify({
+    grant_type: 'client_credentials',
+    client_id: BAIDU_API_KEY,
+    client_secret: BAIDU_SECRET_KEY
+  })
+  const data = await baiduFormRequest(BAIDU_TOKEN_URL, body)
+  if (!data || !data.access_token) throw new Error((data && data.error_description) || '获取百度 Access Token 失败')
+  const expiresIn = Number(data.expires_in || 2592000)
+  baiduTokenCache = { token: data.access_token, expireAt: now + Math.max(300, expiresIn - 3600) * 1000 }
+  return baiduTokenCache.token
+}
+
+/**
+ * 用百度通用物体分割（object_segment）给队徽去底，返回透明 PNG Buffer
+ */
+async function removeLogoBackgroundWithBaidu(buffer, tokenRetried = false) {
+  const token = await getBaiduAccessToken(false)
+  const body = `image=${encodeURIComponent(buffer.toString('base64'))}`
+  const data = await baiduFormRequest(`${BAIDU_OBJECT_SEGMENT_URL}?access_token=${encodeURIComponent(token)}`, body)
+  if (data && data.error_code) {
+    // 111/110 为 Token 失效类错误，刷新一次后重试
+    if (!tokenRetried && [110, 111].includes(Number(data.error_code))) {
+      baiduTokenCache = { token: '', expireAt: 0 }
+      return await removeLogoBackgroundWithBaidu(buffer, true)
+    }
+    throw new Error(`百度抠图失败 code=${data.error_code} ${data.error_msg || ''}`)
+  }
+  const foreground = (data && data.foreground) || ''
+  if (!foreground) throw new Error('百度抠图未返回透明图')
+  return Buffer.from(foreground, 'base64')
+}
+
+const LOGO_STYLES = {
+  shield: 'a classic football club shield badge, strong outline, symmetrical layout',
+  circle: 'a modern circular roundel badge, ring border, clean geometric inner shapes',
+  minimal: 'a flat minimalist geometric emblem, simple bold silhouette, few colors',
+  mascot: 'a friendly football club mascot emblem inside a badge shape, stylized animal head'
+}
+
+const LOGO_COLORS = {
+  red: 'crimson red, deep navy and gold',
+  blue: 'royal blue, sky blue and silver',
+  green: 'emerald green, lime and white',
+  yellow: 'golden yellow, amber and black',
+  purple: 'deep purple, violet and gold',
+  orange: 'vibrant orange, warm amber and white',
+  black: 'charcoal black, graphite and white',
+  teal: 'teal, cyan and navy'
+}
+
+function normalizeLogoStyle(style) {
+  const key = String(style || '').toLowerCase()
+  return LOGO_STYLES[key] ? key : 'shield'
+}
+
+function normalizeLogoColor(color) {
+  const key = String(color || '').toLowerCase()
+  return LOGO_COLORS[key] ? key : 'blue'
+}
+
+function buildTeamLogoPrompt(teamName, style, color, variantIndex) {
+  const keywords = extractTeamKeywords(teamName || 'FC Team')
+  const colorText = LOGO_COLORS[normalizeLogoColor(color)]
+  const styleText = LOGO_STYLES[normalizeLogoStyle(style)]
+  const variantHints = [
+    'centered emblem, compact silhouette',
+    'emblem with a small football element integrated',
+    'emblem with star accents',
+    'emblem with banner ribbon base'
+  ]
+  const variantHint = variantHints[variantIndex % variantHints.length]
+  return [
+    `Original fictional football club emblem for "${keywords}"`,
+    styleText,
+    `${colorText} color palette`,
+    variantHint,
+    'centered composition with generous transparent-friendly margins',
+    'pure white background (#FFFFFF), fully isolated emblem, no shadow, no scenery',
+    'flat vector illustration style, crisp clean edges, high contrast',
+    'no text, no letters, no numbers, no watermark',
+    'original design, must not reference or imitate any real football club crest, brand, trademark or copyrighted character, no real person'
+  ].join(', ')
+}
+
+/**
+ * 生成球队队徽候选（轻量模式 AI 队徽入口，PC 与小程序共用同一动作）
+ */
+async function generateTeamLogoCandidates(options = {}) {
+  const teamName = String(options.teamName || '').trim() || 'FC Team'
+  const style = normalizeLogoStyle(options.style)
+  const color = normalizeLogoColor(options.color)
+  const count = Math.max(1, Math.min(4, Number(options.count) || 1))
+  const candidates = []
+  const failures = []
+  const notices = []
+  const baiduReady = Boolean(BAIDU_API_KEY && BAIDU_SECRET_KEY)
+
+  for (let index = 0; index < count; index += 1) {
+    const prompt = buildTeamLogoPrompt(teamName, style, color, index)
+    try {
+      const imageUrl = await withBackoffRetry('队徽生成', () => requestHunyuanImage({ prompt, aspect_ratio: '1:1' }), { maxAttempts: 3, baseDelayMs: 3000 })
+      const sourceBuffer = await downloadImage(imageUrl)
+      if (!sourceBuffer || !sourceBuffer.length) throw new Error('生成图下载失败')
+      let finalBuffer = sourceBuffer
+      let backgroundRemoved = false
+      let backgroundMethod = 'none'
+      if (baiduReady) {
+        try {
+          finalBuffer = await withBackoffRetry('队徽去底', () => removeLogoBackgroundWithBaidu(sourceBuffer), { maxAttempts: 2, baseDelayMs: 2000 })
+          backgroundRemoved = true
+          backgroundMethod = 'baidu-object-segment'
+        } catch (err) {
+          console.warn('[队徽去底] 失败，回退白底原图:', err.message)
+          notices.push('自动去底失败，已返回白底原图，可手动上传透明 PNG')
+        }
+      } else {
+        notices.push('未配置百度抠图密钥，已返回白底原图，可手动上传透明 PNG')
+      }
+      const uploaded = await uploadGeneratedBuffer(finalBuffer, 'team-logos/ai', 'png')
+      if (!uploaded || !uploaded.url) throw new Error('候选图上传失败')
+      candidates.push({
+        id: `candidate-${Date.now()}-${index + 1}`,
+        index: index + 1,
+        teamName,
+        style,
+        color,
+        prompt,
+        url: uploaded.url,
+        fileID: uploaded.fileID,
+        sourceUrl: imageUrl,
+        aspectRatio: '1:1',
+        backgroundRemoved,
+        backgroundMethod,
+        aiGenerated: true
+      })
+    } catch (err) {
+      failures.push({ index: index + 1, message: err.message || '生成失败', rateLimited: isRateLimitError(err.message) })
+    }
+    if (index < count - 1) await sleep(800)
+  }
+
+  const allFailed = candidates.length === 0
+  const anyRateLimited = failures.some(item => item.rateLimited)
+  const message = allFailed
+    ? (anyRateLimited ? 'AI 生图接口当前较繁忙（限流），请稍后重试' : 'AI 队徽生成失败，请重试')
+    : `已生成 ${candidates.length}/${count} 张候选队徽`
+
+  return {
+    success: !allFailed,
+    data: {
+      teamName,
+      style,
+      color,
+      candidates,
+      failures,
+      notices: [...new Set(notices)],
+      backgroundRemovalAvailable: baiduReady,
+      aiGenerated: true,
+      aiProvider: 'hunyuan-image',
+      aiModel: 'hunyuan-image',
+      aiGeneratedAt: new Date().toISOString(),
+      compliance: 'AI 生成图像，仅用于本赛事球队展示；不含真实俱乐部、品牌或人物元素'
+    },
+    message,
+    code: allFailed ? (anyRateLimited ? 'AI_RATE_LIMITED' : 'AI_GENERATE_FAILED') : ''
   }
 }
 
@@ -327,6 +584,14 @@ exports.main = async (event, context) => {
           data: { results: avatarResults },
           message: `成功生成 ${avatarResults.filter(r => r.success).length}/${avatarResults.length} 个头像`
         }
+
+      case 'generateTeamLogoCandidates':
+        return await generateTeamLogoCandidates({
+          teamName: event.teamName || event.name,
+          style: event.style,
+          color: event.color || event.teamColor,
+          count: event.count
+        })
 
       case 'generateBatchTeamLogos':
         if (!event.teams || !Array.isArray(event.teams)) {
