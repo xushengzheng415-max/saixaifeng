@@ -147,6 +147,7 @@
           </section>
 
           <section v-else-if="activeTab === 'playerCards'"><PlayerCardTemplateLibrary /></section>
+          <section v-else-if="activeTab === 'cardSkins'"><PlayerCardSkinStudio /></section>
 
           <section v-else-if="activeTab === 'feedback'"><ServiceFeedbackPanel /></section>
 
@@ -257,7 +258,8 @@ import ImageCropper from '@/components/common/ImageCropper.vue'
 import PlatformTabletNav from '@/components/PlatformTabletNav.vue'
 import PlatformInstallGuide from '@/components/PlatformInstallGuide.vue'
 import SystemAdmin from '@/views/system/SystemAdmin.vue'
-import PlayerCardTemplateLibrary from './PlayerCardStudio.vue'
+import PlayerCardTemplateLibrary from './PlayerCardTemplateLibrary.vue'
+import PlayerCardSkinStudio from './PlayerCardStudio.vue'
 import DataCenter from '@/views/data/DataCenter.vue'
 import SelfTestDashboard from '@/views/marketing/SelfTestDashboard.vue'
 import AiPortraitAdmin from '@/views/ai-portrait/AiPortraitAdmin.vue'
@@ -274,7 +276,7 @@ const dataCenterRef=ref(null),cardRulesRef=ref(null),marketingRef=ref(null),aiPo
 function refreshSection(){return activeTab.value==='dataCenter'?dataCenterRef.value?.refresh():activeTab.value==='cardRules'?cardRulesRef.value?.refresh():activeTab.value==='marketingSelfTest'?marketingRef.value?.refresh():activeTab.value==='aiPortrait'?aiPortraitRef.value?.refresh():activeTab.value==='membership'?membershipRef.value?.refresh():activeTab.value==='insurance'?insuranceRef.value?.refresh():activeTab.value==='honeyOrders'?honeyOrdersRef.value?.refresh():activeTab.value==='paymentSettings'?paymentSettingsRef.value?.refresh():loadOverview()}
 const router = useRouter(), route = useRoute(), logoUrl = `${import.meta.env.BASE_URL}logo.png`
 const requestedSection = String(route.query.section || '')
-const activeTab = ref(['overview','organizers','accounts','tournaments','teams','dataCenter','support','content','playerCards','cardRules','feedback','marketingSelfTest','aiPortrait','membership','insurance','honeyOrders','paymentSettings'].includes(requestedSection) ? requestedSection : 'overview'), contentTab = ref('banners'), checkingPermission = ref(true), loading = ref(false), savingBanner = ref(false), lastLoadedAt = ref(null)
+const activeTab = ref(['overview','organizers','accounts','tournaments','teams','dataCenter','support','content','playerCards','cardSkins','cardRules','feedback','marketingSelfTest','aiPortrait','membership','insurance','honeyOrders','paymentSettings'].includes(requestedSection) ? requestedSection : 'overview'), contentTab = ref('banners'), checkingPermission = ref(true), loading = ref(false), savingBanner = ref(false), lastLoadedAt = ref(null)
 const banners = ref([]), tournaments = ref([]), organizers = ref([]), accounts = ref([]), teams = ref([]), supportRequests = ref([])
 const organizerKeyword = ref(''), organizerContactFilter = ref('all'), organizerStageFilter = ref('all'), organizerIntentFilter = ref('all'), accountKeyword = ref(''), tournamentKeyword = ref(''), tournamentStatusFilter = ref('all'), teamKeyword = ref(''), featuredKeyword = ref('')
 const accountDeletingId = ref('')
@@ -328,9 +330,9 @@ const hideTeam = row => changeHiddenRow('teams', row, true)
 const restoreTeam = row => changeHiddenRow('teams', row, false)
 const stats = reactive({ totalTournaments: 0, totalOrganizers: 0, totalTeams: 0, activeSupportCount: 0, missingContactCount: 0, leadCount: 0 })
 const bannerForm = reactive({ bannerId: '', title: '', imageUrl: '', displayImageUrl: '', link: '', sort: 0, isActive: true, storageType: 'cloud' })
-const sections = { overview: ['运营总览','掌握平台赛事、主办方和问题协助的最新情况'], organizers: ['主办方联系人','找到赛事创建者，查看联系方式及其赛事和球队'], accounts: ['账号管理','管理主办方登录账号，并安全处理无业务关联的空账号'], tournaments: ['全平台赛事','查看平台内全部赛事的创建方、状态和参赛规模'], teams: ['全平台球队','查看长期球队资产、创建方和历史参赛情况'], dataCenter: ['数据中心',''], support: ['问题与协助','通过用户确认授权的方式安全处理实际使用问题'], content: ['内容运营','管理公开赛事中心的轮播和推荐赛事'], playerCards: ['球员卡系统',''],cardRules:['积分规则',''], feedback: ['反馈管理','查看服务号「我的」页提交的用户反馈并跟进处理'],marketingSelfTest:['自测身价',''],aiPortrait:['AI 形象照','模型上下架、默认模型与后端使用数据（不含价格与扣费规则）'],membership:['会员管理','会员档位价格、会员订单与赠滴发放核对、生效会员列表（订单只读，不提供退款）'],insurance:['赛事保险','投保引导外链、已上传保单统计与险种分布（外链点击不算成交）'],honeyOrders:['蜂蜜充值','充值订单、收款汇总与账本一致性核对（订单只读；手动加滴只加不减）'],paymentSettings:['支付设置','微信支付配置体检、加密写入（AES-256-GCM，页面不回读明文）、逐项清除与 APIv3 密钥生成'] }
+const sections = { overview: ['运营总览','掌握平台赛事、主办方和问题协助的最新情况'], organizers: ['主办方联系人','找到赛事创建者，查看联系方式及其赛事和球队'], accounts: ['账号管理','管理主办方登录账号，并安全处理无业务关联的空账号'], tournaments: ['全平台赛事','查看平台内全部赛事的创建方、状态和参赛规模'], teams: ['全平台球队','查看长期球队资产、创建方和历史参赛情况'], dataCenter: ['数据中心',''], support: ['问题与协助','通过用户确认授权的方式安全处理实际使用问题'], content: ['内容运营','管理公开赛事中心的轮播和推荐赛事'], playerCards: ['球员卡系统',''],cardSkins: ['背景卡 / 皮肤','按平台、赛事、球队或球员标签维护背景卡套系，统一上传素材、调整落位并整套发布'],cardRules:['积分规则',''], feedback: ['反馈管理','查看服务号「我的」页提交的用户反馈并跟进处理'],marketingSelfTest:['自测身价',''],aiPortrait:['AI 形象照','模型上下架、默认模型与后端使用数据（不含价格与扣费规则）'],membership:['会员管理','会员档位价格、会员订单与赠滴发放核对、生效会员列表（订单只读，不提供退款）'],insurance:['赛事保险','投保引导外链、已上传保单统计与险种分布（外链点击不算成交）'],honeyOrders:['蜂蜜充值','充值订单、收款汇总与账本一致性核对（订单只读；手动加滴只加不减）'],paymentSettings:['支付设置','微信支付配置体检、加密写入（AES-256-GCM，页面不回读明文）、逐项清除与 APIv3 密钥生成'] }
 const section = computed(() => ({ title: sections[activeTab.value][0], description: sections[activeTab.value][1] }))
-const navigation = computed(() => [{key:'overview',label:'运营总览',icon:Picture},{key:'organizers',label:'主办方联系人',icon:UserFilled},{key:'accounts',label:'账号管理',icon:UserFilled},{key:'tournaments',label:'全平台赛事',icon:Trophy},{key:'teams',label:'全平台球队',icon:Flag},{key:'dataCenter',label:'数据中心',icon:DataAnalysis},{key:'playerCards',label:'球员卡系统',icon:Picture},{key:'feedback',label:'反馈管理',icon:ChatDotRound},{key:'cardRules',label:'积分规则',icon:DataAnalysis},{key:'support',label:'问题与协助',icon:Headset,badge:stats.activeSupportCount||''},{key:'content',label:'内容运营',icon:Tickets}])
+const navigation = computed(() => [{key:'overview',label:'运营总览',icon:Picture},{key:'organizers',label:'主办方联系人',icon:UserFilled},{key:'accounts',label:'账号管理',icon:UserFilled},{key:'tournaments',label:'全平台赛事',icon:Trophy},{key:'teams',label:'全平台球队',icon:Flag},{key:'dataCenter',label:'数据中心',icon:DataAnalysis},{key:'playerCards',label:'球员卡系统',icon:Picture},{key:'cardSkins',label:'背景卡 / 皮肤',icon:Picture},{key:'feedback',label:'反馈管理',icon:ChatDotRound},{key:'cardRules',label:'积分规则',icon:DataAnalysis},{key:'support',label:'问题与协助',icon:Headset,badge:stats.activeSupportCount||''},{key:'content',label:'内容运营',icon:Tickets}])
 const marketingNavigation = computed(() => [{key:'membership',label:'会员管理',icon:Medal},{key:'insurance',label:'赛事保险',icon:FirstAidKit},{key:'marketingSelfTest',label:'自测身价',icon:DataAnalysis},{key:'aiPortrait',label:'AI 形象照',icon:Picture},{key:'honeyOrders',label:'蜂蜜充值',icon:Tickets},{key:'paymentSettings',label:'支付设置',icon:Wallet}])
 const selectSection = key => { activeTab.value = key }
 const statCards = computed(() => [{key:'o',label:'主办方',value:stats.totalOrganizers,hint:stats.leadCount ? `${stats.leadCount} 个准客户待跟进` : '平台联系人档案',icon:UserFilled,color:'blue',target:'organizers'},{key:'t',label:'全部赛事',value:stats.totalTournaments,hint:'含草稿与历史赛事',icon:Trophy,color:'green',target:'tournaments'},{key:'m',label:'长期球队',value:stats.totalTeams,hint:'不等同于参赛快照',icon:Flag,color:'orange',target:'teams'},{key:'s',label:'协助处理中',value:stats.activeSupportCount,hint:'等待确认或授权中',icon:Service,color:'purple',target:'support'}])
