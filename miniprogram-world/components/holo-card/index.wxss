@@ -17,22 +17,13 @@
   background: transparent;
   transform-style: preserve-3d;
   transition: transform 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
-  filter:
-    drop-shadow(0 22rpx 34rpx rgba(0, 0, 0, 0.66))
-    drop-shadow(0 0 22rpx rgba(240, 199, 94, 0.26));
+  /* 只留一层投影：真机上 filter 层数越多，倾斜时越卡 */
+  filter: drop-shadow(0 20rpx 32rpx rgba(0, 0, 0, 0.7));
   will-change: transform;
-  /* 未按压/未扫光时默认轻摆，对齐 H5 cosmos-idle-tilt */
-  animation: holoSway 7s ease-in-out infinite alternate;
 }
 
 .holo.is-active {
-  animation: none;
   transition: transform 90ms linear;
-}
-
-@keyframes holoSway {
-  0% { transform: rotateX(3deg) rotateY(-5deg); }
-  100% { transform: rotateX(-3deg) rotateY(5deg); }
 }
 
 .card-art {
@@ -69,6 +60,17 @@
   mix-blend-mode: color-dodge;
   opacity: 0.3;
   transition: opacity 200ms ease;
+  /* 只做透明度呼吸（便宜），不再持续改 background-position，避免端上一直重绘 */
+  animation: shineBreath 4.6s ease-in-out infinite alternate;
+}
+
+.holo.is-active .card-shine {
+  animation: none;
+}
+
+@keyframes shineBreath {
+  0% { opacity: 0.24; }
+  100% { opacity: 0.4; }
 }
 
 .tex {
@@ -114,12 +116,6 @@
   );
   background-size: 220% 220%;
   background-position: 30% 30%;
-  animation: rainDrift 7s ease-in-out infinite alternate;
-}
-
-@keyframes rainDrift {
-  0% { background-position: 26% 32%; }
-  100% { background-position: 74% 62%; }
 }
 
 /* —— 常驻扫光：保证端上有可见动效 —— */
@@ -143,6 +139,7 @@
   );
   transform: translateX(-120%) rotate(14deg);
   animation: streakMove 5s ease-in-out infinite;
+  will-change: transform;
 }
 
 @keyframes streakMove {

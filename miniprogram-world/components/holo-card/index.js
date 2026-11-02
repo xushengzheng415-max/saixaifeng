@@ -4,7 +4,7 @@ var SHINE_ACTIVE = 0.62
 var GLARE_IDLE = 0.42
 var GLARE_ACTIVE = 0.62
 var SWEEP_MS = 3600
-var SWEEP_STEP = 70
+var SWEEP_STEP = 80
 
 function clamp01(n) {
   if (n < 0) return 0
@@ -57,32 +57,49 @@ Component({
     ready: function () {
       var self = this
       this.toIdle()
-      this.measure(function () {
+      this.ensureRect(function () {
         self.showcase()
       })
     },
     detached: function () {
-      if (this._loopTimer) {
-        clearInterval(this._loopTimer)
-        this._loopTimer = null
-      }
+      this.stopShowcase()
+    }
+  },
+
+  pageLifetimes: {
+    show: function () {
+      this.ensureRect()
     }
   },
 
   methods: {
-    measure: function (done) {
+    rectValid: function () {
+      return !!this._rect && this._rect.width > 4 && this._rect.height > 4
+    },
+
+    /** 取卡片位置；ready 时可能还没排好版，失败就短间隔重试，避免端上首次触摸没反应 */
+    ensureRect: function (done, retries) {
       var self = this
+      var left = typeof retries === 'number' ? retries : 2
       wx.createSelectorQuery()
         .in(this)
         .select('.holo')
         .boundingClientRect(function (rect) {
-          if (rect && rect.width && rect.height) self._rect = rect
-          if (typeof done === 'function') done()
+          if (rect && rect.width > 4 && rect.height > 4) {
+            self._rect = rect
+            if (typeof done === 'function') done()
+            return
+          }
+          if (left > 0) {
+            setTimeout(function () {
+              self.ensureRect(done, left - 1)
+            }, 120)
+          }
         })
         .exec()
     },
 
-    /** 回到空闲：清空内联 transform 交回 CSS 轻摆，箔光与扫光继续循环 */
+    /** 回到空闲：去掉倾斜，箔光与扫光继续循环 */
     toIdle: function () {
       this.setData({
         activeClass: '',
@@ -108,17 +125,26 @@ Component({
       })
     },
 
+    applyTouch: function (touch) {
+      if (!this.rectValid() || !touch) return
+      var rect = this._rect
+      this.paint(
+        clamp01((touch.clientX - rect.left) / rect.width),
+        clamp01((touch.clientY - rect.top) / rect.height)
+      )
+    },
+
     /** 进页面时自动扫一遍（对齐 H5 showcase），端上一定能看到动效 */
     showcase: function () {
       var self = this
-      if (!this._rect) return
-      if (this._loopTimer) clearInterval(this._loopTimer)
+      if (this._showcased || !this.rectValid()) return
+      this._showcased = true
+      this.stopShowcase()
       var start = Date.now()
       this._loopTimer = setInterval(function () {
         var p = (Date.now() - start) / SWEEP_MS
         if (p >= 1) {
-          clearInterval(self._loopTimer)
-          self._loopTimer = null
+          self.stopShowcase()
           self.toIdle()
           return
         }
@@ -138,33 +164,45 @@ Component({
     },
 
     onTouchStart: function (e) {
+      var self = this
+      var touch = e && e.touches && e.touches[0]
       this._touching = true
       this.stopShowcase()
-      this.measure()
-      this.applyFromEvent(e)
+      /* 先立刻给反馈（箔光/高光提亮），倾斜在拿到卡片位置后一帧内补上 */
+      this.setData({
+        activeClass: 'is-active',
+        shineStyle: 'opacity: ' + SHINE_ACTIVE + ';',
+        glareStyle: glareStyle(50, 38, GLARE_ACTIVE)
+      })
+      if (this.rectValid()) {
+        this.applyTouch(touch)
+        this.ensureRect()
+      } else {
+        this.ensureRect(function () {
+          if (self._touching) self.applyTouch(touch)
+        })
+      }
     },
 
     onTouchMove: function (e) {
+      var touch = e && e.touches && e.touches[0]
       var now = Date.now()
-      if (now - (this._lastApply || 0) < 32) return
+      if (now - (this._lastApply || 0) < 40) return
       this._lastApply = now
-      this.applyFromEvent(e)
+      if (this.rectValid()) {
+        this.applyTouch(touch)
+        return
+      }
+      var self = this
+      this.ensureRect(function () {
+        self.applyTouch(touch)
+      })
     },
 
     onTouchEnd: function () {
       if (!this._touching) return
       this._touching = false
       this.toIdle()
-    },
-
-    applyFromEvent: function (e) {
-      var rect = this._rect
-      var touch = e && e.touches && e.touches[0]
-      if (!rect || !touch) return
-      this.paint(
-        clamp01((touch.clientX - rect.left) / rect.width),
-        clamp01((touch.clientY - rect.top) / rect.height)
-      )
     }
   }
 })
