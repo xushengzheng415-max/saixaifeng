@@ -1,32 +1,33 @@
-/* 全息主卡：对齐 H5 卡世界 player-card-holo（holo-cosmos）效果
-   比例 0.698 / 透明卡形 / 星空箔光随手指 / 松手回到默认循环流光 */
+/* 全息主卡：对齐 H5 卡世界 player-card-holo（holo-cosmos）
+   卡面比例 0.698 / 卡形遮罩内置 base64（不依赖端上加载本地 wxss 图片）/ 星空箔光 / 扫光 / 手指跟随 + 默认循环 */
 
 .holo-wrap {
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  perspective: 800px; /* 对齐 H5 .holo-card 的透视，倾斜才有立体感 */
+  perspective: 900px;
 }
 
 .holo {
+  --card-mask: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAADXCAYAAAD4BagrAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAARHSURBVHhe7dLZjtxIDAVR//9Pz6BnYKAcViYvtZS2COC8dJNZ2n79MjOzZ/YP/2Dvba+P4eec37a2xxl2Unt/CLSlvc6xL8YPYOvL41lHnWsXji9r60vjOUvWxnO2nmcHxJezx4viOTNr4hlkJ8aXsWRNPCOxJp6xxL4YH/4M4/+/ifH/I3ZwfOBvYwfEh/xmtkN8qPqffdR9IHyY+tvr6zwIPjzVqtK5W5U+AD4s9cxK525TcvOc0TajkplbxBvmDfF/2her/n+LeBO8Gf5dx5k981vFi9e13SJetO7h0vFidS+XjReq+7lcvEDd12Xihen+To8XpOc4LV6Inufr8QL0XF+LP6znOzz+oN7jsPhDepfD4g/pfXaPP6D32i0eLG2OB0o/NsXDpE+r4iHSkiguSR3DOCh1DOOg1DGMg1LHMA5KHcM4KHUM46DUMYyDUscwDkodwzgodQzjoNQxjINSxzAOSh3DOCh1DOOg1DGMg1LHMA5KHcM4KHUM46DUMYyDUscwDkodwzgodQzjoNQxjINSxzAOSh3DOCh1DOOg1DGMg1LXNA5LlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkkzrbgsLVkVD5FoVTxE+rQ6HiR9Wh0Pkj6tjgdJtCoeIn1aHQ+SPq2OB0m0Kh4i0ap4iETteIC0pB0PkEZacVkaieOiNBPHRalSxgUpNYyDUtdiHJK6FuOQ1LUYh6SuxTgkdS3GIaljGAeljmEclDqmcVhKTeOwlJrGYSk1jcNSahqHpdQ0DkupaRyWElFckipRXJIqUVySKlFckipRXJIqUVySKmVckBJlXJASZVyQEmVckBJlXJASZVyQEmVckBJlXJASUVySKmVckBJlXJASZVyQEmVckBJlXJASZVyQElFckipRXJIqUVySZlpxWRppxWVppBWXpZE4LkozcVyUZuK4KM3EcVGaieOiNBPHRWkmiktSYhqHpa7FOCR1TOOwlJrGYSkRxSWpEsUlaaYVl6WRVlyWRlpxWVqyKh4i0ap4iPRpUzxM+m1zPFDaLR6s99o9/oDe57D4Q3qPw+MP6tm+Gn9cz3RavBA9x+nxgnR/l4kXpnu6bLxQ3cfl4wXr+m4TL1zXdbt4A7qW28cb0vkeE29M53lcvEF932PjDfLGtQ8+31fHh6M+tvS318aHpZo14sPTn2xjfKBvZzvHB/w29oX40J/MTogv4SnsQvHl3JFdOL6sO7AbxZd3NXbz+ELPZg+LL/jb7OHxhR/NXhY/gCPYi+PHsAez/+KHsZbZYvxQOsym8YNJmEXxwxkxa8ePiMxWx4/Jj8p2y4/KDsuPyszskf0LRjK8l2RPJKYAAAAASUVORK5CYII=");
   position: relative;
   width: 100%;
   padding-top: 143.27%; /* 卡面 300x430，比例 0.6977 */
   background: transparent;
   transform-style: preserve-3d;
-  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition: transform 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
   filter:
     drop-shadow(0 22rpx 34rpx rgba(0, 0, 0, 0.66))
     drop-shadow(0 0 22rpx rgba(240, 199, 94, 0.26));
   will-change: transform;
-  /* 未按压时默认轻摆，对齐 H5 cosmos-idle-tilt */
+  /* 未按压/未扫光时默认轻摆，对齐 H5 cosmos-idle-tilt */
   animation: holoSway 7s ease-in-out infinite alternate;
 }
 
-.holo.is-grabbing {
-  transition: transform 60ms linear;
+.holo.is-active {
   animation: none;
+  transition: transform 90ms linear;
 }
 
 @keyframes holoSway {
@@ -40,72 +41,120 @@
   top: 0;
   width: 100%;
   height: 100%;
-  border-radius: 26rpx;
 }
 
-/* 星空箔光：cosmos 底图 + cosmos 顶图 + 12 段彩虹，默认缓慢流动 */
-.card-shine {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 26rpx;
-  background-image:
-    url('/assets/card/cosmos/cosmos-top-trans.jpg'),
-    url('/assets/card/cosmos/cosmos-bottom.jpg'),
-    repeating-linear-gradient(
-      82deg,
-      hsl(53, 45%, 62%) 0%,
-      hsl(93, 40%, 55%) 5%,
-      hsl(176, 38%, 55%) 10%,
-      hsl(228, 42%, 58%) 15%,
-      hsl(283, 40%, 58%) 20%,
-      hsl(326, 38%, 56%) 25%,
-      hsl(326, 38%, 56%) 30%,
-      hsl(283, 40%, 58%) 35%,
-      hsl(228, 42%, 58%) 40%,
-      hsl(176, 38%, 55%) 45%,
-      hsl(93, 40%, 55%) 50%,
-      hsl(53, 45%, 62%) 55%
-    );
-  background-size: 100% 100%, 100% 100%, 210% 210%;
-  background-position: 50% 50%, 50% 50%, 30% 30%;
-  background-repeat: no-repeat, no-repeat, no-repeat;
-  background-blend-mode: soft-light, soft-light, normal;
-  mix-blend-mode: color-dodge;
-  opacity: 0.26;
-  pointer-events: none;
-  transition: opacity 200ms ease;
-  animation: shineDrift 7s ease-in-out infinite;
-}
-
-.holo.is-grabbing .card-shine {
-  animation: none;
-}
-
-@keyframes shineDrift {
-  0% { background-position: 50% 50%, 50% 50%, 30% 30%; }
-  50% { background-position: 50% 50%, 50% 50%, 72% 60%; }
-  100% { background-position: 50% 50%, 50% 50%, 30% 30%; }
-}
-
-/* 镜面高光：中景星空 + 跟随手指的径向光 */
+/* 卡形遮罩：箔光只落在卡面轮廓内（把卡面 alpha 缩成 150x215 内置成 base64） */
+.card-shine,
+.card-sweep,
 .card-glare {
   position: absolute;
   left: 0;
   top: 0;
   width: 100%;
   height: 100%;
-  border-radius: 26rpx;
-  background-image: url('/assets/card/cosmos/cosmos-middle-trans.jpg');
-  background-size: 100% 100%;
-  background-position: 50% 50%;
-  background-repeat: no-repeat;
-  background-blend-mode: soft-light;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: var(--card-mask);
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: 0 0;
+  mask-image: var(--card-mask);
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  mask-position: 0 0;
+}
+
+/* —— 星空箔光：三层 cosmos 贴图 + 12 段彩虹 —— */
+.card-shine {
+  mix-blend-mode: color-dodge;
+  opacity: 0.3;
+  transition: opacity 200ms ease;
+}
+
+.tex {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.tex-bottom {
+  opacity: 0.36;
+}
+
+.tex-middle {
+  opacity: 0.24;
+}
+
+.tex-top {
+  opacity: 0.18;
+}
+
+.rain {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-image: repeating-linear-gradient(
+    82deg,
+    hsl(53, 45%, 62%) 0%,
+    hsl(93, 40%, 55%) 5%,
+    hsl(176, 38%, 55%) 10%,
+    hsl(228, 42%, 58%) 15%,
+    hsl(283, 40%, 58%) 20%,
+    hsl(326, 38%, 56%) 25%,
+    hsl(326, 38%, 56%) 30%,
+    hsl(283, 40%, 58%) 35%,
+    hsl(228, 42%, 58%) 40%,
+    hsl(176, 38%, 55%) 45%,
+    hsl(93, 40%, 55%) 50%,
+    hsl(53, 45%, 62%) 55%
+  );
+  background-size: 220% 220%;
+  background-position: 30% 30%;
+  animation: rainDrift 7s ease-in-out infinite alternate;
+}
+
+@keyframes rainDrift {
+  0% { background-position: 26% 32%; }
+  100% { background-position: 74% 62%; }
+}
+
+/* —— 常驻扫光：保证端上有可见动效 —— */
+.card-sweep {
+  mix-blend-mode: screen;
+  opacity: 0.32;
+}
+
+.streak {
+  position: absolute;
+  top: -20%;
+  left: 0;
+  width: 46%;
+  height: 140%;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.5) 45%,
+    rgba(255, 255, 255, 0.75) 52%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: translateX(-120%) rotate(14deg);
+  animation: streakMove 5s ease-in-out infinite;
+}
+
+@keyframes streakMove {
+  0% { transform: translateX(-120%) rotate(14deg); }
+  55% { transform: translateX(230%) rotate(14deg); }
+  100% { transform: translateX(230%) rotate(14deg); }
+}
+
+/* —— 镜面高光：跟随手指的径向光 —— */
+.card-glare {
   mix-blend-mode: soft-light;
   opacity: 0.42;
-  pointer-events: none;
   transition: opacity 160ms ease;
 }
 

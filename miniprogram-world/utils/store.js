@@ -207,7 +207,7 @@ function mainCardView() {
     numberText: '#' + p.number,
     positionLabel: p.positionLabel,
     headHint: p.name + ' · ' + p.positionLabel + ' · #' + p.number,
-    foilTip: '轻彩箔光已默认循环 · 按住卡面滑动略加强',
+    foilTip: '箔光循环扫过 · 按住卡面滑动可带动光斑',
     cityText: state.cityName + ' · ' + state.cityCode,
     cardUrl: p.cardUrl,
     stats: [

@@ -1,15 +1,26 @@
 <view class="holo-wrap">
   <view
-    class="holo {{grabbingClass}}"
+    class="holo {{activeClass}}"
     style="{{tiltStyle}}"
-    bindtouchmove="onTouchMove"
     bindtouchstart="onTouchStart"
+    bindtouchmove="onTouchMove"
     bindtouchend="onTouchEnd"
     bindtouchcancel="onTouchEnd"
     aria-label="{{ariaLabel}}"
   >
     <image class="card-art" src="{{cardUrl}}" mode="scaleToFill"></image>
-    <view class="card-shine" style="{{shineStyle}}"></view>
+
+    <view class="card-shine" style="{{shineStyle}}">
+      <image class="tex tex-bottom" src="/assets/card/cosmos/cosmos-bottom.jpg" mode="scaleToFill"></image>
+      <image class="tex tex-middle" src="/assets/card/cosmos/cosmos-middle-trans.jpg" mode="scaleToFill"></image>
+      <image class="tex tex-top" src="/assets/card/cosmos/cosmos-top-trans.jpg" mode="scaleToFill"></image>
+      <view class="rain" style="{{rainStyle}}"></view>
+    </view>
+
+    <view class="card-sweep">
+      <view class="streak"></view>
+    </view>
+
     <view class="card-glare" style="{{glareStyle}}"></view>
   </view>
   <view class="holo-tip">{{tipText}}</view>

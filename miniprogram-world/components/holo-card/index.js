@@ -1,12 +1,30 @@
 var TILT = 16
-var IDLE_SHINE = 0.26
-var IDLE_GLARE = 0.4
-var ACTIVE_SHINE = 0.54
-var ACTIVE_GLARE = 0.56
-var COSMOS_MIDDLE = '/assets/card/cosmos/cosmos-middle-trans.jpg'
+var SHINE_IDLE = 0.3
+var SHINE_ACTIVE = 0.62
+var GLARE_IDLE = 0.42
+var GLARE_ACTIVE = 0.62
+var SWEEP_MS = 3600
+var SWEEP_STEP = 70
 
-/* 空闲时清空内联 transform，交回 CSS 的 holoSway 轻摆动画（对齐 H5 cosmos-idle-tilt） */
-var IDLE_TILT = ''
+function clamp01(n) {
+  if (n < 0) return 0
+  if (n > 1) return 1
+  return n
+}
+
+function tiltStyle(rotateX, rotateY) {
+  return 'transform: rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' + rotateY.toFixed(2) + 'deg);'
+}
+
+function glareStyle(x, y, opacity) {
+  return (
+    'background-image: radial-gradient(circle at ' + x + '% ' + y + '%, ' +
+    'rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.18) 34%, rgba(255, 255, 255, 0) 64%);' +
+    'background-size: 100% 100%;' +
+    'background-repeat: no-repeat;' +
+    'opacity: ' + opacity + ';'
+  )
+}
 
 Component({
   properties: {
@@ -20,124 +38,133 @@ Component({
     },
     tipText: {
       type: String,
-      value: '轻彩箔光已默认循环 · 按住卡面滑动略加强'
+      value: '全息箔光循环扫过 · 按住卡面滑动可带动光斑'
     }
   },
 
   data: {
-    tiltStyle: IDLE_TILT,
-    shineStyle: '',
-    glareStyle: '',
-    grabbingClass: ''
+    tiltStyle: '',
+    shineStyle: 'opacity: ' + SHINE_IDLE + ';',
+    rainStyle: '',
+    glareStyle: glareStyle(50, 38, GLARE_IDLE),
+    activeClass: ''
   },
 
   lifetimes: {
     attached: function () {
-      this.syncIdleStyles()
+      this.toIdle()
     },
     ready: function () {
-      this.syncIdleStyles()
-      this.measure()
-    }
-  },
-
-  observers: {
-    cardUrl: function () {
-      this.syncIdleStyles()
+      var self = this
+      this.toIdle()
+      this.measure(function () {
+        self.showcase()
+      })
+    },
+    detached: function () {
+      if (this._loopTimer) {
+        clearInterval(this._loopTimer)
+        this._loopTimer = null
+      }
     }
   },
 
   methods: {
-    /** 用卡面图本身做遮罩，箔光只落在卡形内（对齐 H5 的 --card-mask） */
-    maskStyle: function () {
-      var url = this.data.cardUrl || ''
-      if (!url) return ''
-      return (
-        '-webkit-mask-image: url("' + url + '");' +
-        '-webkit-mask-size: 100% 100%;' +
-        '-webkit-mask-repeat: no-repeat;' +
-        '-webkit-mask-position: center 50%;' +
-        'mask-image: url("' + url + '");' +
-        'mask-size: 100% 100%;' +
-        'mask-repeat: no-repeat;' +
-        'mask-position: center 50%;'
-      )
-    },
-
-    glareBackground: function (x, y) {
-      return (
-        'background-image: url("' + COSMOS_MIDDLE + '"), radial-gradient(circle at ' + x + '% ' + y + '%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 60%);' +
-        'background-size: 100% 100%, 100% 100%;' +
-        'background-position: 50% 50%, ' + x + '% ' + y + '%;' +
-        'background-repeat: no-repeat, no-repeat;'
-      )
-    },
-
-    syncIdleStyles: function () {
-      var mask = this.maskStyle()
-      this.setData({
-        shineStyle: 'opacity: ' + IDLE_SHINE + ';' + mask,
-        glareStyle: this.glareBackground(50, 38) + 'opacity: ' + IDLE_GLARE + ';' + mask
-      })
-    },
-
-    measure: function () {
+    measure: function (done) {
       var self = this
       wx.createSelectorQuery()
         .in(this)
         .select('.holo')
         .boundingClientRect(function (rect) {
           if (rect && rect.width && rect.height) self._rect = rect
+          if (typeof done === 'function') done()
         })
         .exec()
     },
 
+    /** 回到空闲：清空内联 transform 交回 CSS 轻摆，箔光与扫光继续循环 */
+    toIdle: function () {
+      this.setData({
+        activeClass: '',
+        tiltStyle: '',
+        shineStyle: 'opacity: ' + SHINE_IDLE + ';',
+        rainStyle: '',
+        glareStyle: glareStyle(50, 38, GLARE_IDLE)
+      })
+    },
+
+    /** 按归一化坐标落点：倾斜 + 箔光增强 + 彩虹与镜面光跟随 */
+    paint: function (nx, ny) {
+      var rotateY = (nx - 0.5) * TILT * 2
+      var rotateX = (0.5 - ny) * TILT * 2
+      var x = Math.round(nx * 100)
+      var y = Math.round(ny * 100)
+      this.setData({
+        activeClass: 'is-active',
+        tiltStyle: tiltStyle(rotateX, rotateY),
+        shineStyle: 'opacity: ' + SHINE_ACTIVE + ';',
+        rainStyle: 'background-position: ' + x + '% ' + y + '%;',
+        glareStyle: glareStyle(x, y, GLARE_ACTIVE)
+      })
+    },
+
+    /** 进页面时自动扫一遍（对齐 H5 showcase），端上一定能看到动效 */
+    showcase: function () {
+      var self = this
+      if (!this._rect) return
+      if (this._loopTimer) clearInterval(this._loopTimer)
+      var start = Date.now()
+      this._loopTimer = setInterval(function () {
+        var p = (Date.now() - start) / SWEEP_MS
+        if (p >= 1) {
+          clearInterval(self._loopTimer)
+          self._loopTimer = null
+          self.toIdle()
+          return
+        }
+        var ang = p * Math.PI * 4
+        self.paint(
+          clamp01(0.5 + Math.cos(ang) * 0.42),
+          clamp01(0.5 + Math.sin(ang * 0.85) * 0.36)
+        )
+      }, SWEEP_STEP)
+    },
+
+    stopShowcase: function () {
+      if (this._loopTimer) {
+        clearInterval(this._loopTimer)
+        this._loopTimer = null
+      }
+    },
+
     onTouchStart: function (e) {
       this._touching = true
+      this.stopShowcase()
       this.measure()
-      this.setData({ grabbingClass: 'is-grabbing' })
-      this.applyPoint(e)
+      this.applyFromEvent(e)
     },
 
     onTouchMove: function (e) {
       var now = Date.now()
       if (now - (this._lastApply || 0) < 32) return
       this._lastApply = now
-      this.applyPoint(e)
+      this.applyFromEvent(e)
     },
 
     onTouchEnd: function () {
       if (!this._touching) return
       this._touching = false
-      var mask = this.maskStyle()
-      this.setData({
-        grabbingClass: '',
-        tiltStyle: IDLE_TILT,
-        shineStyle: 'opacity: ' + IDLE_SHINE + ';' + mask,
-        glareStyle: this.glareBackground(50, 38) + 'opacity: ' + IDLE_GLARE + ';' + mask
-      })
+      this.toIdle()
     },
 
-    applyPoint: function (e) {
+    applyFromEvent: function (e) {
       var rect = this._rect
       var touch = e && e.touches && e.touches[0]
       if (!rect || !touch) return
-      var px = (touch.clientX - rect.left) / rect.width
-      var py = (touch.clientY - rect.top) / rect.height
-      px = Math.max(0, Math.min(1, px))
-      py = Math.max(0, Math.min(1, py))
-
-      var rotateY = (px - 0.5) * TILT * 2
-      var rotateX = (0.5 - py) * TILT * 2
-      var x = Math.round(px * 100)
-      var y = Math.round(py * 100)
-      var mask = this.maskStyle()
-
-      this.setData({
-        tiltStyle: 'transform: rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' + rotateY.toFixed(2) + 'deg);',
-        shineStyle: 'opacity: ' + ACTIVE_SHINE + '; background-position: 50% 50%, 50% 50%, ' + x + '% ' + y + '%;' + mask,
-        glareStyle: this.glareBackground(x, y) + 'opacity: ' + ACTIVE_GLARE + ';' + mask
-      })
+      this.paint(
+        clamp01((touch.clientX - rect.left) / rect.width),
+        clamp01((touch.clientY - rect.top) / rect.height)
+      )
     }
   }
 })
