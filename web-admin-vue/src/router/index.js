@@ -413,6 +413,13 @@ const routes = [
     children: [{ path: '', component: () => import('../views/tournament/TournamentStaffAccess.vue') }]
   },
   {
+    path: '/tournaments/:id/transfer',
+    name: 'TournamentTransferCenter',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '转会中心', parent: 'tournaments', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/tournament/TournamentTransferCenter.vue') }]
+  },
+  {
     path: '/tournaments/:id/staff-results',
     name: 'TournamentStaffResults',
     component: () => import('../views/layout/LayoutView.vue'),
@@ -567,9 +574,9 @@ function hasOrganizerSession() {
   const version = localStorage.getItem('authSessionVersion') || ''
   const loginType = localStorage.getItem('loginType') || ''
   const authToken = localStorage.getItem('authToken') || ''
-  // 只承认微信主办方会话。平台管理员会话由上面的 redirectPlatformSession 单独分流；
+  // 手机验证码与微信均使用自然人会话。平台管理员会话由 redirectPlatformSession 单独分流；
   // 这里不再接受 platform-password（历史实现把它伪装成 organizer 才放行，正是串味来源）。
-  return loginType === 'wechat' &&
+  return ['wechat', 'phone'].includes(loginType) &&
     Boolean(role) &&
     version === 'phone-canonical-web-v1' &&
     Boolean(authToken)
@@ -607,7 +614,7 @@ async function needsOrganizerServiceBinding(to) {
   if (['/service-account-binding','/tournament-staff','/organization-onboarding'].includes(to.path)) return false
   if (!hasLocalOrganization()) return false
   const loginType = localStorage.getItem('loginType') || ''
-  if (loginType !== 'wechat') return false
+  if (!['wechat', 'phone'].includes(loginType)) return false
   try {
     const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
     if (user.isPlatformOwner === true) return false

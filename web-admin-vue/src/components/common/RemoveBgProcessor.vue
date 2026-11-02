@@ -23,7 +23,7 @@
               · 建议使用透明背景 PNG 格式，效果最佳
             </span>
             <span class="tip-size">
-              · 建议尺寸 500×500 像素
+              · 建议尺寸 1024×1024 像素，保留清晰文字
             </span>
           </template>
           <span v-else>
@@ -62,10 +62,10 @@
           :center-box="true"
           :can-move="true"
           :can-move-box="true"
-          :original="false"
+          :original="cropConfig.useOriginal"
           :auto-crop-width="cropConfig.width"
           :auto-crop-height="cropConfig.height"
-          :enlarge="2"
+          :enlarge="cropConfig.enlarge"
           mode="contain"
         />
         <!-- 头像参考框叠加层（仅球员头像显示） -->
@@ -286,14 +286,18 @@ async function addLogoSafeAreaToFile(file) {
 }
 
 // 根据类型动态裁剪配置
+const isLogoType = computed(() => props.type === 'teamLogo' || props.type === 'tournamentLogo')
+
 const cropConfig = computed(() => {
-  if (props.type === 'teamLogo' || props.type === 'tournamentLogo') {
+  if (isLogoType.value) {
     return {
       title: '调整 Logo 位置',
-      subtitle: '已预留安全边距，可拖动或缩放调整位置（建议 500×500）',
+      subtitle: '已预留安全边距，可拖动或缩放调整位置（建议 1024×1024）',
       ratio: [1, 1],
       width: 500,
       height: 500,
+      enlarge: 1,
+      useOriginal: true,
       showAvatarFrame: false
     }
   }
@@ -303,6 +307,8 @@ const cropConfig = computed(() => {
     ratio: [150, 194],
     width: 150,
     height: 194,
+    enlarge: 2,
+    useOriginal: false,
     showAvatarFrame: true
   }
 })
@@ -331,11 +337,11 @@ async function handleFileChange(file) {
   processing.value = true
   errorMessage.value = ''
 
-  // 队徽/赛事Logo：先压缩图片（避免大图撑爆裁剪框）
+  // 队徽/赛事Logo：仅对超大图做上限压缩，避免文字被压糊。
   let processFile = file.raw
   if (props.type === 'teamLogo' || props.type === 'tournamentLogo') {
     try {
-      processFile = await compressImage(file.raw, 500, 500)
+      processFile = await compressImage(file.raw, 1024, 1024)
     } catch (err) {
       console.warn('[RemoveBg] 图片压缩失败，使用原图:', err.message)
       processFile = file.raw
@@ -376,11 +382,13 @@ async function handleFileChange(file) {
         processMethod.value = result.method || ''
         methodWarning.value = result.warning || ''
 
-        // ★ 进入裁剪器前先压缩抠图结果（百度返回的原图可能几千像素）
-        //    避免裁剪后 getCropData 输出大图 → 413 上传失败
-        const cropperMaxSize = props.type === 'playerAvatar' ? 200 : 200
+        // 进入裁剪器前只对超大图限边；队徽保留高分辨率，避免环字发糊。
+        // 实际上传已走 32KB 分片，不再需要为躲避 413 把图压到 200px。
+        const cropperMaxSize = isLogoType.value ? 1024 : 400
         const cropperReady = await compressToSize(result.data, cropperMaxSize)
-        const cropperWithSafeArea = await addLogoSafeArea(cropperReady)
+        const cropperWithSafeArea = isLogoType.value
+          ? await addLogoSafeArea(cropperReady)
+          : cropperReady
         console.log(`[RemoveBg] 裁剪前压缩: 最长边≤${cropperMaxSize}px, ${(cropperReady.length / 1024).toFixed(1)}KB`)
 
         // 将 base64 转为 Blob URL（vue-cropper 对大 base64 支持不好）
@@ -447,8 +455,8 @@ async function handleCropConfirm() {
 }
 
 async function uploadWithAutoRetry(base64Data) {
-  // ★ 分片上传：每片 32KB，远低于 HTTP 网关限制
-  const sizes = [200, 128, 64]
+  // 分片上传已绕过网关限制；队徽优先保留清晰度，仅失败时逐步降采样。
+  const sizes = isLogoType.value ? [1024, 768, 512] : [400, 256, 200]
   let lastError = null
 
   for (let i = 0; i < sizes.length; i++) {

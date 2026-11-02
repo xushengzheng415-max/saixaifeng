@@ -29,7 +29,7 @@
         <p v-if="unverifiedCount" class="incomplete">{{ unverifiedCount }} 项统计记录不完整，暂不参与排名</p>
         <article class="rank-card panel">
           <header class="rank-card-head">
-            <div><h3>{{ divisionTabLabel }} · 个人进球榜</h3><p>按正式赛果的进球事件统计；进球相同时助攻更多、出场更少者在前。</p></div>
+            <div><h3>{{ divisionTabLabel }} · 个人进球榜</h3><p>按正式赛果的进球事件统计，排序以统一数据中心为准。</p></div>
             <span>{{ visiblePlayerRows.length }} 名球员</span>
           </header>
           <div v-if="visiblePlayerRows.length" class="rank-table-wrap">
@@ -133,6 +133,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { callFunction } from '../../utils/cloud'
+import { teamBoard } from '../../../../cloudfunctions/dataCenter/shared/tournament-boards.mjs'
 
 const props = defineProps({ tournamentId:String, divisionId:String, date:String, kind:String, keyword:String, teamRows:{ type:Array, default:() => [] } })
 const loading = ref(false), error = ref(''), statistics = ref(null), cardMetric = ref('yellowCards')
@@ -147,14 +148,6 @@ function teamNames(ids) { return (ids || []).map(id => teamDirectory.value.get(S
 function averageText(value){ const text=Number(value||0).toFixed(2); return text.endsWith('.00') ? text.slice(0,-3) : text }
 
 // 组别标签：总榜 + 各竞赛组别。球队与球员的组别归属都取积分榜同一口径。
-const divisionByTeam = computed(() => {
-  const map = new Map()
-  for (const team of props.teamRows) {
-    if (!team.teamId) continue
-    map.set(String(team.teamId), { id:String(team.divisionId || ''), name:String(team.divisionName || '').trim() || '未分组别' })
-  }
-  return map
-})
 const divisionTabs = computed(() => {
   const seen = new Map()
   for (const team of props.teamRows) {
@@ -170,7 +163,7 @@ const isAllDivisions = computed(() => divisionTab.value === 'all')
 const divisionTabLabel = computed(() => divisionTabs.value.find(tab => tab.id === divisionTab.value)?.name || '总榜')
 
 const playerRowsWithDivision = computed(() => rows.value.map(row => {
-  const division = (row.teamIds || []).map(id => divisionByTeam.value.get(String(id))).find(Boolean) || { id:'', name:'未分组别' }
+  const division = !isAllDivisions.value ? {id:divisionTab.value,name:divisionTabLabel.value} : {id:'',name:'跨组别总榜'}
   return { ...row, divisionId:division.id, divisionName:division.name }
 }))
 // 服务端进球榜已按进球、助攻、出场等规则排序，这里只做范围筛选并重排连续名次。
@@ -191,18 +184,19 @@ const teamRows = computed(() => props.teamRows.map(team => ({
 })))
 const scorerRows = computed(() => {
   const list = isAllDivisions.value ? teamRows.value : teamRows.value.filter(team => team.divisionKey === divisionTab.value)
-  return [...list].sort((a,b) => b.goalsFor-a.goalsFor || b.goalDifference-a.goalDifference || b.points-a.points || a.played-b.played).map((team,index) => ({ ...team, rank:index+1 }))
+  return teamBoard(list, 'goals')
 })
 const keeperRows = computed(() => {
   const list = isAllDivisions.value ? teamRows.value : teamRows.value.filter(team => team.divisionKey === divisionTab.value)
-  return [...list].sort((a,b) => a.goalsAgainst-b.goalsAgainst || a.goalsAgainst/a.played-b.goalsAgainst/b.played || b.points-a.points || b.played-a.played).map((team,index) => ({ ...team, rank:index+1 }))
+  return teamBoard(list, 'conceded')
 })
 
 async function load() {
   const version = ++requestVersion
   loading.value = true; error.value = ''; statistics.value = null
   try {
-    const scope = { tournamentId:props.tournamentId, mode:'official', ...(props.divisionId ? {divisionId:props.divisionId} : {}) }
+    const selectedDivision = props.divisionId || (divisionTab.value === 'all' ? '' : divisionTab.value)
+    const scope = { tournamentId:props.tournamentId, mode:'official', ...(selectedDivision ? {divisionId:selectedDivision} : {}) }
     if (props.date) {
       const end = new Date(`${props.date}T00:00:00+08:00`)
       end.setUTCDate(end.getUTCDate() + 1)
@@ -215,7 +209,7 @@ async function load() {
   } catch (cause) { if (version === requestVersion) error.value = cause.message }
   finally { if (version === requestVersion) loading.value = false }
 }
-watch(() => [props.tournamentId,props.divisionId,props.date],load,{immediate:true})
+watch(() => [props.tournamentId,props.divisionId,props.date,divisionTab.value],load,{immediate:true})
 </script>
 
 <style scoped>

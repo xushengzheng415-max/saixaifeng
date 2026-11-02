@@ -69,6 +69,9 @@
             <p class="updated-at">最近更新：{{ updatedAt(tournament) }}</p>
           </template>
           <button class="enter-button" type="button" @click.stop="openTournament(tournament)">进入赛事</button>
+          <button v-if="tournament.isShared" class="leave-shared-button" type="button"
+            :disabled="Boolean(leavingGrantId)" @click.stop="leaveSharedTournament(tournament)"
+            @keydown.enter.stop @keydown.space.stop>{{ leavingGrantId === tournament.grantId ? '退出中…' : '退出共享' }}</button>
         </div>
       </article>
     </div>
@@ -96,6 +99,7 @@ const ownLoadError = ref('')
 const tournaments = ref([])
 const hasOwnOrganization = ref(false)
 const deletingTournamentId = ref('')
+const leavingGrantId = ref('')
 const demoModeAvailable = isDemoModeAvailable()
 const demoModeActive = ref(isDemoMode())
 const isVisualQa = import.meta.env.DEV && (window.location.href.includes('visualQa=1') || localStorage.getItem('sxfVisualQa') === '1')
@@ -172,6 +176,7 @@ async function loadTournaments() {
         _id: String(grant.tournamentId || ''),
         name: grant.tournamentName || grant.tournamentId || '赛事',
         isShared: true,
+        grantId: String(grant.id || ''),
         permissions: Array.isArray(grant.permissions) ? grant.permissions : []
       })).filter(item => item._id && !ownIds.has(item._id))
     } catch (error) {
@@ -206,8 +211,34 @@ async function goToCreate() {
   router.push('/tournaments/create')
 }
 function openTournament(tournament) {
+  if (leavingGrantId.value) return
   if (!tournament?._id) return
   router.push(`/tournaments/${tournament._id}`)
+}
+async function leaveSharedTournament(tournament) {
+  if (!tournament?.isShared || !tournament.grantId || leavingGrantId.value) return
+  const session = [localStorage.getItem('authToken'), localStorage.getItem('userId')].join('|')
+  leavingGrantId.value = tournament.grantId
+  try {
+    await ElMessageBox.confirm(`退出“${tournament.name}”后，你将无法继续管理该赛事。重新加入需由主办方授权。`, '退出共享', {
+      confirmButtonText: '确认退出', cancelButtonText: '取消', type: 'warning'
+    })
+    if (session !== [localStorage.getItem('authToken'), localStorage.getItem('userId')].join('|')) throw new Error('登录账号已变化，请刷新后重试')
+    const result = await callFunction('tournamentStaffAccess', { action: 'leave', grantId: tournament.grantId })
+    if (session !== [localStorage.getItem('authToken'), localStorage.getItem('userId')].join('|')) return
+    if (!result?.success) throw new Error(result?.message || result?.error || '退出失败，请重试')
+    tournaments.value = tournaments.value.filter(item => item.grantId !== tournament.grantId)
+    if (sessionStorage.getItem('sxfStaffTournamentId') === String(tournament._id)) {
+      sessionStorage.removeItem('sxfStaffTournamentId')
+      sessionStorage.removeItem('sxfStaffPermissions')
+      sessionStorage.removeItem('sxfTournamentStaff')
+    }
+    ElMessage.success('已退出共享赛事')
+  } catch (error) {
+    if (!['cancel', 'close'].includes(error)) ElMessage.error(error.message || '退出失败，请重试')
+  } finally {
+    leavingGrantId.value = ''
+  }
 }
 const demoEntering = ref(false)
 async function toggleDemoMode() {
@@ -315,6 +346,7 @@ onUnmounted(() => {
 <style scoped>
 .tournament-space{width:100%;min-height:calc(100vh - var(--admin-topbar-height));padding-bottom:38px;background:#f7f9f8}.space-hero{position:relative;height:332px;padding:58px clamp(74px,7.1vw,114px);overflow:hidden;color:#fff;background:linear-gradient(90deg,rgba(0,58,37,.96),rgba(0,60,38,.7) 48%,rgba(0,47,31,.08)),url('../../assets/images/tournament-space-emerald-field-v1.png') center/cover no-repeat}.space-hero:after{content:"";position:absolute;left:-3%;right:-3%;bottom:-43px;height:74px;border-radius:50% 50% 0 0;background:#f7f9f8}.hero-copy{position:relative;z-index:1}.hero-copy h1{margin:0;color:#fff;font-size:48px;line-height:1.25;font-weight:800;letter-spacing:2px}.hero-copy p{margin:12px 0 0;color:rgba(255,255,255,.92);font-size:21px;font-weight:500}.space-heading{position:absolute;z-index:2;left:clamp(74px,7.1vw,114px);bottom:51px;display:flex;align-items:center;gap:10px}.space-heading i{width:4px;height:24px;border-radius:3px;background:#25d9d1}.space-heading h2{margin:0;color:#fff;font-size:23px;font-weight:700}.tournament-grid{position:relative;z-index:3;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;width:calc(100% - clamp(148px,14.2vw,228px));min-height:470px;margin:-50px auto 0}.create-card,.tournament-card{height:470px;border:1px solid #dfe5e1;border-radius:13px;background:#fff;box-shadow:0 6px 18px rgba(28,55,40,.12)}.create-card{padding:12px;cursor:pointer}.create-border{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed #74c08e;border-radius:11px}.create-icon{display:grid;width:82px;height:82px;margin-bottom:20px;place-items:center;border-radius:50%;color:#07833f;font-size:43px;background:#e6f4e9}.create-card strong{color:#087b3d;font-size:22px}.create-card small{margin-top:15px;color:#7e8983;font-size:14px}.create-card:hover,.create-card:focus-visible{border-color:#4aac70;outline:none;box-shadow:0 10px 26px rgba(12,111,58,.18)}.tournament-card{overflow:hidden;cursor:pointer;transition:transform .18s,box-shadow .18s}.tournament-card:hover,.tournament-card:focus-visible{transform:translateY(-3px);outline:none;box-shadow:0 14px 30px rgba(12,91,49,.18)}.card-cover{position:relative;height:152px;display:flex;align-items:center;justify-content:center;background-position:center;background-size:cover}.status-pill{position:absolute;left:14px;top:14px;padding:6px 10px;border-radius:6px;color:#fff;font-size:14px;background:#168c45}.status-registering{background:#f59b16}.status-draft{background:#2778cc}.status-completed,.status-finished{background:#7d8782}.more-button{position:absolute;right:13px;top:12px;display:grid;width:38px;height:38px;padding:0;place-items:center;border:1px solid rgba(255,255,255,.55);border-radius:50%;color:#fff;font-size:23px;background:rgba(0,35,23,.55);cursor:pointer}.tournament-logo,.tournament-mark{width:88px;height:88px;object-fit:contain}.tournament-mark{display:grid;place-items:center;border:3px solid rgba(255,255,255,.8);border-radius:50%;color:#fff;font-size:47px;background:rgba(0,74,43,.65)}.card-body{padding:13px 14px 14px}.card-body h3{overflow:hidden;margin:0;color:#141b17;font-size:20px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}.category-line{margin:6px 0 0;color:#68736d;font-size:13px}.card-metrics{display:flex;align-items:center;gap:9px;margin-top:15px;color:#34443b;font-size:13px}.card-metrics span,.date-line{display:flex;align-items:center;gap:6px}.card-metrics .el-icon,.date-line .el-icon{color:#118a47;font-size:17px}.card-metrics i{color:#a5ada8;font-style:normal}.date-line{margin-top:11px;color:#37453d;font-size:13px}.progress-heading{display:flex;justify-content:space-between;margin-top:17px;color:#334239;font-size:13px}.progress-heading span{color:#56635c}.card-body :deep(.el-progress){margin-top:7px}.updated-at{margin:13px 0 0;color:#8a948e;font-size:12px}.enter-button{width:100%;height:42px;margin-top:13px;border:0;border-radius:6px;color:#fff;font-size:16px;font-weight:700;background:linear-gradient(135deg,#078442,#04a457);cursor:pointer}.enter-button:hover{background:#06743b}.empty-note{width:calc(100% - clamp(148px,14.2vw,228px));margin:16px auto 0;padding:14px 18px;border:1px dashed #b9d7c3;border-radius:9px;color:#547060;text-align:center;background:#fff}.guidance-panel{display:flex;align-items:center;gap:18px;width:calc(100% - clamp(148px,14.2vw,228px));min-height:86px;margin:27px auto 0;padding:14px 20px;border:1px solid #c7ded0;border-radius:10px;color:#35463c;background:#f7fbf8}.guidance-icon{display:grid;width:54px;height:54px;flex:none;place-items:center;border-radius:50%;color:#fff;font-size:27px;background:linear-gradient(135deg,#0b8e48,#006f38)}.guidance-panel div{min-width:0}.guidance-panel strong{display:block;color:#1c2d23;font-size:17px}.guidance-panel p{margin:5px 0 0;color:#59675f;font-size:14px;line-height:1.55}@media(max-width:1280px){.space-hero{padding-inline:52px}.space-heading{left:52px}.tournament-grid,.empty-note,.guidance-panel{width:calc(100% - 104px)}}
 .shared-pill{background:#087f43}.shared-rights{margin:12px 0 0;color:#4f6257;font-size:13px;line-height:1.6}
+.leave-shared-button{display:block;min-height:36px;margin:8px 0 0 auto;padding:6px 10px;border:0;border-radius:6px;background:transparent;color:#68736d;font:inherit;font-size:13px;cursor:pointer}.leave-shared-button:hover{color:#b64438;background:#fff4f2}.leave-shared-button:focus-visible{outline:2px solid #078442;outline-offset:2px}.leave-shared-button:disabled{opacity:.55;cursor:wait}
 .demo-mode-button{position:absolute;z-index:2;top:24px;right:clamp(74px,7.1vw,114px);min-width:142px;height:44px;padding:0 18px;border:1px solid rgba(255,255,255,.78);border-radius:7px;color:#fff;font-weight:700;background:rgba(0,112,58,.84);cursor:pointer}.demo-mode-button:hover,.demo-mode-button:focus-visible{outline:2px solid #fff;outline-offset:2px;background:#078442}.demo-mode-copy{margin:8px 0 0;color:rgba(255,255,255,.9);font-size:15px}
 @media(max-width:760px){.demo-mode-button{top:16px;right:20px;min-width:116px;height:40px;padding:0 12px;font-size:13px}}
 </style>

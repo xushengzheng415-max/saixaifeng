@@ -7,7 +7,10 @@ import App from './App.vue'
 import router from './router'
 import './assets/global.css'
 import './assets/portal.css'
+import './assets/tablet-landscape.css'
+import { installTabletLayout } from './utils/tabletLayout'
 
+installTabletLayout()
 const app = createApp(App)
 
 // 注册所有Element Plus图标

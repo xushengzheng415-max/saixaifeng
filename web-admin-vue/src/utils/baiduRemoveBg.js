@@ -5,6 +5,15 @@
 
 import { callFunction } from './cloud'
 
+// 赛事子账号走 webLoginApi 中转时，服务端会校验参数内的赛事范围。
+// 缺少 tournamentId 会被判定为“子账号没有该操作权限”，导致抠图整体失效。
+function staffScopeParams() {
+  if (typeof sessionStorage === 'undefined') return {}
+  if (sessionStorage.getItem('sxfTournamentStaff') !== '1') return {}
+  const tournamentId = sessionStorage.getItem('sxfStaffTournamentId') || ''
+  return tournamentId ? { tournamentId } : {}
+}
+
 /**
  * 压缩图片
  * @param {File} file - 原文件
@@ -16,27 +25,27 @@ function compressImage(file, maxWidth = 800, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const img = new Image()
     const url = URL.createObjectURL(file)
-    
+
     img.onload = () => {
       URL.revokeObjectURL(url)
-      
+
       // 计算新尺寸
       let width = img.width
       let height = img.height
-      
+
       if (width > maxWidth) {
         height = (height * maxWidth) / width
         width = maxWidth
       }
-      
+
       // 创建 canvas
       const canvas = document.createElement('canvas')
       canvas.width = width
       canvas.height = height
-      
+
       const ctx = canvas.getContext('2d')
       ctx.drawImage(img, 0, 0, width, height)
-      
+
       // 转换为 blob
       canvas.toBlob(
         (blob) => {
@@ -50,12 +59,12 @@ function compressImage(file, maxWidth = 800, quality = 0.8) {
         quality
       )
     }
-    
+
     img.onerror = () => {
       URL.revokeObjectURL(url)
       reject(new Error('图片加载失败'))
     }
-    
+
     img.src = url
   })
 }
@@ -86,7 +95,7 @@ export async function removeBackgroundBaidu(imageFile) {
 
     // 1. 压缩图片（走 webLoginApi 中转时 HTTP body 有限制，必须压到极小）
     let processedFile = imageFile
-    
+
     // 保持 250px 宽、0.5 质量，确保 base64 < 100KB
     if (imageFile.size > 50 * 1024) {
       processedFile = await compressImage(imageFile, 250, 0.5)
@@ -98,7 +107,8 @@ export async function removeBackgroundBaidu(imageFile) {
     // 3. 调用云函数
     const result = await callFunction('baiduRemoveBg', {
       action: 'removeBackground',
-      imageBase64: imageBase64
+      imageBase64: imageBase64,
+      ...staffScopeParams()
     })
 
 
@@ -128,7 +138,8 @@ export async function removeBackgroundBaidu(imageFile) {
 export async function testBaiduApi() {
   try {
     const result = await callFunction('baiduRemoveBg', {
-      action: 'test'
+      action: 'test',
+      ...staffScopeParams()
     })
     return result
   } catch (err) {

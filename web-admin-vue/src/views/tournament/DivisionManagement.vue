@@ -38,7 +38,7 @@
             <td data-label="参赛球队"><span class="team-count"><b>{{ division.teamCount }}</b><span>/ {{ division.capacityText }} 支</span></span></td>
             <td data-label="赛制"><div class="format-cell"><span>{{ division.playerFormatText }}</span><span class="format-text">{{ division.formatText }}</span></div></td>
             <td data-label="规则"><div class="rule-cell"><span class="configuration-state" :class="division.stateClass">{{ division.stateText }}</span><span v-if="!division.finalized" class="progress-value">{{ division.progress }}%</span><el-tooltip v-if="division.finalized" :content="division.versionText" placement="top"><span class="rule-version" tabindex="0" :aria-label="'规则版本：' + division.versionText">版本信息</span></el-tooltip></div><el-progress v-if="!division.finalized" class="rule-progress" :percentage="division.progress" :show-text="false" :stroke-width="4" /></td>
-            <td data-label="报名"><span class="registration-state" :class="{ open: division.registrationEnabled }"><i aria-hidden="true" />{{ division.registrationEnabled ? '报名中' : '未开启' }}</span></td>
+            <td data-label="报名"><span class="registration-state" :class="{ open: division.registrationOpen }"><i aria-hidden="true" />{{ division.registrationStateText }}</span></td>
             <td class="actions-cell" data-label="操作"><div class="operation-cell">
               <el-button link type="primary" :disabled="!canManage" @click="openDivisionEditor(division)">{{ division.primaryAction }}</el-button>
               <el-button v-if="division.finalized" link :disabled="!canManage" @click="startRuleRevision(division)">调整规则</el-button>
@@ -49,7 +49,7 @@
                   <el-dropdown-item command="teams">参赛球队</el-dropdown-item>
                   <el-dropdown-item command="draw">抽签分组</el-dropdown-item>
                   <el-dropdown-item command="schedule">比赛地图</el-dropdown-item>
-                  <el-dropdown-item command="registration" divided :disabled="!canManage || togglingRegistrationId === division.id">{{ division.registrationEnabled ? '关闭报名' : '开启报名' }}</el-dropdown-item>
+                  <el-dropdown-item command="registration" divided :disabled="!canManage || togglingRegistrationId === division.id || division.registrationLocked">{{ division.registrationEnabled ? '关闭报名' : '开启报名' }}</el-dropdown-item>
                   <el-dropdown-item command="rename" :disabled="!canManage || renamingDivisionId === division.id">重命名组别</el-dropdown-item>
                   <el-dropdown-item v-if="division.pairingGenerated || division.teamCount > 0" command="reset" divided :disabled="!canManage" class="danger-action">清空赛程并重新抽签</el-dropdown-item>
                   <el-dropdown-item command="delete" :divided="!(division.pairingGenerated || division.teamCount > 0)" :disabled="!canManage || deletingDivisionId === division.id" class="danger-action">删除组别</el-dropdown-item>
@@ -101,6 +101,7 @@ const tournamentLogo = computed(() => {
   return resolvedTournamentLogo.value || (/^(https?:\/\/|\/)/i.test(tournamentLogoSource.value) ? tournamentLogoSource.value : '')
 })
 const tournamentStatus = computed(() => ({ draft: '筹备中', registering: '报名中', upcoming: '即将开始', ongoing: '进行中', completed: '已结束', finished: '已结束' })[tournament.value.status] || '筹备中')
+const terminalTournamentStatus = computed(() => ['completed', 'finished', 'ended', 'cancelled', 'canceled', 'archived'].includes(String(tournament.value.status || '').toLowerCase()))
 const dateRange = computed(() => tournament.value.startDate && tournament.value.endDate ? `${formatDate(tournament.value.startDate)} — ${formatDate(tournament.value.endDate)}` : '日期待定')
 const canManage = computed(() => permissions.tournament.manage(tournament.value))
 const sourceDivisions = computed(() => divisionRecords.value.length ? divisionRecords.value : (Array.isArray(tournament.value.divisions) ? tournament.value.divisions : []))
@@ -151,6 +152,9 @@ function normalizeDivision(division, index) {
     versionText: division.rulesVersion || division.ruleVersion || (finalized ? '已定版' : '暂未定版'),
     finalized,
     registrationEnabled: division.registrationEnabled === true,
+    registrationOpen: division.registrationEnabled === true && !terminalTournamentStatus.value,
+    registrationStateText: division.registrationEnabled !== true ? '未开启' : (terminalTournamentStatus.value ? '已结束' : '报名中'),
+    registrationLocked: terminalTournamentStatus.value && division.registrationEnabled !== true,
     stateText,
     stateClass: finalized ? 'finalized' : (progress > 0 ? 'configuring' : 'unconfigured'),
     primaryAction,

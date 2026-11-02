@@ -83,7 +83,7 @@
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
-          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="!canManageTeamAccess"> · 账号权限由主账号分配</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="!canManageTeamAccess"> · 当前赛事未授权</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffDisplayRows" v-loading="loading || teamAccessLoading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table staff-roster-table">
             <el-table-column label="头像" width="44" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="76" />
@@ -91,10 +91,10 @@
             <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag><el-tag v-if="row._accountHolderRow" size="small" type="info" class="dual-role-tag">非编制工作人员</el-tag></template></el-table-column>
             <el-table-column label="出生日期" min-width="98"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="籍贯" min-width="76" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
-            <el-table-column v-if="sourceTournamentId" label="手机号" min-width="108"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.phone || '未分配') : '—' }}<small v-if="canManageTeamAccess && staffAccount(row)" class="staff-account-phone">{{ staffAccountLabel(row) }}</small></template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="手机号" min-width="108"><template #default="{ row }">{{ teamStaffPhone(row, staffAccount(row)) || '未填写' }}<small v-if="canManageTeamAccess" class="staff-account-phone">{{ staffAccountLabel(row) }}</small></template></el-table-column>
             <el-table-column v-if="sourceTournamentId" label="操作权限" min-width="86"><template #default="{ row }">{{ canManageTeamAccess ? staffPermissionLabel(row) : '—' }}</template></el-table-column>
-            <el-table-column v-if="sourceTournamentId" label="状态" min-width="82"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.status || '未授权') : '主账号设置' }}</template></el-table-column>
-            <el-table-column v-if="!isReadOnlyTournament && sourceTournamentId" label="操作" width="90"><template #default="{ row }"><span :title="row._accountHolderRow ? '账号持有人行仅用于展示归属，请在具体工作人员行上移交主账号' : (canManageTeamAccess ? '' : '账号权限需由赛事所属机构主账号分配')"><el-button link type="primary" :disabled="!canManageTeamAccess || !tournamentRelation?._id || row._accountHolderRow" @click="openTeamAccess(row)">分配权限</el-button></span></template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="状态" min-width="82"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.status || '未授权') : '未授权' }}</template></el-table-column>
+            <el-table-column v-if="!isReadOnlyTournament && sourceTournamentId" label="操作" width="140"><template #default="{ row }"><el-button link type="primary" :disabled="Boolean(row._accountHolderRow)" @click="openEditStaff(row)">编辑</el-button><span :title="row._accountHolderRow ? '账号持有人行仅用于展示归属，请在具体工作人员行上移交主账号' : (canManageTeamAccess ? '' : '当前账号没有本赛事授权')"><el-button link type="primary" :disabled="!canManageTeamAccess || !tournamentRelation?._id || row._accountHolderRow" @click="openTeamAccess(row)">分配权限</el-button></span></template></el-table-column>
           </el-table>
         </section>
         <section class="synthetic-player-panel">
@@ -104,6 +104,7 @@
               <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament && pendingReviewPlayers.length" link type="primary" :disabled="batchReviewing || !!playerReviewingId" @click="togglePendingReviewSelection">{{ selectedReviewPlayers.length === pendingReviewPlayers.length ? '取消全选' : '全选待审' }}</el-button>
               <span v-if="!isTeamDataWorkspace && selectedReviewPlayers.length" class="review-selection-count">已选 {{ selectedReviewPlayers.length }} 人</span>
             <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="success" :loading="batchReviewing" :disabled="!selectedReviewPlayers.length || !!playerReviewingId || loading" @click="reviewSelectedPlayers">批量审核</el-button>
+            <el-button v-if="canSupplementFromRegistration" type="success" plain @click="openWordSupplementImport"><el-icon><Upload /></el-icon>{{ players.length ? '上传报名表补全' : '上传报名表补球员' }}</el-button>
             <el-button v-if="!isTeamDataWorkspace" type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
             </div>
@@ -124,7 +125,21 @@
             <el-table-column v-if="!isTeamDataWorkspace" label="出生日期" width="88" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 44" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="认领状态" width="78" align="center"><template #default="{ row }"><el-tag :type="playerClaimed(row) ? 'success' : 'info'" size="small">{{ playerClaimed(row) ? '已认领' : '未认领' }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="76" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="116" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag>
+                <template v-else-if="playerOrganizerReviewStatus(row) === 'rejected'">
+                  <el-tooltip :content="playerOrganizerReviewReason(row) || '已驳回，等待球队补充资料'" placement="top">
+                    <el-tag type="danger" size="small">已驳回</el-tag>
+                  </el-tooltip>
+                  <el-button link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">重审</el-button>
+                </template>
+                <template v-else>
+                  <el-button link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">通过</el-button>
+                  <el-button link type="danger" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="openRejectPlayer(row)">驳回</el-button>
+                </template>
+              </template>
+            </el-table-column>
             <template v-if="isTeamDataWorkspace">
               <el-table-column prop="appearances" label="出场场次" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="90" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
               <el-table-column prop="minutes" label="出场时间" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="105" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
@@ -210,8 +225,11 @@
           >
             <el-icon><Delete /></el-icon>清空球员名单
           </el-button>
-          <el-button type="success" size="small" @click="showBatchImport = true">
-            <el-icon><Download /></el-icon>批量导入名单
+          <el-button type="success" size="small" @click="openWordSupplementImport">
+            <el-icon><Upload /></el-icon>上传报名表补全
+          </el-button>
+          <el-button type="success" plain size="small" @click="showBatchImport = true; importMode = 'excel'">
+            <el-icon><Download /></el-icon>Excel 导入
           </el-button>
           <el-button type="warning" size="small" @click="showBatchAvatarImport = true">
             <el-icon><Upload /></el-icon>批量导入头像
@@ -318,7 +336,7 @@
         <el-tab-pane label="手动新建" name="manual">
           <div class="tab-content">
 <el-form :model="playerForm" label-width="100px">
-            <!-- 第一行：姓名 + 身份证号（核心信息放最前） -->
+            <!-- 第一行：姓名 + 证件类型 -->
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="姓名" required>
@@ -330,19 +348,26 @@
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="身份证号" required>
-                  <el-input
-                    v-model="playerForm.idCard"
-                    placeholder="18位身份证号"
-                    maxlength="18"
-                    @input="onIdCardInput"
-                  />
+                <el-form-item label="证件类型" required>
+                  <el-select v-model="playerForm.documentType" style="width: 100%" @change="onDocumentTypeChange">
+                    <el-option label="居民身份证" value="resident_id" />
+                    <el-option label="护照" value="passport" />
+                  </el-select>
                 </el-form-item>
               </el-col>
             </el-row>
 
-            <!-- 第二行：自动生成的信息 -->
             <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item :label="playerForm.documentType === 'passport' ? '护照号' : '身份证号'" required>
+                  <el-input
+                    v-model="playerForm.idCard"
+                    :placeholder="playerForm.documentType === 'passport' ? '护照号' : '18位身份证号'"
+                    :maxlength="playerForm.documentType === 'passport' ? 12 : 18"
+                    @input="onIdCardInput"
+                  />
+                </el-form-item>
+              </el-col>
               <el-col :span="12">
                 <el-form-item label="球衣姓名">
                   <el-input
@@ -357,40 +382,53 @@
                   </el-input>
                 </el-form-item>
               </el-col>
+            </el-row>
+
+            <!-- 第二行：自动生成的信息 -->
+            <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="平台年龄">
                   <el-input
                     v-model="displayAge"
-                    placeholder="根据身份证号计算"
+                    :placeholder="playerForm.documentType === 'passport' ? '请先填写出生日期' : '根据身份证号计算'"
                     readonly
                   >
                     <template #suffix>
-                      <el-tooltip content="根据身份证号出生日期计算实际年龄">
+                      <el-tooltip :content="playerForm.documentType === 'passport' ? '护照球员请手动填写出生日期' : '根据身份证号出生日期计算实际年龄'">
                         <el-icon><Info-Filled /></el-icon>
                       </el-tooltip>
                     </template>
                   </el-input>
                 </el-form-item>
               </el-col>
-            </el-row>
-
-            <!-- 第三行：身份证解析的信息 -->
-            <el-row :gutter="16">
-              <el-col :span="8">
-                <el-form-item label="出生日期">
+              <el-col :span="12">
+                <el-form-item label="出生日期" :required="playerForm.documentType === 'passport'">
+                  <el-date-picker
+                    v-if="playerForm.documentType === 'passport'"
+                    v-model="playerForm.birthDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="选择出生日期"
+                    style="width: 100%"
+                  />
                   <el-input
+                    v-else
                     v-model="playerForm.birthDate"
                     placeholder="自动识别"
                     readonly
                   />
                 </el-form-item>
               </el-col>
-              <el-col :span="8">
-                <el-form-item label="籍贯">
-                  <el-input v-model="playerForm.nativePlace" placeholder="自动识别" readonly />
+            </el-row>
+
+            <!-- 第三行：籍贯 / 性别 -->
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item :label="playerForm.documentType === 'passport' ? '出生地' : '籍贯'">
+                  <el-input v-model="playerForm.nativePlace" :placeholder="playerForm.documentType === 'passport' ? '可手动填写' : '自动识别，可手动修改'" />
                 </el-form-item>
               </el-col>
-              <el-col :span="8">
+              <el-col :span="12">
                 <el-form-item label="性别">
                   <el-select v-model="playerForm.gender" style="width: 100%">
                     <el-option label="男" value="male" />
@@ -444,8 +482,8 @@
             <!-- 第五行：国籍 -->
             <el-row :gutter="16">
               <el-col :span="12">
-                <el-form-item label="国籍">
-                  <el-input v-model="playerForm.nationality" placeholder="默认：中国" />
+                <el-form-item label="国籍" :required="playerForm.documentType === 'passport'">
+                  <el-select v-model="playerForm.nationality" filterable clearable placeholder="待确认（地球图标）" style="width: 100%"><el-option v-for="item in nationalitySelectOptions" :key="item.code" :label="item.zh" :value="item.zh" /></el-select>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -610,7 +648,6 @@
       <!-- 编辑模式：直接显示表单 -->
       <template v-else>
 <el-form :model="playerForm" label-width="100px">
-          <!-- 第一行：姓名 + 身份证号（核心信息放最前） -->
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="姓名" required>
@@ -622,19 +659,26 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="身份证号" required>
-                <el-input
-                  v-model="playerForm.idCard"
-                  placeholder="18位身份证号"
-                  maxlength="18"
-                  @input="onIdCardInput"
-                />
+              <el-form-item label="证件类型" required>
+                <el-select v-model="playerForm.documentType" style="width: 100%" @change="onDocumentTypeChange">
+                  <el-option label="居民身份证" value="resident_id" />
+                  <el-option label="护照" value="passport" />
+                </el-select>
               </el-form-item>
             </el-col>
           </el-row>
 
-          <!-- 第二行：自动生成的信息 -->
           <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item :label="playerForm.documentType === 'passport' ? '护照号' : '身份证号'" required>
+                <el-input
+                  v-model="playerForm.idCard"
+                  :placeholder="playerForm.documentType === 'passport' ? '护照号' : '18位身份证号'"
+                  :maxlength="playerForm.documentType === 'passport' ? 12 : 18"
+                  @input="onIdCardInput"
+                />
+              </el-form-item>
+            </el-col>
             <el-col :span="12">
               <el-form-item label="球衣姓名">
                 <el-input
@@ -649,40 +693,51 @@
                 </el-input>
               </el-form-item>
             </el-col>
+          </el-row>
+
+          <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="平台年龄">
                 <el-input
                   v-model="displayAge"
-                  placeholder="根据身份证号计算"
+                  :placeholder="playerForm.documentType === 'passport' ? '请先填写出生日期' : '根据身份证号计算'"
                   readonly
                 >
                   <template #suffix>
-                    <el-tooltip content="根据身份证号出生日期计算实际年龄">
+                    <el-tooltip :content="playerForm.documentType === 'passport' ? '护照球员请手动填写出生日期' : '根据身份证号出生日期计算实际年龄'">
                       <el-icon><Info-Filled /></el-icon>
                     </el-tooltip>
                   </template>
                 </el-input>
               </el-form-item>
             </el-col>
-          </el-row>
-
-          <!-- 第三行：身份证解析的信息 -->
-          <el-row :gutter="16">
-            <el-col :span="8">
-              <el-form-item label="出生日期">
+            <el-col :span="12">
+              <el-form-item label="出生日期" :required="playerForm.documentType === 'passport'">
+                <el-date-picker
+                  v-if="playerForm.documentType === 'passport'"
+                  v-model="playerForm.birthDate"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  placeholder="选择出生日期"
+                  style="width: 100%"
+                />
                 <el-input
+                  v-else
                   v-model="playerForm.birthDate"
                   placeholder="自动识别"
                   readonly
                 />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
-              <el-form-item label="籍贯">
-                <el-input v-model="playerForm.nativePlace" placeholder="自动识别" readonly />
+          </el-row>
+
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item :label="playerForm.documentType === 'passport' ? '出生地' : '籍贯'">
+                <el-input v-model="playerForm.nativePlace" :placeholder="playerForm.documentType === 'passport' ? '可手动填写' : '自动识别，可手动修改'" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :span="12">
               <el-form-item label="性别">
                 <el-select v-model="playerForm.gender" style="width: 100%">
                   <el-option label="男" value="male" />
@@ -736,8 +791,8 @@
           <!-- 第五行：国籍 -->
           <el-row :gutter="16">
             <el-col :span="12">
-              <el-form-item label="国籍">
-                <el-input v-model="playerForm.nationality" placeholder="默认：中国" />
+                <el-form-item label="国籍" :required="playerForm.documentType === 'passport'">
+                <el-select v-model="playerForm.nationality" filterable clearable placeholder="待确认（地球图标）" style="width: 100%"><el-option v-for="item in nationalitySelectOptions" :key="item.code" :label="item.zh" :value="item.zh" /></el-select>
               </el-form-item>
             </el-col>
             <el-col :span="12">
@@ -857,10 +912,10 @@
       </template>
     </el-dialog>
 
-    <!-- 批量导入球员对话框 -->
+    <!-- 批量导入球员对话框：可把报名表补进当前已认领/已有球队，不新建球队 -->
     <el-dialog
       v-model="showBatchImport"
-      title="批量导入球员"
+      :title="importMode === 'word' ? '上传报名表补全（当前球队）' : '批量导入球员'"
       width="1180px"
       class="batch-import-dialog"
       top="5vh"
@@ -871,10 +926,10 @@
       <div class="import-header">
         <el-radio-group v-model="importMode" size="small" @change="clearImportData">
           <el-radio-button value="excel">Excel 模板导入</el-radio-button>
-          <el-radio-button value="word">快捷模式（Word 报名表）</el-radio-button>
+          <el-radio-button value="word">Word 报名表补全</el-radio-button>
         </el-radio-group>
-        <p class="import-tip" v-if="importMode === 'excel'">下载模板并填写球员信息后，上传 Excel 文件即可批量导入</p>
-        <p class="import-tip" v-else>直接上传球队 Word 报名表（.docx），按「姓名 + 号码 + 出生年月/日期」快速录入，无需身份证号</p>
+        <p class="import-tip" v-if="importMode === 'excel'">下载模板并填写球员信息后，上传 Excel 文件即可批量导入到当前球队</p>
+        <p class="import-tip" v-else>上传本队 Word 报名表，把球员和工作人员补进「{{ team.name || '当前球队' }}」，不会新建另一支球队；已有同名同号球员会更新资料。</p>
         <el-button v-if="importMode === 'excel'" type="success" size="small" @click="downloadImportTemplate">
           <el-icon><Download /></el-icon> 下载模板
         </el-button>
@@ -911,14 +966,27 @@
       <!-- 预览区域 -->
       <div v-else class="import-preview">
         <div class="import-preview-header">
-          <span class="import-preview-count">共解析到 <strong>{{ importParsedData.length }}</strong> 条人员记录</span>
+          <span class="import-preview-count">
+            共解析 <strong>{{ importParsedData.length }}</strong> 人；
+            已勾选入队 <strong>{{ selectedImportCount }}</strong>
+            （球员 {{ selectedImportPlayerCount }} / 工作人员 {{ selectedImportStaffCount }}）
+          </span>
           <div class="import-preview-actions">
-            <el-button size="small" @click="clearImportData">重新选择</el-button>
-            <el-button type="primary" size="small" :loading="batchImporting" @click="confirmBatchImport">
-              确认导入 ({{ importParsedData.length }})
+            <el-button size="small" @click="setImportSelection(true)">全选有效</el-button>
+            <el-button size="small" @click="setImportSelection(false)">全不选</el-button>
+            <el-button size="small" @click="selectImportPlayersOnly">仅选球员</el-button>
+            <el-button size="small" @click="clearImportData">重新选择文件</el-button>
+            <el-button type="primary" size="small" :loading="batchImporting" :disabled="!selectedImportCount" @click="confirmBatchImport">
+              确认导入已勾选 ({{ selectedImportCount }})
             </el-button>
           </div>
         </div>
+        <el-alert
+          type="info"
+          :closable="false"
+          style="margin-bottom: 8px;"
+          title="请勾选要补进当前球队/本届名单的人员；未勾选的不会导入。资料不全的人员也可先不选，后续由主教练邀请球员自行加入。"
+        />
         <!-- Word 报名表信息提示 -->
         <el-alert
           v-if="wordFormInfo.队名"
@@ -962,7 +1030,12 @@
             </div>
           </template>
         </el-alert>
-        <el-table :data="importParsedData" max-height="56vh" size="small" border style="width: 100%">
+        <el-table :data="importParsedData" max-height="56vh" size="small" border style="width: 100%" row-key="_importKey">
+          <el-table-column label="入队" width="64" align="center" fixed>
+            <template #default="{ row }">
+              <el-checkbox v-model="row._selected" :disabled="Boolean(row._error)" />
+            </template>
+          </el-table-column>
           <el-table-column type="index" label="#" width="40" />
           <el-table-column label="照片" width="60" align="center">
             <template #default="{ row }">
@@ -994,7 +1067,8 @@
           <el-table-column label="状态" width="90" align="center">
             <template #default="{ row }">
               <el-tag v-if="row._error" type="danger" size="small">错误</el-tag>
-              <el-tag v-else type="success" size="small">正常</el-tag>
+              <el-tag v-else-if="row._selected" type="success" size="small">将入队</el-tag>
+              <el-tag v-else type="info" effect="plain" size="small">已跳过</el-tag>
             </template>
           </el-table-column>
         </el-table>
@@ -1151,7 +1225,14 @@
           <el-date-picker v-model="teamEditForm.establishedDate" type="date" placeholder="选择建立时间" style="width: 100%" value-format="YYYY-MM-DD" />
         </el-form-item>
 
-        <!-- 账号所有者即为负责人 -->
+        <!-- 账号所有者即为负责人；自主报名的球队可能未采集联系人，可在此补录 -->
+        <el-form-item label="球队负责人">
+          <el-input v-model="teamEditForm.contactName" placeholder="领队或教练姓名" maxlength="20" />
+        </el-form-item>
+
+        <el-form-item label="联系电话">
+          <el-input v-model="teamEditForm.contactPhone" placeholder="11 位手机号" maxlength="11" />
+        </el-form-item>
 
         <el-form-item label="球队Logo">
           <div class="logo-upload-wrapper">
@@ -1214,9 +1295,26 @@
       />
     </el-dialog>
 
-    <el-dialog v-model="showAddStaff" title="添加工作人员" width="500px" :close-on-click-modal="false">
+    <el-dialog v-model="rejectPlayerDialog.visible" title="驳回球员资料" width="480px" :close-on-click-modal="false">
+      <el-form label-width="82px">
+        <el-form-item label="球员">{{ rejectPlayerDialog.playerName }}</el-form-item>
+        <el-form-item label="驳回原因">
+          <el-select v-model="rejectPlayerDialog.reasons" multiple placeholder="选择资料缺项" style="width:100%">
+            <el-option v-for="item in rejectReasonOptions" :key="item" :label="item" :value="item" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="rejectPlayerDialog.reasons.includes(OTHER_REJECT_REASON)" label="其他原因" required>
+          <el-input v-model="rejectPlayerDialog.note" type="textarea" :rows="3" maxlength="120" show-word-limit placeholder="请写明需要补充的资料或具体问题，球队端提交名单时会看到" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rejectPlayerDialog.visible = false">取消</el-button>
+        <el-button type="danger" :loading="rejectPlayerSubmitting" @click="submitRejectPlayer">确认驳回</el-button>
+      </template>
+    </el-dialog>
+    <el-dialog v-model="showAddStaff" :title="editingStaffId ? '编辑工作人员' : '添加工作人员'" width="500px" :close-on-click-modal="false">
       <el-form :model="staffForm" label-width="90px">
-        <el-form-item v-if="sourceTournamentId && canManageTeamAccess" label="添加方式"><el-radio-group v-model="staffSource"><el-radio-button value="manual">填写资料</el-radio-button><el-radio-button value="player">队内球员</el-radio-button></el-radio-group></el-form-item>
+        <el-form-item v-if="sourceTournamentId && canManageTeamAccess && !editingStaffId" label="添加方式"><el-radio-group v-model="staffSource"><el-radio-button value="manual">填写资料</el-radio-button><el-radio-button value="player">队内球员</el-radio-button></el-radio-group></el-form-item>
         <el-form-item v-if="staffSource === 'player'" label="球员" required><el-select v-model="staffPlayerId" filterable placeholder="选择队内球员" style="width:100%" @change="selectStaffPlayer"><el-option v-for="player in staffPlayerOptions" :key="player._id" :value="String(player._id)" :label="`${player.jerseyNumber || '—'}号 ${player.name}`" /></el-select></el-form-item>
         <el-form-item label="姓名" required><el-input v-model="staffForm.name" :disabled="staffSource === 'player'" maxlength="30" /></el-form-item>
         <el-form-item label="职务" required><el-select v-model="staffForm.type" style="width:100%"><el-option label="领队" value="team_leader" /><el-option label="主教练" value="head_coach" /><el-option label="队医" value="doctor" /><el-option label="工作人员" value="other" /></el-select></el-form-item>
@@ -1251,11 +1349,12 @@
 </template>
 
 <script setup>
+import { canAssignTeamAccounts, teamStaffDisplayRows, teamStaffPhone } from '../../utils/teamAccountAccess.js'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled, Picture } from '@element-plus/icons-vue'
-import { queryById, queryList, queryAll, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, getCurrentUser, rosterExceptionBoard } from '../../utils/cloud'
+import { queryById, queryList, queryAll, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, toInlineImageUrl, callFunction, getCurrentOwner, getCurrentUser, rosterExceptionBoard } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
@@ -1264,7 +1363,9 @@ import ImageCropper from '../../components/common/ImageCropper.vue'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
 import { provincesData, cityMapData, districtMapData } from './areaData.js'
 import { generateJerseyName } from '../../utils/jerseyName.js'
+import { nationalityOptions } from '../../utils/nationalityDisplay.js'
 import { KIT_COLOR_OPTIONS } from '../../utils/registrationKitColors.js'
+const nationalitySelectOptions = nationalityOptions()
 import { actualStaffRecords } from '../../utils/staffRecords.js'
 import { withLinkedStaffPhotos } from '../../utils/rosterPosterData.js'
 import { sortPlayerTableRows } from '../../utils/teamPlayerTableSort.js'
@@ -1409,25 +1510,10 @@ const sessionScope = ref(null)
 // 与服务端 organizerClaimInvite.userOwnsTournament 保持一致：账号/权限操作按“赛事归属”判定。
 // 判定优先使用服务端会话身份（tournamentStaffAccess scope 的 activeOrgId），
 // 因为工作人员工作区会清空本地 userInfo.orgId，本地缓存不可信。
-const canManageTeamAccess = computed(() => {
-  if (!sourceTournamentId.value) return false
-  if (isDemoMode()) return true
-  const tournament = tournamentContext.value || {}
-  const scope = sessionScope.value
-  if (tournament.orgId) {
-    const scopeOrg = String(scope?.activeOrgId || '')
-    const localUser = getCurrentUser() || {}
-    const localOrg = String(localUser.orgId || localUser.organizationId || localUser.organization_id || '')
-    const sessionOrg = scopeOrg || localOrg
-    if (!sessionOrg || sessionOrg !== String(tournament.orgId)) return false
-    // 工作人员子账号同样属于该机构，但服务端仅允许主账号分配球队账号，保持一致。
-    if (scope?.isStaff && !scope?.isOwner) return false
-    return true
-  }
-  const user = getCurrentUser() || {}
-  const ownerIds = [tournament.creatorId, tournament.organizerId, tournament.ownerId, tournament.userId].filter(Boolean).map(String)
-  return Boolean(user._id) && ownerIds.includes(String(user._id))
-})
+const canManageTeamAccess = computed(() => canAssignTeamAccounts({
+  tournamentId:sourceTournamentId.value, tournament:tournamentContext.value || {}, scope:sessionScope.value,
+  user:getCurrentUser() || {}, demo:isDemoMode()
+}))
 const tournamentRelation = ref(qaSnapshot && sourceTournamentId.value ? { tournamentId: sourceTournamentId.value, teamId, divisionId: sourceDivisionId.value, divisionName: isProfessionalTournamentTeam.value ? 'U16组' : 'U8组', registrationNo: isProfessionalTournamentTeam.value ? 'HNYC-U16-021' : 'HNYC-U8-001', joinSource: isProfessionalTournamentTeam.value ? 'invite' : '主办方邀请', status: 'approved', claimedAt: isProfessionalTournamentTeam.value ? '2026-07-21T10:32:00' : '2026-07-18T10:24:00', rosterStatus: isProfessionalTournamentTeam.value ? 'submitted' : '' } : {})
 const isSyntheticTeam = computed(() => team.value.synthetic === true || Boolean(team.value.syntheticDatasetId))
 const tournamentParticipationCode = computed(() => tournamentRelation.value.registrationNo || tournamentRelation.value.tournamentTeamCode || tournamentRelation.value.participationCode || tournamentRelation.value.registrationCode || team.value.teamCode || (tournamentRelation.value._id ? `T-${String(tournamentRelation.value._id).slice(-6).toUpperCase()}` : '待分配'))
@@ -1442,7 +1528,7 @@ async function resolveTournamentLogo() {
     .map(value => String(value || '').trim())
     .find(value => value.startsWith('cloud://'))
   if (!cloudSource) return
-  const resolved = await getFileUrl(cloudSource)
+  const resolved = await toInlineImageUrl(await getFileUrl(cloudSource))
   resolvedTournamentLogo.value = /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
 }
 const tournamentLogoUrl = computed(() => resolvedTournamentLogo.value || tournamentLogoDirectUrl.value || `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`)
@@ -1454,7 +1540,18 @@ const competitionMatches = ref([])
 const competitionRoster = ref(null)
 const competitionDivision = ref({})
 const playerAvatarErrors = ref(new Set())
-function markPlayerAvatarFailed(row) { playerAvatarErrors.value = new Set([...playerAvatarErrors.value, row._id]) }
+function markPlayerAvatarFailed(row) {
+  // cloud:// 不能直接当 <img src>；若在临时链接解析完成前触发 onerror，不能永久打上失败标记。
+  const src = String(row?.photoUrl || '')
+  if (!row?._id || src.startsWith('cloud://') || src.startsWith('cloud1://')) return
+  playerAvatarErrors.value = new Set([...playerAvatarErrors.value, row._id])
+}
+function clearPlayerAvatarError(rowId) {
+  if (!rowId || !playerAvatarErrors.value.has(rowId)) return
+  const next = new Set(playerAvatarErrors.value)
+  next.delete(rowId)
+  playerAvatarErrors.value = next
+}
 function displayJerseyName(row) { return row.jerseyName || row.shirtName || generateJerseyName(row.name || '') || '—' }
 const tournamentPlayerRows = computed(() => {
   const base = buildTournamentPlayerStats(withLinkedStaffPhotos(competitionRoster.value ?? exportPlayers.value, staffMembers.value), qaSnapshot ? competitionMatches.value : [], [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' })
@@ -1520,7 +1617,7 @@ async function loadPlayerCompetitionData() {
       const sourceById = new Map(exportPlayers.value.map(player => [String(player._id), player]))
       competitionRoster.value = await Promise.all((roster.rows || []).map(async player => {
         const merged = mergeTournamentRosterPlayer(sourceById.get(String(player.id)), player)
-        if (String(merged.photoUrl || '').startsWith('cloud://')) merged.photoUrl = await getFileUrl(merged._exportPhotoFileId || merged.photoUrl)
+        if (String(merged.photoUrl || '').startsWith('cloud://')) merged.photoUrl = await toInlineImageUrl(await getFileUrl(merged._exportPhotoFileId || merged.photoUrl)); else merged.photoUrl = await toInlineImageUrl(merged.photoUrl)
         return merged
       }))
       playerAvatarErrors.value = new Set()
@@ -1561,6 +1658,8 @@ const maskedPhone = computed(() => {
 const clearingPlayers = ref(false)
 const showAddPlayer = ref(false)
 const showAddStaff = ref(false)
+// 非空表示弹窗处于编辑状态，保存时更新原有工作人员而不是新增。
+const editingStaffId = ref('')
 const staffSubmitting = ref(false)
 const staffForm = ref({ name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null })
 const staffSource = ref('manual')
@@ -1572,23 +1671,7 @@ const teamAccessRows = ref([])
 const primaryTeamAccount = computed(() => teamAccessRows.value.find(item => item.accountType === 'owner') || teamAccessRows.value.find(item => item.accountType === 'pending_owner'))
 // 账号持有人（主账号）在工作人员表顶部单独占一行。认领链路只写账号归属、不建 coaches 档案，
 // 会出现"头部写着主账号是谁、名单里却看不到他"。该行仅用于展示，不参与导出、海报和名单统计。
-const staffDisplayRows = computed(() => {
-  const owner = primaryTeamAccount.value
-  const rows = staffMembers.value
-  if (!owner) return rows
-  const ownerPhone = String(owner.phone || '').replace(/\D/g, '')
-  const duplicated = Boolean(ownerPhone) && rows.some(row => String(row.phone || row.phoneNumber || '').replace(/\D/g, '') === ownerPhone)
-  if (duplicated) return rows
-  return [{
-    _id:'team-account-holder',
-    _accountHolderRow:true,
-    name:owner.name || '未命名',
-    phone:owner.phone || '',
-    role:'账号持有人',
-    roleLabel:owner.roleLabel || '',
-    accountType:owner.accountType
-  }, ...rows]
-})
+const staffDisplayRows = computed(() => teamStaffDisplayRows(staffMembers.value, primaryTeamAccount.value))
 const teamAccessLoading = ref(false)
 const teamAccessSaving = ref(false)
 const teamAccessDeletingRole = ref('')
@@ -1780,7 +1863,7 @@ function exportMemberValue(row, key) {
   if (key === 'identityNumber') return row.identityNumber || row.idCard || row.idNumber || row._exportIdentityNumber || ''
   if (key === 'phone') return row.phone || row.contactPhone || ''
   if (key === 'position') return row._memberType === '球员' ? getPositionLabel(row.position) : ''
-  if (key === 'organizerReviewStatus') return row._memberType === '球员' ? (playerOrganizerReviewStatus(row) === 'approved' ? '已审核' : '待审核') : ''
+  if (key === 'organizerReviewStatus') return row._memberType === '球员' ? ({ approved:'已审核', rejected:'已驳回' }[playerOrganizerReviewStatus(row)] || '待审核') : ''
   if (key === 'gender') return ({ male:'男', female:'女' })[String(row.gender || '').toLowerCase()] || row.gender || ''
   if (key === 'age') return row.birthDate ? calculateAge(row.birthDate) : ''
   if (key === 'birthDate' && row.birthDate) {
@@ -1956,10 +2039,49 @@ const importErrors = ref([])
 const batchImporting = ref(false)
 const colDetectInfo = ref({})
 const importUploadRef = ref(null)
-const importMode = ref('excel') // excel=模板导入，word=快捷模式（Word 报名表，免身份证）
+const importMode = ref('excel') // excel=模板导入，word=报名表补全到当前球队
 const wordFormInfo = ref({})
 const wordTeamLogoPreview = ref('')
 const wordTeamLogoFile = ref(null)
+const canSupplementFromRegistration = computed(() => !isTeamDataWorkspace.value && !isSyntheticTeam.value)
+const selectedImportRows = computed(() => importParsedData.value.filter(row => row && !row._error && row._selected))
+const selectedImportCount = computed(() => selectedImportRows.value.length)
+const selectedImportPlayerCount = computed(() => selectedImportRows.value.filter(row => row._importKind !== 'staff').length)
+const selectedImportStaffCount = computed(() => selectedImportRows.value.filter(row => row._importKind === 'staff').length)
+
+function openWordSupplementImport() {
+  clearImportData()
+  importMode.value = 'word'
+  showBatchImport.value = true
+}
+
+function setImportSelection(selected) {
+  importParsedData.value.forEach(row => {
+    if (!row || row._error) {
+      if (row) row._selected = false
+      return
+    }
+    row._selected = Boolean(selected)
+  })
+}
+
+function selectImportPlayersOnly() {
+  importParsedData.value.forEach(row => {
+    if (!row || row._error) {
+      if (row) row._selected = false
+      return
+    }
+    row._selected = row._importKind !== 'staff'
+  })
+}
+
+function markImportRowsSelectable(rows = []) {
+  return rows.map((row, index) => ({
+    ...row,
+    _importKey: row._importKey || `${row._importKind || 'person'}-${index}-${row.name || ''}-${row.jerseyNumber || ''}-${row.idCard || ''}`,
+    _selected: row._error ? false : (row._selected !== false)
+  }))
+}
 const getTeamLogoUrl = (teamRecord) => {
   const sources = [teamRecord?.logoFileID, teamRecord?.logoFileId, teamRecord?.logoCloudFileId, teamRecord?.logoUrl, teamRecord?.logo, teamRecord?._logoFileId]
     .map(value => String(value || '').trim())
@@ -1967,15 +2089,17 @@ const getTeamLogoUrl = (teamRecord) => {
 }
 const teamLogoDisplayUrl = computed(() => {
   const value = String(team.value.logoUrl || team.value.logo || '')
-  return /^(https?:\/\/|\/)/i.test(value) ? value : `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
+  // 解析后的队徽可能是 blob: 对象地址，需一并接受，否则报名表导入的队徽仍显示占位图。
+  return /^((https?|blob|data):|\/)/i.test(value) ? value : `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
 })
 const teamHasLogo = computed(() => Boolean(getTeamLogoUrl(team.value)))
 
 async function resolveTeamLogo(teamRecord) {
   const source = getTeamLogoUrl(teamRecord)
   if (!source.startsWith('cloud://')) return { ...teamRecord, _logoFileId: source }
-  const resolved = await getFileUrl(source)
-  const url = /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
+  const resolved = await toInlineImageUrl(await getFileUrl(source))
+  // 内联转换会返回 blob: 对象地址，只接受 http(s) 会让报名表已上传的队徽退化成占位图。
+  const url = resolved && !/^cloud:\/\//i.test(String(resolved)) ? String(resolved) : ''
   return { ...teamRecord, _logoFileId: source, logo: url, logoUrl: url }
 }
 
@@ -1993,8 +2117,8 @@ const showEditTeam = ref(false)
 const playerReviewingId = ref('')
 const reviewPlayerTable = ref(null)
 const selectedReviewPlayers = ref([])
-const pendingReviewPlayers = computed(() => players.value.filter(player => playerOrganizerReviewStatus(player) !== 'approved'))
-function onReviewSelectionChange(selection) { selectedReviewPlayers.value = selection.filter(player => playerOrganizerReviewStatus(player) !== 'approved') }
+const pendingReviewPlayers = computed(() => players.value.filter(player => playerOrganizerReviewStatus(player) === 'pending'))
+function onReviewSelectionChange(selection) { selectedReviewPlayers.value = selection.filter(player => playerOrganizerReviewStatus(player) === 'pending') }
 function togglePendingReviewSelection() {
   if (batchReviewing.value || playerReviewingId.value || loading.value) return
   const selectAll = selectedReviewPlayers.value.length !== pendingReviewPlayers.value.length
@@ -2002,13 +2126,16 @@ function togglePendingReviewSelection() {
   if (selectAll) pendingReviewPlayers.value.forEach(player => reviewPlayerTable.value?.toggleRowSelection(player, true))
 }
 const batchReviewing = ref(false)
-function canSelectReviewPlayer(player) { return !batchReviewing.value && !playerReviewingId.value && playerOrganizerReviewStatus(player) !== 'approved' }
+function canSelectReviewPlayer(player) { return !batchReviewing.value && !playerReviewingId.value && playerOrganizerReviewStatus(player) === 'pending' }
 const teamEditForm = ref({
   name: '',
   teamCode: '',
   establishedDate: '',
   logoUrl: '',
-  description: ''
+  logoFileID: '',
+  description: '',
+  contactName: '',
+  contactPhone: ''
 })
 
 // 队徽裁剪相关
@@ -2020,6 +2147,7 @@ const cropperPendingFile = ref(null)
 
 const playerForm = ref({
   name: '', gender: 'male', birthDate: '', idCard: '',
+  documentType: 'resident_id',
   nationality: '中国', nativePlace: '', jerseyNumber: 1,
   position: '', jerseyName: '', clothingSize: '',
   contactName: '', contactPhone: '',
@@ -2071,20 +2199,23 @@ const displayAge = computed(() => {
 
 // 解析身份证号
 function parseIdCard(idCard) {
-  if (!idCard || idCard.length !== 18) return null
+  // 报名时身份证后四位（含校验位）常不完整，地区码、生日和性别位不依赖它们，
+  // 因此按实际填写的位数解析，不再要求满 18 位。
+  const value = String(idCard || '').replace(/[^0-9xX]/g, '')
+  if (value.length < 6) return null
 
   // 提取出生日期
-  const year = idCard.substring(6, 10)
-  const month = idCard.substring(10, 12)
-  const day = idCard.substring(12, 14)
-  const birthDate = `${year}-${month}-${day}`
+  const year = value.substring(6, 10)
+  const month = value.substring(10, 12)
+  const day = value.substring(12, 14)
+  const birthDate = value.length >= 14 && Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31 ? `${year}-${month}-${day}` : ''
 
   // 提取性别（第17位，奇数男，偶数女）
-  const genderCode = parseInt(idCard.charAt(16))
-  const gender = genderCode % 2 === 1 ? 'male' : 'female'
+  const genderCode = parseInt(value.charAt(16))
+  const gender = value.length >= 17 && Number.isFinite(genderCode) ? (genderCode % 2 === 1 ? 'male' : 'female') : ''
 
   // 提取籍贯（前6位地区码）- 显示城市
-  const areaCode = idCard.substring(0, 6)
+  const areaCode = value.substring(0, 6)
   const cityMap = {
     // 北京
     '1101': '北京市', '1102': '北京市',
@@ -2195,8 +2326,12 @@ function parseIdCard(idCard) {
     '6529': '阿克苏地区', '6530': '克孜勒苏柯尔克孜自治州', '6531': '喀什地区', '6532': '和田地区',
     '6540': '伊犁哈萨克自治州', '6542': '塔城地区', '6543': '阿勒泰地区', '6590': '自治区直辖县级行政区划'
   }
+  const provinceMap = { '11':'北京市','12':'天津市','13':'河北省','14':'山西省','15':'内蒙古自治区','21':'辽宁省','22':'吉林省','23':'黑龙江省','31':'上海市','32':'江苏省','33':'浙江省','34':'安徽省','35':'福建省','36':'江西省','37':'山东省','41':'河南省','42':'湖北省','43':'湖南省','44':'广东省','45':'广西壮族自治区','46':'海南省','50':'重庆市','51':'四川省','52':'贵州省','53':'云南省','54':'西藏自治区','61':'陕西省','62':'甘肃省','63':'青海省','64':'宁夏回族自治区','65':'新疆维吾尔自治区' }
   const cityCode = areaCode.substring(0, 4)
-  const nativePlace = cityMap[cityCode] || ''
+  const cityName = cityMap[cityCode] || ''
+  // 与报名表既有的“省+市”口径一致；直辖市省名与市名相同，只保留一个。
+  const provinceName = provinceMap[value.substring(0, 2)] || ''
+  const nativePlace = cityName && provinceName && cityName !== provinceName ? `${provinceName}${cityName}` : (cityName || provinceName)
 
   return { birthDate, gender, nativePlace }
 }
@@ -2213,18 +2348,43 @@ function onNameInput() {
 }
 
 // 身份证号输入处理
+// 导入或 OCR 未能识别时会写入“待核验”，它不应阻止按身份证重新核算籍贯。
+function isPendingPlace(value) {
+  const text = String(value || '').trim()
+  return !text || text === '待核验'
+}
+
+function applyIdCardToForm(idCard) {
+  const parsed = idCard ? parseIdCard(idCard) : null
+  if (!parsed) return
+  if (parsed.birthDate) playerForm.value.birthDate = parsed.birthDate
+  if (parsed.gender) playerForm.value.gender = parsed.gender
+  if (isPendingPlace(playerForm.value.nativePlace) && parsed.nativePlace) playerForm.value.nativePlace = parsed.nativePlace
+}
+
 function onIdCardInput() {
-  const idCard = playerForm.value.idCard
-  if (idCard && idCard.length === 18) {
-    const parsed = parseIdCard(idCard)
-    if (parsed) {
-      playerForm.value.birthDate = parsed.birthDate
-      playerForm.value.gender = parsed.gender
-      if (!playerForm.value.nativePlace) {
-        playerForm.value.nativePlace = parsed.nativePlace
-      }
-    }
+  if (playerForm.value.documentType === 'passport') {
+    playerForm.value.idCard = String(playerForm.value.idCard || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
+    return
   }
+  applyIdCardToForm(playerForm.value.idCard)
+}
+
+function onDocumentTypeChange() {
+  if (playerForm.value.documentType === 'passport') {
+    playerForm.value.idCard = String(playerForm.value.idCard || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
+    if (playerForm.value.nationality === '中国') playerForm.value.nationality = ''
+    return
+  }
+  applyIdCardToForm(playerForm.value.idCard)
+}
+
+function inferDocumentType(row = {}) {
+  if (row.documentType === 'passport' || row.documentType === 'resident_id') return row.documentType
+  const identity = String(row.idCard || row.identityNumber || '').trim().toUpperCase()
+  if (/^\d{17}[\dX]$/.test(identity)) return 'resident_id'
+  if (/^(?=.*[A-Z])[A-Z0-9]{5,12}$/.test(identity) || (/^[A-Z0-9]{5,12}$/.test(identity) && !/^\d+$/.test(identity))) return 'passport'
+  return 'resident_id'
 }
 
 // 球员照片上传
@@ -2338,10 +2498,13 @@ function editPlayer(row) {
   isEditingPlayer.value = true
   editingPlayerId.value = row._id
   editingPlayerOriginal.value = row
+  const documentType = inferDocumentType(row)
   playerForm.value = {
     name: row.name || '', gender: row.gender || 'male',
-    birthDate: row.birthDate || '', idCard: row.idCard || '',
-    nationality: row.nationality || '中国', nativePlace: row.nativePlace || '',
+    birthDate: row.birthDate || '', idCard: row.idCard || row.identityNumber || '',
+    documentType,
+    nationality: row.nationality || (documentType === 'passport' ? '' : '中国'),
+    nativePlace: isPendingPlace(row.nativePlace) ? '' : row.nativePlace,
     jerseyNumber: row.jerseyNumber || 1, position: row.position || '',
     jerseyName: row.jerseyName || '', clothingSize: row.clothingSize || '',
     height: row.height || null, weight: row.weight || null,
@@ -2350,6 +2513,8 @@ function editPlayer(row) {
     province: row.province || '', city: row.city || '', district: row.district || '', addressDetail: row.addressDetail || '',
     idCardFront: row.idCardFront || '', idCardBack: row.idCardBack || ''
   }
+  // 籍贯由身份证前 6 位地区码核算，不需要完整的后四位。
+  if (documentType === 'resident_id') applyIdCardToForm(playerForm.value.idCard)
   showAddPlayer.value = true
 }
 
@@ -2432,11 +2597,30 @@ async function submitPlayer() {
     ElMessage.warning('请输入球员姓名')
     return
   }
+  const documentType = playerForm.value.documentType || inferDocumentType(playerForm.value)
+  playerForm.value.documentType = documentType
   const keepImportedIdentity = isEditingPlayer.value && !playerForm.value.idCard && Boolean(editingPlayerOriginal.value?.identityDigest)
-  if (!keepImportedIdentity && (!playerForm.value.idCard || playerForm.value.idCard.length !== 18)) {
-    ElMessage.warning('请输入18位身份证号')
-    return
+  const identity = String(playerForm.value.idCard || '').trim().toUpperCase()
+  if (!keepImportedIdentity) {
+    if (documentType === 'passport') {
+      if (!/^[A-Z0-9]{5,12}$/.test(identity)) {
+        ElMessage.warning('请填写有效护照号（5-12 位字母或数字）')
+        return
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(playerForm.value.birthDate || ''))) {
+        ElMessage.warning('护照球员请填写出生日期')
+        return
+      }
+      if (!String(playerForm.value.nationality || '').trim()) {
+        ElMessage.warning('护照球员请选择国籍')
+        return
+      }
+    } else if (!/^\d{17}[\dX]$/.test(identity)) {
+      ElMessage.warning('请输入18位身份证号')
+      return
+    }
   }
+  playerForm.value.idCard = identity
   if (!playerForm.value.photoUrl) {
     ElMessage.warning('请上传球员照片')
     return
@@ -2501,6 +2685,8 @@ async function submitPlayer() {
 
     const data = {
       ...playerForm.value,
+      documentType,
+      identityNumber: keepImportedIdentity ? undefined : identity,
       playerId: generatePlayerId(team.value.teamCode || teamId, 'C'),
       // 球员归属同时写入主键和历史兼容字段，保证小程序与 PC 端读取一致。
       teamId: teamId,
@@ -2510,7 +2696,10 @@ async function submitPlayer() {
       // 新注册时设置注册时间
       registerTime: isEditingPlayer.value ? playerForm.value.registerTime : new Date().toISOString()
     }
-    if (keepImportedIdentity) delete data.idCard
+    if (keepImportedIdentity) {
+      delete data.idCard
+      delete data.identityNumber
+    }
     if (isEditingPlayer.value) {
       await updateRecord('players', editingPlayerId.value, data)
       ElMessage.success('保存成功')
@@ -2528,6 +2717,8 @@ async function submitPlayer() {
           await addRecord('player_library', {
             name: playerForm.value.name,
             idCard: playerForm.value.idCard,
+            documentType,
+            identityNumber: identity,
             gender: playerForm.value.gender,
             birthDate: playerForm.value.birthDate,
             nativePlace: playerForm.value.nativePlace,
@@ -2576,9 +2767,26 @@ function openAddPlayer() {
 }
 
 function openAddStaff() {
+  editingStaffId.value = ''
   staffSource.value = 'manual'
   staffPlayerId.value = ''
   staffForm.value = { name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null }
+  showAddStaff.value = true
+}
+
+// 工作人员资料存放在 coaches 集合，编辑时复用同一个弹窗，保存走更新。
+function openEditStaff(row) {
+  if (!row?._id) return
+  editingStaffId.value = String(row._id)
+  staffSource.value = 'manual'
+  staffPlayerId.value = ''
+  staffForm.value = {
+    name: row.name || '',
+    type: row.type || 'other',
+    phone: row.phone || row.phoneNumber || '',
+    idCard: row.idCard || '',
+    jerseyNumber: row.jerseyNumber || null
+  }
   showAddStaff.value = true
 }
 
@@ -2587,6 +2795,13 @@ function selectStaffPlayer(id) {
   staffForm.value = { ...staffForm.value, name:player?.name || '', jerseyNumber:player?.jerseyNumber || null, type:'other' }
 }
 
+// 手机号展示：已分配账号取账号手机号，未分配时回退工作人员资料中填报的手机号，
+// 避免领队报名表已识别到手机号却显示为未分配。
+function staffPhone(row) {
+  const account = staffAccount(row)
+  const phone = String(account && account.phone || row.phone || row.phoneNumber || '').replace(/\D/g, '')
+  return phone
+}
 function staffAccount(row) {
   if (row._accountHolderRow) return primaryTeamAccount.value || null
   const direct = teamAccessRows.value.find(item => String(item.staffId || '') === String(row._id))
@@ -2597,7 +2812,7 @@ function staffAccount(row) {
 }
 function staffAccountLabel(row) {
   const account = staffAccount(row)
-  return !account ? '未分配' : account.accountType === 'owner' ? '主账号' : account.accountType === 'pending_owner' ? '待接收主账号' : '子账号'
+  return !account ? '未分配账号' : account.accountType === 'owner' ? '主账号' : account.accountType === 'pending_owner' ? '待接收主账号' : '子账号'
 }
 function staffPermissionLabel(row) {
   const account = staffAccount(row)
@@ -2632,7 +2847,7 @@ async function loadTeamAccess() {
 
 async function openTeamAccess(row) {
   if (!row?._id) return
-  if (!canManageTeamAccess.value) return ElMessage.warning('球队账号权限需由赛事所属机构主账号分配')
+  if (!canManageTeamAccess.value) return ElMessage.warning('当前账号没有本赛事授权')
   if (!tournamentRelation.value?._id) return ElMessage.error('当前球队参赛关系不存在，无法分配账号')
   if (await loadTeamAccess() === false) return
   selectedStaffAccount.value = row
@@ -2721,6 +2936,22 @@ async function submitStaff() {
   const roleLabels = { team_leader:'领队', head_coach:'主教练', doctor:'队医', other:'工作人员' }
   staffSubmitting.value = true
   try {
+    if (editingStaffId.value) {
+      await updateRecord('coaches', editingStaffId.value, {
+        name,
+        type: staffForm.value.type,
+        role: roleLabels[staffForm.value.type] || '工作人员',
+        phone: String(staffForm.value.phone || '').trim(),
+        idCard: String(staffForm.value.idCard || '').trim(),
+        jerseyNumber: Number(staffForm.value.jerseyNumber || 0),
+        updateTime: new Date().toISOString()
+      })
+      ElMessage.success('工作人员资料已更新')
+      showAddStaff.value = false
+      editingStaffId.value = ''
+      await loadPlayers()
+      return
+    }
     if (staffSource.value === 'player') {
       if (!staffPlayerId.value) throw new Error('请选择队内球员')
       const result = await callFunction('organizerClaimInvite', { action:'addPlayerAsStaff', tournamentId:sourceTournamentId.value, divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default', tournamentTeamId:String(tournamentRelation.value._id || ''), playerId:staffPlayerId.value, type:staffForm.value.type, phone:staffForm.value.phone })
@@ -2757,6 +2988,7 @@ async function submitStaff() {
 function resetPlayerForm() {
   playerForm.value = {
     name: '', gender: 'male', birthDate: '', idCard: '',
+    documentType: 'resident_id',
     nationality: '中国', nativePlace: '', jerseyNumber: 1,
     position: '', jerseyName: '', clothingSize: '',
     height: null, weight: null,
@@ -2891,7 +3123,7 @@ async function loadPlayerLibrary(forceRefresh = false) {
       if (player.photoUrl && player.photoUrl.startsWith('cloud://')) {
         player._photoFileID = player.photoUrl
         try {
-          player.photoUrl = await getFileUrl(player.photoUrl)
+          player.photoUrl = await toInlineImageUrl(await getFileUrl(player.photoUrl))
         } catch (err) {
           console.warn('获取头像临时URL失败:', player.name, err)
         }
@@ -2899,6 +3131,7 @@ async function loadPlayerLibrary(forceRefresh = false) {
     }
 
     // 7. 保存到缓存
+    for (const cachedPlayer of list) { if (cachedPlayer.photoUrl) cachedPlayer.photoUrl = await toInlineImageUrl(cachedPlayer.photoUrl) }
     playerLibraryCache.value = [...list]
     libraryCacheLoaded.value = true
 
@@ -3141,13 +3374,19 @@ watch(showAddPlayer, (val) => {
 
 // 编辑球队
 function editTeam() {
+  const permanentLogo = [team.value.logoFileID, team.value.logoFileId, team.value._logoFileId]
+    .map(value => String(value || '').trim())
+    .find(value => value.startsWith('cloud://')) || ''
   teamEditForm.value = {
     name: team.value.name || '',
     teamCode: team.value.teamCode || '',
     establishedDate: team.value.establishedDate || '',
     shortName: team.value.shortName || '',
     logoUrl: team.value.logoUrl || team.value.logo || '',
-    description: team.value.description || ''
+    logoFileID: permanentLogo,
+    description: team.value.description || '',
+    contactName: tournamentRelation.value.contactName || team.value.contactName || team.value.managerName || team.value.ownerName || '',
+    contactPhone: tournamentRelation.value.contactPhone || team.value.contactPhone || team.value.managerPhone || team.value.ownerPhone || team.value.phoneNumber || team.value.phone || ''
   }
   showEditTeam.value = true
 }
@@ -3372,11 +3611,11 @@ async function handleImportFileChange(file) {
         parsed.push(player)
       })
 
-      importParsedData.value = parsed
+      importParsedData.value = markImportRowsSelectable(parsed)
       importErrors.value = errors
 
       if (parsed.length > 0) {
-        ElMessage.success(`成功解析 ${parsed.length} 条人员记录${errors.length > 0 ? `，${errors.length} 条有警告` : ''}`)
+        ElMessage.success(`成功解析 ${parsed.length} 条人员记录，请勾选要入队的人员${errors.length > 0 ? `；${errors.length} 条有警告` : ''}`)
       } else {
         ElMessage.warning('未解析到有效人员数据')
       }
@@ -3432,143 +3671,96 @@ function parseWordFormHeader(fullText) {
   return info
 }
 
+function createWordPreviewUrl(file) {
+  if (!file) return ''
+  try { return URL.createObjectURL(file) } catch { return '' }
+}
+
+function mapDocxPersonToImportRow(person, kind) {
+  const staffType = kind === 'staff'
+    ? (['team_leader', 'head_coach', 'doctor', 'assistant_coach', 'goalkeeper_coach'].includes(person.roleType) ? person.roleType : 'other')
+    : ''
+  const name = String(person.name || '').trim()
+  const identity = String(person.identityNumber || '').trim().toUpperCase()
+  const photoFile = person.photoFile || null
+  const photoPreview = person.previewUrl || createWordPreviewUrl(photoFile)
+  return {
+    name,
+    idCard: identity,
+    jerseyNumber: kind === 'staff' ? '' : normalizeJerseyNumber(person.jerseyNumber),
+    position: kind === 'staff' ? '' : (person.position || ''),
+    height: '',
+    weight: '',
+    contactName: '',
+    contactPhone: normalizePhoneLike(person.phone),
+    relatedPosition: kind === 'staff' ? (person.roleLabel || STAFF_ROLE_LABEL_MAP[staffType] || '工作人员') : '队员',
+    jerseyName: kind === 'staff' ? '' : (person.jerseyName || (typeof generateJerseyName === 'function' ? generateJerseyName(name) : '')),
+    birthDate: person.birthDate || '',
+    nationality: person.nationality || '',
+    nativePlace: person.nativePlace || '',
+    _importKind: kind,
+    _staffType: staffType,
+    _roleSuffix: kind === 'staff' ? getImportRoleSuffix(staffType || 'other') : 'C',
+    _importKindLabel: kind === 'staff'
+      ? (getImportRoleSuffix(staffType || 'other') === 'A' ? '教练' : '工作人员')
+      : '球员',
+    _photoFile: photoFile,
+    _photoPreview: photoPreview,
+    _error: !name,
+    _selected: Boolean(name)
+  }
+}
+
+function normalizePhoneLike(value) {
+  return String(value || '').replace(/\D/g, '').slice(0, 11)
+}
+
 async function handleWordImportFileChange(file) {
   const fileName = (file.name || '').toLowerCase()
   if (!fileName.endsWith('.docx')) {
-    ElMessage.error('快捷模式仅支持 .docx 格式的 Word 报名表')
+    ElMessage.error('请上传 .docx 格式的 Word 报名表')
     return
   }
   try {
     const rawFile = file.raw || file
-    const arrayBuffer = await rawFile.arrayBuffer()
-    const mammoth = (await import('mammoth')).default
-    const result = await mammoth.convertToHtml({ arrayBuffer })
-    const doc = new DOMParser().parseFromString(result.value || '', 'text/html')
-    const parsed = []
-    const warnings = []
-
-    // 报名表队徽可能位于表头表格内：先识别所有“姓名/号码”上方的球员照片，再取首张非球员图片作为队徽
+    const { parseTeamRegistrationDocx } = await import('../../utils/teamRegistrationDocx.js')
+    const docx = await parseTeamRegistrationDocx(rawFile)
+    const warnings = [...(docx.warnings || []), ...(docx.errors || [])]
     wordTeamLogoPreview.value = ''
     wordTeamLogoFile.value = null
-    const wordPlayerPhotoImages = new Set()
-    Array.from(doc.querySelectorAll('table')).forEach(table => {
-      const rows = Array.from(table.querySelectorAll('tr'))
-      rows.forEach((tr, rowIdx) => {
-        if (rowIdx === 0) return
-        const cells = Array.from(tr.querySelectorAll('td, th'))
-        const previousCells = Array.from(rows[rowIdx - 1].querySelectorAll('td, th'))
-        cells.forEach((cell, cellIdx) => {
-          if (!(cell.textContent || '').match(WORD_NAME_CELL_RE)) return
-          const photoImage = previousCells[cellIdx]?.querySelector('img')
-          if (photoImage) wordPlayerPhotoImages.add(photoImage)
-        })
-      })
-    })
-    const headerLogoImage = Array.from(doc.querySelectorAll('img')).find(img => !wordPlayerPhotoImages.has(img))
-    const headerLogoSource = headerLogoImage?.getAttribute('src') || ''
-    if (headerLogoSource) {
-      try {
-        const logoFile = createWordImageFile(headerLogoSource, 'word-team-logo')
-        if (logoFile.size > WORD_TEAM_LOGO_MAX_SIZE) {
-          warnings.push('报名表页首队徽超过 10MB，已跳过队徽补充')
-        } else {
-          wordTeamLogoPreview.value = headerLogoSource
-          wordTeamLogoFile.value = logoFile
-        }
-      } catch (logoError) {
-        console.warn('解析报名表页首队徽失败:', logoError)
-        warnings.push('报名表页首队徽无法解析，不影响球员名单导入')
+    if (docx.logoFile) {
+      if (docx.logoFile.size > WORD_TEAM_LOGO_MAX_SIZE) {
+        warnings.push('报名表队徽超过 10MB，已跳过队徽补充')
+      } else {
+        wordTeamLogoFile.value = docx.logoFile
+        wordTeamLogoPreview.value = docx.logoPreviewUrl || createWordPreviewUrl(docx.logoFile)
       }
     } else if (!teamHasLogo.value) {
-      warnings.push('当前球队没有队徽，且报名表页首未识别到可用队徽')
+      warnings.push('当前球队没有队徽，且报名表未识别到可用队徽')
     }
-
-    // 头部信息（队名/人数/组别/队服颜色）
-    const fullText = (doc.body.textContent || '').replace(/\s+/g, ' ').trim()
-    wordFormInfo.value = parseWordFormHeader(fullText)
-
-    // 表格解析：「姓名：X 号码：N」单元格所在行，下一行同列单元格是其「出生」日期
-    const tables = Array.from(doc.querySelectorAll('table'))
-    tables.forEach(table => {
-      const rows = Array.from(table.querySelectorAll('tr'))
-      rows.forEach((tr, rowIdx) => {
-        const cells = Array.from(tr.querySelectorAll('td, th'))
-        const previousCells = rowIdx > 0
-          ? Array.from(rows[rowIdx - 1].querySelectorAll('td, th'))
-          : []
-        const nextCells = rowIdx + 1 < rows.length
-          ? Array.from(rows[rowIdx + 1].querySelectorAll('td, th'))
-          : []
-        cells.forEach((cell, cellIdx) => {
-          const m = (cell.textContent || '').match(WORD_NAME_CELL_RE)
-          if (!m) return
-          const name = (m[1] || '').trim()
-          if (!name) return
-          const jerseyNumber = normalizeJerseyNumber(normalizeFullWidthDigits((m[2] || '').trim()))
-          let photoFile = null
-          let photoPreview = ''
-          const photoImage = previousCells[cellIdx]?.querySelector('img')
-          const photoSource = photoImage?.getAttribute('src') || ''
-          if (photoSource) {
-            try {
-              const candidatePhoto = createWordImageFile(photoSource, `word-player-${name}`)
-              if (candidatePhoto.size > WORD_PLAYER_PHOTO_MAX_SIZE) {
-                warnings.push(`「${name}」：报名表照片超过 10MB，已跳过照片导入`)
-              } else {
-                photoFile = candidatePhoto
-                photoPreview = photoSource
-              }
-            } catch (photoError) {
-              console.warn(`解析「${name}」报名表照片失败:`, photoError)
-              warnings.push(`「${name}」：报名表照片无法解析`)
-            }
-          }
-          let birthDate = ''
-          const birthText = nextCells[cellIdx] ? (nextCells[cellIdx].textContent || '') : ''
-          const bm = birthText.match(WORD_BIRTH_CELL_RE)
-          if (bm) {
-            const birthDay = bm[3] || '1'
-            birthDate = `${bm[1]}-${String(bm[2]).padStart(2, '0')}-${String(birthDay).padStart(2, '0')}`
-          } else {
-            warnings.push(`「${name}」：未解析到出生日期，导入后可手动补充`)
-          }
-          parsed.push({
-            name,
-            idCard: '',
-            jerseyNumber,
-            position: '',
-            height: '',
-            weight: '',
-            contactName: '',
-            contactPhone: '',
-            relatedPosition: '队员',
-            jerseyName: typeof generateJerseyName === 'function' ? generateJerseyName(name) : '',
-            birthDate,
-            _importKind: 'player',
-            _staffType: '',
-            _roleSuffix: 'C',
-            _importKindLabel: '球员',
-            _photoFile: photoFile,
-            _photoPreview: photoPreview,
-            _error: false
-          })
-        })
-      })
-    })
-
-    if (parsed.length === 0) {
-      ElMessage.error('未从 Word 中解析到球员信息，请确认报名表表格中包含「姓名/号码/出生日期」')
+    wordFormInfo.value = {
+      ...(docx.teamName ? { 队名: docx.teamName } : {}),
+      ...(docx.contactName ? { 领队: docx.contactName } : {}),
+      ...(docx.contactPhone ? { 领队手机: docx.contactPhone } : {}),
+      ...(docx.players?.length ? { 球员人数: String(docx.players.length) } : {}),
+      ...(docx.staff?.length ? { 工作人员: String(docx.staff.length) } : {})
+    }
+    const parsed = [
+      ...(docx.staff || []).filter(person => String(person.name || '').trim()).map(person => mapDocxPersonToImportRow(person, 'staff')),
+      ...(docx.players || []).filter(person => String(person.name || '').trim()).map(person => mapDocxPersonToImportRow(person, 'player'))
+    ]
+    if (!parsed.length) {
+      ElMessage.error('未从 Word 中解析到可导入人员，请确认报名表格式')
       return
     }
-
-    importParsedData.value = parsed
+    importParsedData.value = markImportRowsSelectable(parsed)
     importErrors.value = warnings
     colDetectInfo.value = {}
-    const photoCount = parsed.filter(player => player._photoFile).length
-    ElMessage.success(`已从 Word 报名表解析到 ${parsed.length} 名球员、${photoCount} 张球员照片`)
+    const photoCount = parsed.filter(item => item._photoFile).length
+    ElMessage.success(`已解析 ${parsed.length} 人（含工作人员），默认全选；请勾选要入队的人员后再确认。照片 ${photoCount} 张`)
   } catch (err) {
     console.error('解析 Word 报名表失败:', err)
-    ElMessage.error('Word 报名表解析失败，请确认文件格式正确（.docx）')
+    ElMessage.error(err?.message || 'Word 报名表解析失败，请确认文件格式正确（.docx）')
   }
 }
 
@@ -3812,7 +4004,7 @@ async function auditAndRemoveAvatarBackground(sourceFile) {
   const result = await callFunction('baiduRemoveBg', {
     action: 'removeBackground',
     imageBase64,
-    ...(isTournamentStaff ? { tournamentId:sourceTournamentId.value } : {})
+    ...(isTournamentStaff ? { tournamentId: sourceTournamentId.value || sessionStorage.getItem('sxfStaffTournamentId') || '' } : {})
   })
   if (!result.success || !result.data) {
     throw new Error(result.message || '未检测到有效人像')
@@ -3943,7 +4135,7 @@ async function uploadWordTeamLogoIfMissing() {
     throw new Error(uploadResult.message || '报名表队徽上传失败')
   }
 
-  const logoUrl = uploadResult.tempUrl || await getFileUrl(uploadResult.fileId)
+  const logoUrl = uploadResult.tempUrl || await toInlineImageUrl(await getFileUrl(uploadResult.fileId))
   if (!logoUrl) throw new Error('报名表队徽已上传，但未获取到可访问地址')
   await updateRecord('teams', teamId, { logo: logoUrl, logoUrl, logoFileID: uploadResult.fileId })
 
@@ -3986,16 +4178,17 @@ async function uploadWordPlayerPhoto(player, playerId) {
   }
 }
 
-// 确认批量导入
+// 确认批量导入（仅导入已勾选人员）
 async function confirmBatchImport() {
-  const validData = importParsedData.value.filter(p => !p._error)
+  const validData = selectedImportRows.value
   if (validData.length === 0) {
-    ElMessage.warning('没有可导入的有效人员数据')
+    ElMessage.warning('请先勾选要入队的人员')
     return
   }
 
   const playerCount = validData.filter(item => item._importKind !== 'staff').length
   const staffCount = validData.filter(item => item._importKind === 'staff').length
+  const skippedCount = importParsedData.value.filter(item => !item._error && !item._selected).length
   const wordPhotoCount = importMode.value === 'word' ? validData.filter(item => item._photoFile).length : 0
   const wordExistingUpdateCount = importMode.value === 'word'
     ? validData.filter(item => item._importKind !== 'staff' && findExistingWordPlayers(item).length === 1).length
@@ -4003,9 +4196,9 @@ async function confirmBatchImport() {
   const shouldImportWordLogo = importMode.value === 'word' && !teamHasLogo.value && Boolean(wordTeamLogoFile.value)
   try {
     await ElMessageBox.confirm(
-      `确定处理 ${playerCount} 名球员、${staffCount} 名工作人员到「${team.value.name || '当前球队'}」${wordExistingUpdateCount ? `；其中 ${wordExistingUpdateCount} 名将匹配并更新现有球员` : ''}${wordPhotoCount ? `，自动抠图并导入 ${wordPhotoCount} 张球员照片` : ''}${shouldImportWordLogo ? '，并补充报名表队徽' : ''}？`,
-      '批量导入确认',
-      { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'info' }
+      `确定将已勾选的 ${playerCount} 名球员、${staffCount} 名工作人员补进「${team.value.name || '当前球队'}」${skippedCount ? `（另有 ${skippedCount} 人未勾选，不会导入）` : ''}${wordExistingUpdateCount ? `；其中 ${wordExistingUpdateCount} 名将匹配并更新现有球员` : ''}${wordPhotoCount ? `，自动抠图并导入 ${wordPhotoCount} 张球员照片` : ''}${shouldImportWordLogo ? '，并补充报名表队徽' : ''}？`,
+      '确认入队',
+      { confirmButtonText: '确认导入已勾选', cancelButtonText: '取消', type: 'info' }
     )
   } catch {
     return
@@ -4166,6 +4359,17 @@ async function confirmBatchImport() {
   clearImportData()
 
   await loadPlayers()
+  if (tournamentRelation.value?._id) {
+    try {
+      await updateRecord('tournament_teams', tournamentRelation.value._id, {
+        rosterPlayerCount: players.value.length,
+        updateTime: new Date().toISOString()
+      })
+      tournamentRelation.value.rosterPlayerCount = players.value.length
+    } catch (error) {
+      console.warn('同步参赛关系球员数失败:', error)
+    }
+  }
   showBatchImport.value = false
 
   const logoResultText = logoImportResult.imported
@@ -4178,7 +4382,7 @@ async function confirmBatchImport() {
   const photoResultText = wordPhotoCount
     ? `，球员照片抠图上传成功 ${successPhotos} 张${failedPhotos ? `、失败 ${failedPhotos} 张` : ''}`
     : ''
-  const resultMessage = `导入完成：新增球员 ${successPlayers} 人、更新现有球员 ${updatedPlayers} 人、工作人员 ${successStaff} 人${failed > 0 ? `，人员失败 ${failed} 人` : ''}${photoResultText}${logoResultText}`
+  const resultMessage = `已将勾选人员补进当前球队：新增球员 ${successPlayers} 人、更新 ${updatedPlayers} 人、工作人员 ${successStaff} 人${failed > 0 ? `，失败 ${failed} 人` : ''}${photoResultText}${logoResultText}`
   if (logoImportFailed || failedPhotos > 0 || failed > 0) {
     ElMessage.warning(resultMessage)
   } else {
@@ -4231,7 +4435,11 @@ async function handleLogoCropConfirm(croppedBlob) {
     const result = await uploadScopedTeamFile(cloudPath, processedFile, { chunkSize: 32 * 1024 })
 
     if (result.success) {
-      teamEditForm.value.logoUrl = result.tempUrl
+      const permanentId = String(result.fileId || result.fileID || '').trim()
+      teamEditForm.value.logoUrl = result.tempUrl || permanentId
+      if (permanentId.startsWith('cloud://')) {
+        teamEditForm.value.logoFileID = permanentId
+      }
       if (isProcessed) {
         ElMessage.success('透明背景Logo上传成功')
       } else {
@@ -4248,7 +4456,11 @@ async function handleLogoCropConfirm(croppedBlob) {
 
 // RemoveBgProcessor 抠图上传成功回调
 function handleLogoRemoveBgSuccess(result) {
-  teamEditForm.value.logoUrl = result.url
+  const permanentId = String(result.fileID || result.fileId || '').trim()
+  teamEditForm.value.logoUrl = result.url || permanentId
+  if (permanentId.startsWith('cloud://')) {
+    teamEditForm.value.logoFileID = permanentId
+  }
   showLogoRemoveBg.value = false
   ElMessage.success('Logo 上传成功')
 }
@@ -4259,13 +4471,48 @@ async function submitTeamEdit() {
     ElMessage.warning('请输入球队全称')
     return
   }
-  // 账号所有者即为负责人，使用账号绑定的手机号
+  // 负责人与联系电话可在此补录；手机号填写时必须是有效的 11 位号码。
+  const contactPhone = String(teamEditForm.value.contactPhone || '').replace(/\D/g, '')
+  if (contactPhone && !/^1[3-9]\d{9}$/.test(contactPhone)) {
+    ElMessage.warning('请填写有效的 11 位联系电话')
+    return
+  }
+  teamEditForm.value.contactPhone = contactPhone
 
   submitting.value = true
   try {
-    const teamData = {
-      ...teamEditForm.value,
-      logo: teamEditForm.value.logoUrl
+    const form = { ...teamEditForm.value }
+    const logoUrl = String(form.logoUrl || '').trim()
+    const logoFileID = String(form.logoFileID || team.value.logoFileID || team.value.logoFileId || team.value._logoFileId || '').trim()
+    delete form.logoFileID
+    const teamData = { ...form }
+    // 预览用的 blob/data 不能写回数据库，否则后端会报「队徽地址无效」。
+    if (/^(blob:|data:)/i.test(logoUrl)) {
+      delete teamData.logoUrl
+      delete teamData.logo
+      if (logoFileID.startsWith('cloud://')) {
+        teamData.logoFileID = logoFileID
+        teamData.logoFileId = logoFileID
+      }
+    } else if (logoUrl.startsWith('cloud://')) {
+      teamData.logo = logoUrl
+      teamData.logoUrl = logoUrl
+      teamData.logoFileID = logoUrl
+      teamData.logoFileId = logoUrl
+    } else if (/^https?:\/\//i.test(logoUrl)) {
+      teamData.logo = logoUrl
+      teamData.logoUrl = logoUrl
+      if (logoFileID.startsWith('cloud://')) {
+        teamData.logoFileID = logoFileID
+        teamData.logoFileId = logoFileID
+      }
+    } else {
+      delete teamData.logoUrl
+      delete teamData.logo
+      if (logoFileID.startsWith('cloud://')) {
+        teamData.logoFileID = logoFileID
+        teamData.logoFileId = logoFileID
+      }
     }
     await updateRecord('teams', teamId, teamData)
     ElMessage.success('保存成功')
@@ -4380,6 +4627,29 @@ function generatePlayerId(teamCode, roleSuffix, overrideSeq) {
   return teamCode + nextSeq + roleSuffix;
 }
 
+// 头像临时链接按需解析：列表先渲染，头像解析完成后就地更新，不再阻塞页面。
+async function hydrateAvatarUrls(rows) {
+  await Promise.all((rows || []).map(async row => {
+    if (!row) return
+    const exportPhotoFileId = [row.photoFileID, row.photoFileId, row.photoUrl]
+      .map(value => String(value || '')).find(value => /^(cloud:\/\/|cloud1:\/\/)/.test(value)) || ''
+    try {
+      if (exportPhotoFileId) {
+        row._exportPhotoFileId = exportPhotoFileId
+        // 先清掉不可直链的 cloud 地址，避免渲染阶段 onerror 误判为永久失败。
+        row.photoUrl = ''
+        row.photoUrl = await toInlineImageUrl(await getFileUrl(exportPhotoFileId))
+        clearPlayerAvatarError(row._id)
+      } else if (row.photoUrl) {
+        row.photoUrl = await toInlineImageUrl(row.photoUrl)
+        clearPlayerAvatarError(row._id)
+      }
+    } catch (error) {
+      console.warn('头像临时链接解析失败:', error && error.message ? error.message : error)
+    }
+  }))
+}
+
 async function loadPlayers() {
   loading.value = true
   const statisticsRequest = requestUnifiedStatistics().catch(error => ({ success: false, error: error.message }))
@@ -4432,13 +4702,9 @@ async function loadPlayers() {
     actualStaffRecords([...(staffByTeamId || []), ...(staffByTeamCode || [])]).forEach(person => {
       if (person?._id) staffMap.set(String(person._id), person)
     })
-    staffMembers.value = await Promise.all(Array.from(staffMap.values()).map(async person => {
-      const exportPhotoFileId = [person.photoFileID, person.photoFileId, person.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
-      if (exportPhotoFileId) {
-        try { return { ...person, _exportPhotoFileId:exportPhotoFileId, photoUrl:await getFileUrl(exportPhotoFileId) } } catch { return { ...person, _exportPhotoFileId:exportPhotoFileId } }
-      }
-      return person
-    }))
+    const staffRows = Array.from(staffMap.values())
+    await hydrateAvatarUrls(staffRows)
+    staffMembers.value = staffRows
 
     // 合并并去重（按 _id）
     const playerMap = new Map()
@@ -4450,23 +4716,12 @@ async function loadPlayers() {
     }
     let result = Array.from(playerMap.values())
 
-    // 处理头像URL：如果是 cloudId，需要转换成临时URL
-    const processedPlayers = await Promise.all(result.map(async (player) => {
-      const exportPhotoFileId = [player.photoFileID, player.photoFileId, player.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
-      if (exportPhotoFileId) {
-        try {
-          const tempUrl = await getFileUrl(exportPhotoFileId)
-          return { ...player, _exportPhotoFileId:exportPhotoFileId, photoUrl:tempUrl }
-        } catch (err) {
-          console.error('获取头像临时URL失败:', err)
-          return { ...player, _exportPhotoFileId:exportPhotoFileId }
-        }
-      }
-      return player
-    }))
-
-    players.value = processedPlayers
-    const formalPlayerIds = new Set(processedPlayers.map(player => String(player._id || '')).filter(Boolean))
+    // 头像临时链接会随每次加载重新解析；之前加载失败留下的错误标记必须清空。
+    // 必须先解析再挂到表格，避免 cloud:// 先渲染触发 onerror 后永久显示占位头像。
+    playerAvatarErrors.value = new Set()
+    await hydrateAvatarUrls(result)
+    players.value = result
+    const formalPlayerIds = new Set(result.map(player => String(player._id || '')).filter(Boolean))
     const draftMap = new Map()
     ;(exportRosterPlayers || []).forEach(draft => {
       if (!draft?._id) return
@@ -4475,17 +4730,18 @@ async function loadPlayers() {
       if (draft.confirmedPlayerId && formalPlayerIds.has(String(draft.confirmedPlayerId))) return
       draftMap.set(String(draft._id), { ...draft, _exportSource:'registration_player_draft' })
     })
-    importedDraftPlayers.value = await Promise.all(Array.from(draftMap.values()).map(async draft => {
-      const exportPhotoFileId = [draft.photoFileID, draft.photoFileId, draft.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
-      if (!exportPhotoFileId) return draft
-      try { return { ...draft, _exportPhotoFileId:exportPhotoFileId, photoUrl:await getFileUrl(exportPhotoFileId) } } catch { return { ...draft, _exportPhotoFileId:exportPhotoFileId } }
-    }))
+    const draftRows = Array.from(draftMap.values())
+    await hydrateAvatarUrls(draftRows)
+    importedDraftPlayers.value = draftRows
 
     // 普通球队资料页沿用历史同步行为；赛事内查看只读，不因打开页面改写球队资产。
     if (!sourceTournamentId.value) {
       try {
-        await updateRecord('teams', teamId, { playerCount: processedPlayers.length })
-        if (team.value) team.value.playerCount = processedPlayers.length
+        // 只在人数变化时回写，避免每次打开详情都产生一次写请求
+        if (Number(team.value && team.value.playerCount) !== result.length) {
+          await updateRecord('teams', teamId, { playerCount: result.length })
+        }
+        if (team.value) team.value.playerCount = result.length
       } catch (e) {
         console.error('同步 playerCount 失败:', e)
       }
@@ -4517,15 +4773,17 @@ function playerClaimed(player) {
 }
 
 function playerOrganizerReviewStatus(player) {
+  const reviewRaw = String(player?.organizerReviewStatus || '').toLowerCase()
   if (sourceTournamentId.value) {
     const playerId = String(player?._id || '')
     const source = String(player?.source || '').toLowerCase()
     const importedRegistrationPlayer = Boolean(player?.registrationImportBatchId || player?.importDraftId || player?.registrationSourceFileId || source.indexOf('registration_docx_import') === 0)
     if (tournamentRosterPlayerIds.value.has(playerId)) return 'approved'
-    if (importedRegistrationPlayer && String(player?.organizerReviewStatus || '').toLowerCase() === 'approved') return 'approved'
+    if (importedRegistrationPlayer && reviewRaw === 'approved') return 'approved'
+    if (reviewRaw === 'rejected') return 'rejected'
     return 'pending'
   }
-  return String(player?.organizerReviewStatus || '').toLowerCase() === 'approved' ? 'approved' : 'pending'
+  return reviewRaw === 'approved' ? 'approved' : (reviewRaw === 'rejected' ? 'rejected' : 'pending')
 }
 
 async function approvePlayerRecord(player) {
@@ -4547,6 +4805,54 @@ async function reviewPlayer(player) {
   } catch (error) { ElMessage.error(error.message || '审核失败，请重试') }
   finally { playerReviewingId.value = '' }
 }
+// 逐人驳回：快捷原因覆盖最常见的资料缺项，具体说明会显示在球队端。
+const rejectPlayerDialog = ref({ visible:false, playerId:'', playerName:'', reasons:[], note:'' })
+const rejectPlayerSubmitting = ref(false)
+// 「其他原因」单独成项：勾选后才显示必填文本框，避免和预设缺项混在一起。
+const OTHER_REJECT_REASON = '其他原因'
+const rejectReasonOptions = ['未交球员照片','未填场上位置','未填球衣号码','未填身份证号','未填联系电话','未填出生日期','未完成人证核验','信息与证件不一致', OTHER_REJECT_REASON]
+function playerOrganizerReviewReason(player) {
+  return String(player?.organizerReviewReason || player?.organizerReviewedNote || '').trim()
+}
+// 按缺失字段预勾选原因，主办方仍可增删。
+function suggestRejectReasons(player) {
+  const suggestions = []
+  if (!String(player?.photoUrl || player?.photo || '').trim()) suggestions.push('未交球员照片')
+  if (!String(player?.position || '').trim()) suggestions.push('未填场上位置')
+  if (!String(player?.jerseyNumber || '').trim()) suggestions.push('未填球衣号码')
+  if (!String(player?.idCard || player?.idNumber || '').trim()) suggestions.push('未填身份证号')
+  if (!String(player?.phone || player?.phoneNumber || player?.contactPhone || player?.guardianPhone || '').trim()) suggestions.push('未填联系电话')
+  if (!String(player?.birthDate || '').trim()) suggestions.push('未填出生日期')
+  if (String(player?.identityStatus || '').toLowerCase() !== 'verified') suggestions.push('未完成人证核验')
+  return suggestions
+}
+function openRejectPlayer(player) {
+  if (isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value || !player?._id) return
+  rejectPlayerDialog.value = { visible:true, playerId:String(player._id), playerName:String(player.name || '球员'), reasons:suggestRejectReasons(player), note:'' }
+}
+async function submitRejectPlayer() {
+  const dialog = rejectPlayerDialog.value
+  const picked = (dialog.reasons || []).filter(item => item !== OTHER_REJECT_REASON)
+  const wantsOther = (dialog.reasons || []).includes(OTHER_REJECT_REASON)
+  const detail = wantsOther ? String(dialog.note || '').trim() : ''
+  if (wantsOther && !detail) { ElMessage.warning('选了「其他原因」，请填写具体原因'); return }
+  const reason = picked.concat(detail ? [detail] : []).join('；').slice(0, 200)
+  if (!reason) { ElMessage.warning('请选择或填写驳回原因'); return }
+  rejectPlayerSubmitting.value = true
+  try {
+    const result = await rosterExceptionBoard({
+      rosterAction:'rejectPlayer', tournamentId:sourceTournamentId.value, teamId,
+      divisionId:sourceDivisionId.value || tournamentRelation.value?.divisionId || 'default',
+      playerId:dialog.playerId, reason
+    })
+    if (!result?.success) throw new Error(result?.error || result?.message || '驳回失败')
+    rejectPlayerDialog.value.visible = false
+    await loadPlayers()
+    ElMessage.success('已驳回，球队需补充资料后重新提交')
+  } catch (error) { ElMessage.error(error.message || '驳回失败，请重试') }
+  finally { rejectPlayerSubmitting.value = false }
+}
+
 async function reviewSelectedPlayers() {
   if (isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value) return
   const selectedIds = new Set(selectedReviewPlayers.value.map(player => String(player._id)))
@@ -4630,7 +4936,7 @@ async function loadAccessScope() {
   if (qaSnapshot) return
   try {
     const result = await callFunction('tournamentStaffAccess', { action: 'scope' })
-    if (result?.success) sessionScope.value = { activeOrgId: String(result.activeOrgId || ''), isOwner: Boolean(result.isOwner), isStaff: Boolean(result.isStaff) }
+    if (result?.success) sessionScope.value = { activeOrgId: String(result.activeOrgId || ''), isOwner: Boolean(result.isOwner), isStaff: Boolean(result.isStaff), grants: Array.isArray(result.grants) ? result.grants : [] }
   } catch (error) {
     console.warn('读取会话机构身份失败:', error?.message || error)
   }

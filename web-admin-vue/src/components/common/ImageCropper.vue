@@ -133,8 +133,8 @@ function confirm() {
   cropping.value = true
   try {
     const canvas = cropper.getCroppedCanvas({
-      width: 400,
-      height: 400,
+      width: 1024,
+      height: 1024,
       fillColor: '#fff',
       imageSmoothingEnabled: true,
       imageSmoothingQuality: 'high'

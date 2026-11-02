@@ -5,6 +5,24 @@ export function calculatePreMatchSuspensions({
   awayRoster = { players: [] },
   rules,
   tournamentId = '',
+  divisionId = '',
+  manualActions = []
+}) {
+  const automatic = calculateEventSuspensions({ matches, currentMatch, homeRoster, awayRoster, rules, tournamentId, divisionId })
+  // 追加停赛单独折算；任一来源无法可靠计算时整体视为不完整，不凭空标记停赛。
+  const manual = calculateManualSuspensions(manualActions, matches, currentMatch, divisionId, tournamentId)
+  if (!automatic.complete) return { ids: new Set(), complete: false, reason: automatic.reason }
+  if (!manual.complete) return { ids: new Set(), complete: false, reason: manual.reason }
+  return { ids: new Set([...automatic.ids, ...manual.ids]), complete: true, reason: '' }
+}
+
+function calculateEventSuspensions({
+  matches = [],
+  currentMatch,
+  homeRoster = { players: [] },
+  awayRoster = { players: [] },
+  rules,
+  tournamentId = '',
   divisionId = ''
 }) {
   if (!rules) return { ids: new Set(), complete: false, reason: '当前组别未找到停赛规则' }
@@ -84,6 +102,57 @@ export function calculatePreMatchSuspensions({
     roster.players.forEach(player => {
       if (player.playerId && bans.get(`${teamId}:${player.playerId}`) > 0) ids.add(player.playerId)
     })
+  }
+  return { ids, complete: true, reason: '' }
+}
+
+// 追加停赛：从处罚场次之后的该队同组别比赛起，依次顺延 suspensionMatches 场。
+// 缺球员编号、处罚场次无法定位或比赛时间顺序不完整时，返回不完整而不是猜测。
+function calculateManualSuspensions(manualActions = [], matches = [], currentMatch, divisionId = '', tournamentId = '') {
+  const ids = new Set()
+  const effective = (manualActions || []).filter(item => item && String(item.status || '') === 'effective')
+  if (!effective.length) return { ids, complete: true, reason: '' }
+  const teamIds = [currentMatch.homeTeamId, currentMatch.awayTeamId].map(value => String(value || '')).filter(Boolean)
+  const currentId = String(currentMatch._id || currentMatch.id || '')
+  const tournamentKey = String(currentMatch.tournamentId || tournamentId || '')
+  const divisionKey = String(currentMatch.divisionId || divisionId || '')
+  const scheduleKey = item => `${item.matchDate || ''} ${item.matchTime || ''}`
+  for (const action of effective) {
+    const teamId = String(action.teamId || '')
+    if (!teamId || !teamIds.includes(teamId)) continue
+    const banCount = Number(action.suspensionMatches)
+    if (!Number.isInteger(banCount) || banCount < 1) {
+      return { ids: new Set(), complete: false, reason: '追加停赛缺少有效停赛场次，未自动标记' }
+    }
+    const playerId = String(action.playerId || '').trim()
+    if (!playerId) return { ids: new Set(), complete: false, reason: '追加停赛缺少球员编号，未自动标记' }
+    const teamMatches = (matches || []).filter(item => {
+      if (!item || item.isBye || ['cancelled', 'canceled'].includes(String(item.status || '').toLowerCase())) return false
+      if (String(item.tournamentId || '') !== tournamentKey) return false
+      if (String(item.divisionId || '') !== divisionKey) return false
+      return [item.homeTeamId, item.awayTeamId].some(id => String(id || '') === teamId)
+    })
+    if (teamMatches.some(item => !item.matchDate || !item.matchTime)) {
+      return { ids: new Set(), complete: false, reason: '追加停赛的该队比赛时间不完整，无法确定顺延顺序' }
+    }
+    const ordered = teamMatches.slice().sort((a, b) => scheduleKey(a).localeCompare(scheduleKey(b))
+      || String(a.matchNo || a.matchSequence || '').localeCompare(String(b.matchNo || b.matchSequence || ''), 'zh-CN', { numeric: true }))
+    const keys = ordered.map(scheduleKey)
+    if (new Set(keys).size !== keys.length) {
+      return { ids: new Set(), complete: false, reason: '追加停赛的该队比赛时间重复，无法确定顺延顺序' }
+    }
+    const anchorId = String(action.matchId || '')
+    const anchorNo = String(action.matchNo || '')
+    let anchorIndex = anchorId ? ordered.findIndex(item => String(item._id || item.id || '') === anchorId) : -1
+    if (anchorIndex < 0 && anchorNo) {
+      const byNo = ordered.map((item, index) => ({ index, no: String(item.matchNo || item.matchSequence || item.sequence || '') })).filter(item => item.no && item.no === anchorNo)
+      if (byNo.length === 1) anchorIndex = byNo[0].index
+      else if (byNo.length > 1) return { ids: new Set(), complete: false, reason: '追加停赛的场次编号重复，未自动标记' }
+    }
+    if (anchorIndex < 0) return { ids: new Set(), complete: false, reason: '追加停赛无法定位处罚场次，未自动标记' }
+    const currentIndex = ordered.findIndex(item => String(item._id || item.id || '') === currentId)
+    if (currentIndex < 0) continue
+    if (currentIndex > anchorIndex && currentIndex <= anchorIndex + banCount) ids.add(playerId)
   }
   return { ids, complete: true, reason: '' }
 }

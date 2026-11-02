@@ -20,8 +20,8 @@ export function adultBirthRange(tournament={},minimumAge=16) {
   if(!reference)return null
   return {birthDateStart:'',birthDateEnd:reference.birthDateStart.slice(0,4)+'-12-31',competitionYear:reference.competitionYear}
 }
-export function divisionBasicsLocked(division={},tournament={}) {
-  return division.rulesLocked===true||division.ruleFinalized===true||['finalized','locked','published'].includes(String(division.ruleStatus||''))||tournament.matchManagementReady===true||['ongoing','in_progress','completed','finished'].includes(String(tournament.status||''))
+export function divisionBasicsLocked(division={},tournament={},editState=null) {
+  return editState?.canEdit !== true
 }
 export function buildDivisionBasics(form,{tournamentId,existing={},registeredTeams=0}={}) {
   const name=String(form.name||'').trim()

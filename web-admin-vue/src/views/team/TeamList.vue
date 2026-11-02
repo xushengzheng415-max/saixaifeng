@@ -591,8 +591,8 @@ async function handleLogoCropConfirm(croppedBlob) {
       console.warn('[队徽] 去背景异常，使用原图:', rembgErr.message)
     }
 
-    // ★ 压缩到 400px 以内
-    const compressedBlob = await compressImage(finalBlob, 400)
+    // 队徽保留清晰度；分片上传可承受更高分辨率
+    const compressedBlob = await compressImage(finalBlob, 1024)
     // 分片上传依赖 file.name；Blob 没有文件名，必须转成 File
     const compressedFile = new File(
       [compressedBlob],

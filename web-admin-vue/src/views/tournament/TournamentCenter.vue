@@ -123,7 +123,7 @@
               <div class="card-actions">
                 <el-button type="primary" size="small" @click.stop="goToTournament(tournament._id)">查看详情</el-button>
                 <el-button
-                  v-if="userRole === 'COACH' && (tournament.status === 'registering' || tournament.status === 'upcoming')"
+                  v-if="userRole === 'COACH' && registrationStatusOpen(tournament.status)"
                   type="success"
                   size="small"
                   @click.stop="handleSignup(tournament)"
@@ -476,7 +476,7 @@ async function loadSignupDivisions(tournament) {
   signupDivisions.value = source.map((division, order) => {
     const maxTeams = Number(division.maxTeams || tournament?.maxTeams || 0)
     const registeredTeams = Number(capacityCounts[division.id] || 0)
-    const registrationOpen = tournament?.registrationEnabled !== false && division.registrationEnabled === true && ['registering', 'upcoming'].includes(tournamentStatus)
+    const registrationOpen = tournament?.registrationEnabled !== false && division.registrationEnabled === true && registrationStatusOpen(tournamentStatus)
     const isFull = maxTeams > 0 && registeredTeams >= maxTeams
     return {
       ...division,
@@ -591,6 +591,11 @@ function getStatusClass(status) {
     'upcoming': 'status-upcoming'
   }
   return classMap[status] || 'status-registering'
+}
+
+// 报名可用状态：组别开关为准，只排除已结束/已取消等终态
+function registrationStatusOpen(status) {
+  return !['completed', 'finished', 'ended', 'cancelled', 'canceled', 'archived'].includes(String(status || '').toLowerCase())
 }
 
 // 格式化日期

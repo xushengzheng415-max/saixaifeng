@@ -7,6 +7,7 @@ import { ElMessage } from 'element-plus'
 import { isDemoMode, demoRequest } from './demoMode'
 import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatformContext, setPlatformAuthToken } from './platformSession'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
+import { createChunkUploadError } from './chunkUploadError'
 import { createInflightReads } from './inflightReads'
 import { readAllPages } from './pagedReads'
 import { createSessionReadCache, stableReadKey } from './sessionReadCache.js'
@@ -80,6 +81,7 @@ const CLOUD_FUNCTION_MAP = {
   resultCenter: 'relay',
   newsCenter: 'relay',
   tournamentStaffAccess: 'relay',
+  tournamentAssistant: 'relay', // AI 办赛助手：经 webLoginApi 携带会话身份中转
   dataCenter: 'relay',
 }
 
@@ -207,6 +209,11 @@ async function performFunctionHTTP(action, data = {}, timeout = 60000) {
   } catch (err) {
     if (err?.name === 'AbortError') {
       throw new Error('请求处理时间较长，请稍后重试')
+    }
+    // 网关超时、连接被重置或响应缺少跨域头时，浏览器只抛出 TypeError: Failed to fetch。
+    // 这里统一换成可操作的中文提示，页面不再直接展示原始英文错误。
+    if (err instanceof TypeError && /fetch|network|load failed/i.test(String(err.message || ''))) {
+      throw new Error('网络请求未完成，请检查网络后重新加载')
     }
     console.error('[callFunctionHTTP] ❌', err.message)
     throw err
@@ -480,6 +487,14 @@ export async function reviseDivisionRules(id) {
   })
 }
 
+export async function readDivisionRuleEditState(id) {
+  const identity=readIdentityKey()
+  const result = await callFunctionHTTP('dbQuery', { collection:'divisions', operation:'divisionRuleEditState', id })
+  if(identity!==readIdentityKey())throw new Error('账号或工作空间已切换，请重新加载')
+  if (!result?.success) throw new Error(result?.error || result?.message || '规则修改状态读取失败，请重试')
+  return result.data
+}
+
 export async function deleteDivision(id) {
   return callFunctionHTTP('dbQuery', {
     collection: 'divisions',
@@ -613,6 +628,12 @@ export async function uploadFile(cloudPath, filePath) {
   throw new Error('uploadFile 需要云函数支持，请使用 uploadFileViaCloud')
 }
 
+// 临时文件链接按 fileId 缓存并在途去重：同一头像在一次页面加载里常被多处解析，
+// 临时链接本身有有效期，25 分钟内复用不会失效。
+const TEMP_FILE_URL_TTL_MS = 25 * 60 * 1000
+const tempFileUrlCache = new Map()
+const tempFileUrlInflight = new Map()
+
 export async function getFileUrl(fileId) {
   if (!fileId) return ''
   if (isDemoMode()) return /^(data:|blob:|https?:\/\/|\/)/.test(fileId) ? fileId : ''
@@ -620,20 +641,56 @@ export async function getFileUrl(fileId) {
   if (fileId.startsWith('http://') || fileId.startsWith('https://')) {
     return fileId
   }
-  try {
-    const result = await callFunction('uploadFile', {
-      action: 'getTempFileURL',
-      fileID: fileId
-    })
-    if (result && result.success && result.url) {
-      return result.url
+  const cached = tempFileUrlCache.get(fileId)
+  // 已经是 blob/data 地址说明本地已解析过，无需再请求。
+  if (cached && cached.expiresAt > Date.now() && cached.url) {
+    return cached.url
+  }
+  const inflight = tempFileUrlInflight.get(fileId)
+  if (inflight) return inflight
+  const request = (async () => {
+    try {
+      const result = await callFunction('uploadFile', {
+        action: 'getTempFileURL',
+        fileID: fileId
+      })
+      if (result && result.success && result.url) {
+        tempFileUrlCache.set(fileId, { url: result.url, expiresAt: Date.now() + TEMP_FILE_URL_TTL_MS })
+        return result.url
+      }
+      // 如果获取失败，返回原始 fileId（可能已过期或无效）
+      console.warn('[getFileUrl] 获取临时URL失败:', result)
+      return fileId
+    } catch (err) {
+      console.error('[getFileUrl] 异常:', err)
+      return fileId
+    } finally {
+      tempFileUrlInflight.delete(fileId)
     }
-    // 如果获取失败，返回原始 fileId（可能已过期或无效）
-    console.warn('[getFileUrl] 获取临时URL失败:', result)
-    return fileId
+  })()
+  tempFileUrlInflight.set(fileId, request)
+  return request
+}
+
+// 云存储对图片固定返回 Content-Disposition: attachment，浏览器会把链接当作附件下载，
+// <img> 也会因该响应头拒绝渲染并触发 onerror。这里用 fetch 取回二进制，转成本地 blob 地址
+// 供页面展示；同一地址只转换一次，避免重复请求和 blob 泄漏。
+const inlineImageCache = new Map()
+export async function toInlineImageUrl(url) {
+  const source = String(url || '').trim()
+  if (!/^https?:\/\//i.test(source)) return url
+  if (inlineImageCache.has(source)) return inlineImageCache.get(source)
+  try {
+    const response = await fetch(source, { credentials: 'omit' })
+    if (!response.ok) return url
+    const blob = await response.blob()
+    if (!/^image\//i.test(String(blob.type || ''))) return url
+    const objectUrl = URL.createObjectURL(blob)
+    inlineImageCache.set(source, objectUrl)
+    return objectUrl
   } catch (err) {
-    console.error('[getFileUrl] 异常:', err)
-    return fileId
+    console.warn('[toInlineImageUrl] 图片内联失败:', source, err && err.message ? err.message : err)
+    return url
   }
 }
 
@@ -741,7 +798,7 @@ export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
       totalChunks,
       folder
     })
-    if (!initResult.success) throw new Error(initResult.message || '初始化分片上传失败')
+    if (!initResult?.success || !initResult.uploadId) throw createChunkUploadError(initResult, '初始化分片上传失败，请重试')
 
     const uploadId = initResult.uploadId
     try {
@@ -755,12 +812,12 @@ export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
           chunkIndex: i,
           data: chunkBase64
         })
-        if (!chunkResult.success) throw new Error(`分片 ${i + 1} 上传失败: ${chunkResult.message}`)
+        if (!chunkResult?.success) throw createChunkUploadError(chunkResult, `分片 ${i + 1} 上传失败，请重试`)
         if (options.onProgress) options.onProgress(i + 1, totalChunks, { chunkSize })
       }
 
       const finishResult = await callFunction('uploadFile', { action: 'finishChunk', uploadId })
-      if (!finishResult.success) throw new Error(finishResult.message || '合并上传失败')
+      if (!finishResult?.success) throw createChunkUploadError(finishResult, '合并上传失败，请重试')
       return { success: true, fileId: finishResult.fileID, tempUrl: finishResult.tempUrl || '' }
     } catch (error) {
       await abortUpload(uploadId)

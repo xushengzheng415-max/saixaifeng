@@ -117,7 +117,7 @@
       </div>
       <!-- 我要报名（未报名时显示） -->
       <div
-        v-if="!mySignupStatus && (tournament.status === 'registering' || tournament.status === 'upcoming')"
+        v-if="!mySignupStatus && registrationStatusOpen"
         class="action-card signup-action"
         @click="handleSignup"
       >
@@ -392,7 +392,7 @@
         <el-icon><CircleClose /></el-icon>
         <span>报名被拒绝</span>
       </div>
-      <div v-else-if="tournament.status === 'registering' || tournament.status === 'upcoming'" class="signup-action">
+      <div v-else-if="registrationStatusOpen" class="signup-action">
         <el-button type="success" size="large" @click="handleSignup">
           <el-icon><CirclePlus /></el-icon>我要报名
         </el-button>
@@ -533,6 +533,7 @@ const currentRole = ref((localStorage.getItem('currentRole') || localStorage.get
 const isOrganizer = computed(() => currentRole.value === 'ORGANIZER')
 const editable = computed(() => isOrganizer.value)
 const tournament = ref({})
+const registrationStatusOpen = computed(() => !['completed', 'finished', 'ended', 'cancelled', 'canceled', 'archived'].includes(String(tournament.value.status || '').toLowerCase()))
 const websiteUrl = ref('')
 const shareUrl = ref('')
 const qrcodeUrl = ref('')
