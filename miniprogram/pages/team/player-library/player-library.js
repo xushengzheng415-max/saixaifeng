@@ -1,5 +1,4 @@
 var workspace = require('../../../utils/workspace')
-var nav = require('../../../utils/nav')
 
 Page({
   data: {
@@ -16,9 +15,33 @@ Page({
       this.loadVisualFixture()
       return
     }
-    this.setData({ teamId: String(options.teamId || ''), highlightPending: options.pendingTeamConfirm === '1' })
+    var teamId = String(options.teamId || '')
+    this._workspaceReady = !teamId
+    this.setData({ teamId: teamId, highlightPending: options.pendingTeamConfirm === '1' })
+    if (teamId) this.enterTeamWorkspace(teamId)
   },
-  onShow: function() { if (this.data.teamId && !this.data.visualQa) this.loadPlayers(true) },
+  // 服务号「加入团队申请审批提醒」现在带 teamId 直达本页，而当前工作空间可能仍是另一支球队的空间。
+  // 沿用旧空间调用 teamPlayers 会报「球队不存在或不属于当前工作空间」，所以先按球队入口切换空间。
+  enterTeamWorkspace: function(teamId) {
+    var that = this
+    this._enterRequest = workspace.loadContext().then(function(context) {
+      var teams = (context && context.teams) || []
+      if (teams.some(function(item) { return String(item.id || item._id || '') === teamId })) return context
+      var entry = ((context && context.homeEntries) || []).filter(function(item) { return item.type === 'team' && String(item.id || '') === teamId })[0]
+      if (!entry || !entry.workspaceId) throw new Error('该球队不在当前工作空间，或当前账号没有查看权限')
+      return workspace.switchWorkspace(entry.workspaceId)
+    }).then(function() {
+      that._workspaceReady = true
+      return that.loadPlayers(true)
+    }).catch(function(error) {
+      that._workspaceReady = true
+      // 进入失败时当前工作空间仍是别的球队，onShow 再请求只会重复报错。
+      that._entryFailed = true
+      that.setData({ loading: false, errorText: (error && error.message) || '无法进入该球队球员库' })
+    })
+    return this._enterRequest
+  },
+  onShow: function() { if (this.data.teamId && !this.data.visualQa && this._entryFailed !== true && this._workspaceReady !== false) this.loadPlayers(true) },
   loadPlayers: function(silent) {
     var that = this
     if (this._loadingRequest) return this._loadingRequest
@@ -51,11 +74,25 @@ Page({
   },
   onSearch: function(e) { this.setData({ query: e.detail.value || '' }); this.applyFilters() },
   setFilter: function(e) { var filter=e.currentTarget.dataset.filter || 'all';this.setData({ filter:filter,filterAllClass:filter==='all'?'active':'',filterPendingClass:filter==='pending'?'active':'',filterExceptionClass:filter==='exception'?'active':'' }); this.applyFilters() },
-  // 从服务号「加入团队申请审批提醒」直接进入本页时页面栈只有一页，navigateBack 会退出小程序回到服务号。
-  // 这里改为回到小程序内的球队主页（本页的上一级），用户再逐级返回都在小程序里。
+  // 用户确认口径（2026-11-02）：从服务号通知直达本页时页面栈只有一页，返回无处可退，
+  // 必须给出明确选择（回小程序首页 / 留在本页），并常驻「首页」入口，方便回主页看其他内容。
+  goHome: function() {
+    wx.switchTab({
+      url: '/pages/home/home',
+      fail: function() { wx.reLaunch({ url: '/pages/home/home' }) }
+    })
+  },
   onBack: function() {
-    var teamId = String(this.data.teamId || '')
-    nav.back(teamId ? '/pages/team/team?teamId=' + encodeURIComponent(teamId) + '&fromNotify=1' : '/pages/teams/index')
+    var pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+    if (pages.length > 1) { wx.navigateBack({ delta: 1 }); return }
+    var that = this
+    wx.showModal({
+      title: '返回小程序首页',
+      content: '当前是从通知直达的页面，可回到小程序首页继续浏览，也可以留在本页。',
+      confirmText: '回首页',
+      cancelText: '留在本页',
+      success: function(result) { if (result.confirm) that.goHome() }
+    })
   },
   invitePlayer: function() { if (!this.data.canManage) return wx.showToast({ title: '当前身份没有邀请权限', icon: 'none' }); wx.navigateTo({ url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(this.data.teamId) }) },
   addPlayer: function() { if (!this.data.canManage) return wx.showToast({ title: '当前身份只可查看球员资料', icon: 'none' }); wx.navigateTo({ url: '/pages/team/player-add/player-add?teamId=' + encodeURIComponent(this.data.teamId) + '&teamName=' + encodeURIComponent(this.data.teamName) }) },

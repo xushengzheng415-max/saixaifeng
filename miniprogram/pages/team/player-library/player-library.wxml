@@ -1,7 +1,7 @@
 <view class="player-library-page">
   <image class="player-library-bg" src="/images/runtime/stadium-tech-bg.jpg" mode="aspectFill" />
   <view class="player-library-content">
-    <view class="player-library-nav" style="height:174rpx;"><text class="player-library-back" bindtap="onBack">‹</text><text class="player-library-title">球队球员库</text></view>
+    <view class="player-library-nav" style="height:174rpx;"><text class="player-library-back" bindtap="onBack">‹</text><text class="player-library-title">球队球员库</text><view class="player-library-home" bindtap="goHome"><image class="player-library-home-icon" src="/images/icons/home-entry-white.svg" mode="aspectFit" /><text>首页</text></view></view>
     <view wx:if="{{loading}}" class="player-library-state"><text>正在加载长期球员资产…</text></view>
     <view wx:elif="{{errorText}}" class="player-library-state"><text>{{errorText}}</text><button bindtap="loadPlayers">重新加载</button></view>
     <block wx:else>

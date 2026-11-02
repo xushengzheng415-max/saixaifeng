@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/team-player-library-back-20261102.md','发布记录/球队球员库通知落点与返回首页-20261102.md'],
   ['docs/releases/card-world-holo4-static-20261101.md','发布记录/card-world-holo4-static-20261101.md'],
   ['docs/releases/card-world-holo3-static-20261101.md','发布记录/card-world-holo3-static-20261101.md'],
   ['docs/releases/webLoginApi-full-9aa3c6cd-20261101.md','发布记录/webLoginApi-full-9aa3c6cd-20261101.md'],
