@@ -62,6 +62,8 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { callFunction } from '../../utils/cloud'
+// 与云函数共用同一份轮转算法，避免页面预览、保存模板与正式生成出现三套口径。
+import pairingTemplates from '../../../../cloudfunctions/generateSchedule/pairingTemplates.js'
 
 const props = defineProps({
   tournamentId: { type: String, required: true },
@@ -88,43 +90,30 @@ const activeRounds = computed(() => patterns.value[activeGroup.value] || [])
 const totalMatches = computed(() => Object.values(patterns.value).reduce((sum, rounds) => sum + rounds.reduce((roundSum, round) => roundSum + round.length, 0), 0))
 
 function groupSize(code) { return normalizedSizes.value[groupCodes.value.indexOf(code)] || normalizedSizes.value[0] || 2 }
-function standardRounds(size, type) {
-  let entries = Array.from({ length:size }, (_, index) => index + 1)
-  if (entries.length % 2) entries.push(null)
-  const rounds = []
-  for (let roundIndex = 0; roundIndex < entries.length - 1; roundIndex += 1) {
-    const pairs = []
-    for (let pairIndex = 0; pairIndex < entries.length / 2; pairIndex += 1) {
-      let home = entries[pairIndex], away = entries[entries.length - 1 - pairIndex]
-      if (!home || !away) continue
-      if ((roundIndex + pairIndex) % 2) [home, away] = [away, home]
-      pairs.push([home, away])
-    }
-    rounds.push(pairs)
-    entries = [entries[0], entries.at(-1), ...entries.slice(1, -1)]
-  }
-  return type === 'double' ? [...rounds, ...rounds.map(round => round.map(([home, away]) => [away, home]))] : rounds
-}
+function standardRounds(size, type) { return pairingTemplates.standardRoundRobinRounds(size, type) }
 function resetPatterns() {
   patterns.value = Object.fromEntries(groupCodes.value.map(code => [code, standardRounds(groupSize(code), loopType.value)]))
   if (!groupCodes.value.includes(activeGroup.value)) activeGroup.value = groupCodes.value[0] || 'A'
 }
+// 兼容两种模板结构：旧模板把组别标在轮次（stage.group）上，且一组一组铺满；
+// 新模板按「轮次」跨组编排，组别标在对阵（match.group）上。两者都按组别、按轮次顺序还原。
 function parseExistingTemplate() {
   const template = props.division?.pairingTemplate
   if (!template?.stages?.length) return false
   const parsed = {}
-  for (const stage of template.stages) {
-    const code = String(stage.group || '').match(/^([A-Z])/)?.[1]
-    if (!code) continue
-    const roundIndex = Math.max(0, Number(stage.round || 1) - 1)
-    parsed[code] ||= []
-    parsed[code][roundIndex] ||= []
+  const lastStage = new Map()
+  template.stages.forEach((stage, stageIndex) => {
     for (const match of stage.matches || []) {
+      const code = String(match.group || match.pool || stage.group || '').match(/^([A-Z])/)?.[1]
+      if (!code) continue
       const home = Number(String(match.home || '').match(/(\d+)$/)?.[1])
       const away = Number(String(match.away || '').match(/(\d+)$/)?.[1])
-      if (home && away) parsed[code][roundIndex].push([home, away])
+      if (!home || !away) continue
+      parsed[code] ||= []
+      if (lastStage.get(code) !== stageIndex) { parsed[code].push([]); lastStage.set(code, stageIndex) }
+      parsed[code].at(-1).push([home, away])
     }
-  }
+  })
   if (!Object.keys(parsed).length) return false
   patterns.value = parsed
   return true
@@ -158,13 +147,24 @@ const validationMessage = computed(() => {
   return ''
 })
 
+// 保存模板也按「轮次」跨组编排：第一轮 A、B、C、D 组同时开赛，第二轮再统一打下一轮，
+// 与云函数生成顺序一致；否则保存后的模板会退回「A 组全部打完再打 B 组」。
 function buildTemplate() {
+  const roundsByGroup = groupCodes.value.map(code => patterns.value[code] || [])
+  const maxRounds = roundsByGroup.reduce((max, rounds) => Math.max(max, rounds.length), 0)
   const stages = []
-  for (const code of groupCodes.value) {
-    ;(patterns.value[code] || []).forEach((round, roundIndex) => stages.push({
-      name: `小组赛 ${code}组 · 第${roundIndex + 1}轮`, stageName:'小组赛阶段', stageOrder:1, phase:'group', group:`${code}组`, round:roundIndex + 1,
-      matches:round.map(([home, away], index) => ({ code:`${code}-R${roundIndex + 1}-${index + 1}`,home:`${code}${home}`,away:`${code}${away}`,roundName:`小组赛 ${code}组第${roundIndex + 1}轮`,stageName:'小组赛阶段',stageOrder:1 }))
-    }))
+  for (let roundIndex = 0; roundIndex < maxRounds; roundIndex += 1) {
+    const matches = []
+    groupCodes.value.forEach((code, groupIndex) => {
+      const round = roundsByGroup[groupIndex][roundIndex]
+      if (!round?.length) return
+      round.forEach(([home, away], index) => matches.push({
+        code:`${code}-R${roundIndex + 1}-${index + 1}`,home:`${code}${home}`,away:`${code}${away}`,round:roundIndex + 1,
+        phase:'group',group:`${code}组`,pool:`${code}组`,roundName:`小组赛 ${code}组第${roundIndex + 1}轮`,stageName:'小组赛阶段',stageOrder:1
+      }))
+    })
+    if (!matches.length) continue
+    stages.push({ name:`小组赛 第${roundIndex + 1}轮`,stageName:'小组赛阶段',stageOrder:1,phase:'group',round:roundIndex + 1,matches })
   }
   return { version:`${mode.value === 'standard' ? 'standard-rotation' : 'custom'}-${loopType.value}-${Date.now()}`,source:mode.value === 'standard' ? '标准循环赛轮转法' : '主办方自定义对阵',mode:mode.value === 'standard' ? 'standard_rotation' : 'custom',loopType:loopType.value,groupSizes:normalizedSizes.value,stages }
 }

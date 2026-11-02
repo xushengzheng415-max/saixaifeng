@@ -31,10 +31,17 @@ function eliminationStages(sources, thirdPlace) {
       next.push({type:'match_winner',matchCode:code})
       if(count===4)semis.push({type:'match_loser',matchCode:code})
     }
-    if(entries.length)stages.push({name:count===2?'决赛':count===4?'半决赛':count===8?'1/4决赛':`1/${count/2}决赛`,phase:'knockout',round,stageOrder:round,matches:entries})
+    if(count===2 && entries.length && thirdPlace && semis.length===2) {
+      // 三四名赛与决赛同轮，场序排在决赛之前：决赛永远是最后一场。
+      stages.push({name:'决赛',phase:'knockout',round,stageOrder:round,matches:[
+        {code:'P34',home:semis[0],away:semis[1],phase:'placement',roundName:'三四名赛',rankRange:'3-4名',stageName:'决赛与排位阶段',stageOrder:round},
+        {code:entries[0].code,home:entries[0].home,away:entries[0].away,phase:'knockout',roundName:'决赛',rankRange:'1-2名',stageName:'决赛与排位阶段',stageOrder:round}
+      ]})
+    } else if(entries.length) {
+      stages.push({name:count===2?'决赛':count===4?'半决赛':count===8?'1/4决赛':`1/${count/2}决赛`,phase:'knockout',round,stageOrder:round,matches:entries})
+    }
     current=next;round++
   }
-  if(thirdPlace && semis.length===2)stages.push({name:'三四名赛',phase:'placement',stageOrder:round,matches:[{code:'P34',home:semis[0],away:semis[1]}]})
   return stages
 }
 function buildConfirmedPairings({tournamentId,division,groupRecords=[],bracketRecords=[],leagueRecords=[],template=null}) {
@@ -65,13 +72,28 @@ function buildConfirmedPairings({tournamentId,division,groupRecords=[],bracketRe
         matches.push(...ranked.matches)
       } else {
         const advance=Number(division.advancePerGroup || division.advanceCount || 2)
-        const source=(group,rank)=>({type:'group_rank',groupName:group.groupName || group.name,rank})
-        let sources=[]
-        if(groups.length===2 && advance===2)sources=[source(groups[0],1),source(groups[1],2),source(groups[1],1),source(groups[0],2)]
-        else {
-          for(let rank=1;rank<=advance;rank++)for(const group of groups){if(rank>group.teams.length)throw new Error('晋级名额超过小组球队数');sources.push(source(group,rank))}
-          if(sources.length<2 || (sources.length & (sources.length-1)))throw new Error('请先确认非标准晋级名额的对阵模板')
+        if(!Number.isInteger(advance) || advance<1)throw new Error('晋级名额设置无效，请先核对竞赛规则')
+        if(groups.length<2 || groups.length%2!==0)throw new Error('小组数量无法生成交叉淘汰，请先确认对阵模板')
+        const source=(group,rank)=>{
+          if(rank<1 || rank>group.teams.length)throw new Error('晋级名额超过小组球队数')
+          return {type:'group_rank',groupName:group.groupName || group.name,rank}
         }
+        // 相邻两组交叉对位：A组第1 对 B组第2、B组第1 对 A组第2（C/D 组同理），
+        // 同组球队淘汰赛首轮回避，小组第一只有在决赛/半决赛才会相遇。
+        // 场序按「同一名次段、各组交叉」展开，保证同半区来自不同小组、决赛放在最后。
+        const pairs=[]
+        for(let index=0;index<groups.length;index+=2)pairs.push([groups[index],groups[index+1]])
+        const sources=[]
+        for(let step=0;step<Math.floor(advance/2);step+=1) {
+          const high=step+1,low=advance-step
+          for(const pair of pairs)sources.push(source(pair[0],high),source(pair[1],low))
+          for(const pair of pairs)sources.push(source(pair[1],high),source(pair[0],low))
+        }
+        if(advance%2===1) {
+          const middle=(advance+1)/2
+          for(const pair of pairs)sources.push(source(pair[0],middle),source(pair[1],middle))
+        }
+        if(sources.length<2 || (sources.length & (sources.length-1)))throw new Error('请先确认非标准晋级名额的对阵模板')
         const offset=matches.length,extra=build(eliminationStages(sources,mode==='top4'))
         for(const match of extra) {
           match.matchNo+=offset;match.matchIndex=match.matchNo

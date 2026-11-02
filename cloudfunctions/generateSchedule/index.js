@@ -590,38 +590,17 @@ function normalizeScheduleTiming(scheduleConfig, division) {
   return { config: config, matchMinutes: matchMinutes, timeSlots: slots, venueSlots: venueSlots }
 }
 
-// 标准循环赛轮转法：每轮每支球队最多参加一场比赛
+// 标准循环赛轮转法：每轮每支球队最多参加一场比赛。
+// 与 pairingTemplates.standardRoundRobinRounds 共用同一口径：首轮相邻签位配对
+// （1-2、3-4、5-6…），其余轮次固定首位轮转，跨小组可按轮次同步开赛。
 function buildRoundRobinRounds(sourceTeams) {
   var teams = (sourceTeams || []).slice()
   if (teams.length < 2) return []
-  if (teams.length % 2 === 1) teams.push(null)
-
-  var rounds = []
-  var teamCount = teams.length
-  for (var roundIndex = 0; roundIndex < teamCount - 1; roundIndex++) {
-    var pairings = []
-    for (var pairIndex = 0; pairIndex < teamCount / 2; pairIndex++) {
-      var home = teams[pairIndex]
-      var away = teams[teamCount - 1 - pairIndex]
-      if (!home || !away) continue
-
-      // 交替主客场，避免固定球队长期连续主场或客场
-      if ((roundIndex + pairIndex) % 2 === 1) {
-        var temp = home
-        home = away
-        away = temp
-      }
-      pairings.push({ home: home, away: away })
-    }
-    rounds.push(pairings)
-
-    // 固定第一支球队，其余球队顺时针轮转
-    var fixed = teams[0]
-    var rotating = teams.slice(1)
-    rotating.unshift(rotating.pop())
-    teams = [fixed].concat(rotating)
-  }
-  return rounds
+  return pairingTemplates.standardRoundRobinRounds(teams.length, 'single').map(function(pairings) {
+    return pairings.map(function(pair) {
+      return { home: teams[pair[0] - 1], away: teams[pair[1] - 1] }
+    })
+  })
 }
 
 function roundScheduleKey(match) {
