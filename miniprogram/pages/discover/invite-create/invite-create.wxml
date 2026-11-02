@@ -13,10 +13,10 @@
     <text>请先切换到球队管理者</text>
   </view>
 
-  <!-- 轻提示 -->
+  <!-- 轻提示：报名入口统一为 H5 报名页 -->
   <view class="tip-bar">
     <text class="tip-icon">📣</text>
-    <text class="tip-text">对手无需提前注册，扫码进小程序即可报名</text>
+    <text class="tip-text">球员扫海报二维码进报名页，填姓名和手机号即可报名</text>
   </view>
 
   <!-- 表单区：全部可跳过 -->
@@ -73,14 +73,46 @@
 
   <!-- 生成海报按钮 -->
   <view class="generate-btn {{generateBtnClass}}" bindtap="onGenerate">
-    <text class="generate-btn-text">生成邀约海报</text>
+    <text class="generate-btn-text">{{generateBtnText}}</text>
   </view>
 
   <!-- 说明 -->
   <view class="notes">
-    <text class="note-item">· 限额与截止由发起方控制</text>
-    <text class="note-item">· 对手扫海报进小程序报名</text>
+    <text class="note-item">· 报名数由球员在 H5 报名页填写生成</text>
+    <text class="note-item">· 签到数由本队在管理页现场勾选</text>
     <text class="note-item">· 报名数据与正式赛事隔离</text>
+  </view>
+
+  <!-- ===== 报名海报 ===== -->
+  <view class="poster-mask" wx:if="{{posterVisible}}" catchtap="onClosePoster">
+    <view class="poster-sheet" catchtap="onStop">
+      <view class="poster-head">
+        <text class="poster-title">报名海报</text>
+        <text class="poster-close" catchtap="onClosePoster">关闭</text>
+      </view>
+
+      <view class="poster-frame">
+        <image class="poster-image" wx:if="{{posterImage}}" src="{{posterImage}}" mode="widthFix"></image>
+        <text class="poster-loading" wx:if="{{!posterImage}}">海报生成中…</text>
+      </view>
+
+      <text class="poster-note">发到微信群即可，球员扫码填姓名和手机号报名</text>
+
+      <view class="poster-actions">
+        <view class="poster-btn poster-btn-primary" bindtap="onSavePoster">
+          <text class="poster-btn-text">{{posterSaveText}}</text>
+        </view>
+        <view class="poster-btn poster-btn-ghost" bindtap="onCopySigninUrl">
+          <text class="poster-btn-text-ghost">复制报名链接</text>
+        </view>
+      </view>
+      <view class="poster-link-row" bindtap="onOpenManage">
+        <text class="poster-link-text">进入管理名单</text>
+      </view>
+    </view>
+
+    <!-- 离屏画布：导出图片后由上面的 image 展示 -->
+    <canvas class="poster-canvas" canvas-id="invitePoster" style="width:{{canvasWidthPx}}px;height:{{canvasHeightPx}}px"></canvas>
   </view>
 
 </view>

@@ -59,3 +59,29 @@
 /* 说明 */
 .notes{margin-top:28rpx;padding:0 16rpx}
 .note-item{display:block;color:rgba(255,220,160,.45);font-size:22rpx;line-height:1.8}
+
+/* ===== 报名海报弹层 ===== */
+.poster-mask{position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(10,26,19,.72);z-index:900;display:flex;align-items:flex-end}
+.poster-sheet{width:100%;box-sizing:border-box;max-height:92vh;display:flex;flex-direction:column;background:#0F1A14;border-radius:28rpx 28rpx 0 0;padding:26rpx 30rpx calc(24rpx + env(safe-area-inset-bottom))}
+.poster-head{display:flex;align-items:center;justify-content:space-between;gap:16rpx}
+.poster-title{flex:1;min-width:0;color:#fff;font-size:32rpx;font-weight:900}
+.poster-close{flex:0 0 auto;color:rgba(255,255,255,.6);font-size:24rpx;padding:6rpx 12rpx}
+
+.poster-frame{margin-top:20rpx;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border-radius:20rpx;padding:16rpx;box-sizing:border-box}
+.poster-image{width:100%;border-radius:16rpx;display:block}
+.poster-loading{color:rgba(255,220,160,.6);font-size:24rpx;padding:120rpx 0}
+
+.poster-note{display:block;margin-top:18rpx;color:rgba(255,220,160,.6);font-size:23rpx;line-height:1.6;text-align:center}
+
+.poster-actions{display:flex;align-items:center;gap:16rpx;margin-top:22rpx}
+.poster-btn{flex:1;height:88rpx;border-radius:20rpx;display:flex;align-items:center;justify-content:center}
+.poster-btn-primary{background:linear-gradient(135deg,#12A35F,#087A48)}
+.poster-btn-ghost{background:rgba(255,255,255,.1);border:2rpx solid rgba(255,255,255,.18)}
+.poster-btn-text{color:#fff;font-size:28rpx;font-weight:900}
+.poster-btn-text-ghost{color:rgba(255,255,255,.82);font-size:26rpx;font-weight:700}
+
+.poster-link-row{margin-top:20rpx;display:flex;align-items:center;justify-content:center;padding:14rpx 0}
+.poster-link-text{color:#7BD3A2;font-size:24rpx;font-weight:700}
+
+/* 画布离屏：只用于绘制导出，不占版面 */
+.poster-canvas{position:fixed;left:-3000px;top:0}

@@ -1,0 +1,155 @@
+<!-- pages/discover/invite-manage/invite-manage.wxml -->
+<!-- 约球管理页（球队端）。WXML 只做简单插值、简单取反与简单或，状态与派生文案全部在 js 预计算 -->
+<view class="page">
+
+  <!-- 邀约概览 -->
+  <view class="hero">
+    <view class="hero-head">
+      <text class="hero-team">{{teamName}}</text>
+      <text class="hero-status {{statusClass}}">{{statusText}}</text>
+    </view>
+    <text class="hero-title">{{titleText}}</text>
+    <text class="hero-venue">{{venueText}}</text>
+    <text class="hero-deadline">{{deadlineText}}</text>
+  </view>
+
+  <view class="metric-row">
+    <view class="metric">
+      <text class="metric-num">{{signupNumText}}</text>
+      <text class="metric-cap">球员报名</text>
+    </view>
+    <view class="metric">
+      <text class="metric-num">{{checkinNumText}}</text>
+      <text class="metric-cap">现场签到</text>
+    </view>
+    <view class="metric">
+      <text class="metric-num">{{acceptedNumText}}</text>
+      <text class="metric-cap">球队应战</text>
+    </view>
+  </view>
+
+  <view class="info-strip">
+    <text class="info-text">{{acceptedTeamText}}</text>
+  </view>
+
+  <view class="warn-strip" wx:if="{{hasClosedReason}}">
+    <text class="warn-text">{{closedReasonText}}</text>
+  </view>
+
+  <view class="error-card" wx:if="{{errorText}}">
+    <text class="error-text">{{errorText}}</text>
+  </view>
+
+  <view class="loading-card" wx:if="{{loading}}">
+    <text class="loading-text">正在读取报名名单…</text>
+  </view>
+
+  <block wx:if="{{!loading}}">
+    <!-- 筛选 -->
+    <view class="filter-row">
+      <view class="filter-chip {{item.itemClass}}" wx:for="{{filters}}" wx:key="id" data-id="{{item.id}}" bindtap="onSwitchFilter">
+        <text class="filter-chip-text">{{item.text}}</text>
+      </view>
+    </view>
+
+    <!-- 名单 -->
+    <view class="card-list" wx:if="{{hasRows}}">
+      <view class="row-card" wx:for="{{rows}}" wx:key="key">
+        <view class="row-main">
+          <view class="row-head">
+            <text class="row-name">{{item.titleText}}</text>
+            <text class="{{item.tagClass}}">{{item.tagText}}</text>
+          </view>
+          <text class="row-sub" wx:if="{{item.subText}}">{{item.subText}}</text>
+          <text class="{{item.statusClass}}">{{item.statusText}}</text>
+        </view>
+        <view class="row-actions" wx:if="{{item.showActions}}">
+          <view class="row-btn {{item.checkClass}}" wx:if="{{item.canCheck}}" data-id="{{item.responseId}}" data-on="{{item.checkTarget}}" bindtap="onTogglePresent">
+            <text class="row-btn-text">{{item.checkText}}</text>
+          </view>
+          <view class="row-btn is-danger" wx:if="{{item.canRemove}}" data-id="{{item.responseId}}" data-name="{{item.titleText}}" bindtap="onRemoveSignup">
+            <text class="row-btn-text">移除</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="empty-card" wx:if="{{!hasRows}}">
+      <text class="empty-text">{{emptyText}}</text>
+    </view>
+
+    <view class="more-strip" wx:if="{{hasMore}}" bindtap="onLoadMore">
+      <text class="more-text">{{moreText}}</text>
+    </view>
+    <view class="more-strip" wx:if="{{scanLimited}}">
+      <text class="more-text">名单超过 100 条，仅显示最近 100 条</text>
+    </view>
+
+    <!-- 管理操作 -->
+    <view class="action-card" wx:if="{{canOperate}}">
+      <text class="action-title">现场操作</text>
+      <view class="action-grid">
+        <view class="action-btn" bindtap="onOpenProxy">
+          <text class="action-btn-text">代签（现场没报名）</text>
+        </view>
+        <view class="action-btn" bindtap="onRemind">
+          <text class="action-btn-text">发开赛提醒</text>
+        </view>
+        <view class="action-btn" wx:if="{{hasSigninUrl}}" bindtap="onCopyLink">
+          <text class="action-btn-text">复制报名链接</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="action-card" wx:if="{{canOperate}}">
+      <text class="action-title">状态判定</text>
+      <text class="action-desc">接战即视为双方有意，成局需人工确认；流局用于表示本场没打成。</text>
+      <view class="action-grid">
+        <view class="action-btn is-primary" wx:if="{{canConfirm}}" bindtap="onConfirmInvite">
+          <text class="action-btn-text is-primary-text">确认成局</text>
+        </view>
+        <view class="action-btn" bindtap="onCancelInvite">
+          <text class="action-btn-text is-danger-text">取消邀约</text>
+        </view>
+        <view class="action-btn" bindtap="onAbandonInvite">
+          <text class="action-btn-text">标记流局</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="busy-strip" wx:if="{{busyText}}">
+      <text class="busy-text">{{busyText}}</text>
+    </view>
+  </block>
+
+  <view class="footer-note">
+    <text class="footer-text">报名数来自球员在 H5 填写的姓名与手机号；签到数由本页勾选；应战数来自对方球队接战。历史邀约缺记录时显示“待确认”。</text>
+  </view>
+
+  <!-- 代签弹窗 -->
+  <view class="modal-mask" wx:if="{{proxyVisible}}" bindtap="onCloseProxy">
+    <view class="modal" catchtap="onStop">
+      <text class="modal-title">现场代签</text>
+      <text class="modal-desc">到场但没在 H5 报名的球员，可由球队代签，只计入签到数。</text>
+      <input class="modal-input" value="{{proxyName}}" placeholder="球员姓名" placeholder-class="modal-placeholder" maxlength="20" bindinput="onProxyNameInput" />
+      <input class="modal-input" value="{{proxyPhone}}" placeholder="手机号（可留空）" placeholder-class="modal-placeholder" maxlength="11" type="number" bindinput="onProxyPhoneInput" />
+      <view class="side-row">
+        <view class="{{proxyOwnClass}}" data-side="own" bindtap="onProxySide">
+          <text class="side-text">本方</text>
+        </view>
+        <view class="{{proxyOppClass}}" data-side="opponent" bindtap="onProxySide">
+          <text class="side-text">对方</text>
+        </view>
+      </view>
+      <view class="modal-actions">
+        <view class="modal-btn" bindtap="onCloseProxy">
+          <text class="modal-btn-text">取消</text>
+        </view>
+        <view class="modal-btn is-primary" bindtap="onConfirmProxy">
+          <text class="modal-btn-text is-primary-text">{{proxyBtnText}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+</view>

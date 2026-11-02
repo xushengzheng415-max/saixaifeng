@@ -184,7 +184,7 @@
       </view>
 
       <view class="card-list" wx:if="{{hasInviteItems}}">
-        <view class="invite-item" wx:for="{{inviteItems}}" wx:key="key">
+        <view class="invite-item" wx:for="{{inviteItems}}" wx:key="key" data-id="{{item.id}}" bindtap="onOpenInviteManage">
           <view class="invite-item-head">
             <text class="invite-item-title">{{item.titleText}}</text>
             <text class="invite-status {{item.statusClass}}">{{item.statusText}}</text>
@@ -198,11 +198,16 @@
             <text class="invite-item-signup">{{item.signupText}}</text>
             <text class="invite-item-deadline">{{item.deadlineText}}</text>
           </view>
+          <view class="invite-metric-row">
+            <text class="invite-metric">{{item.checkinText}}</text>
+            <text class="invite-metric">{{item.acceptedText}}</text>
+          </view>
+          <text class="invite-item-accepted-team" wx:if="{{item.hasAcceptedTeam}}">{{item.acceptedTeamText}}</text>
           <text class="invite-item-cry" wx:if="{{item.hasBattleCry}}">{{item.battleCryText}}</text>
-          <view class="invite-response-row">
-            <text class="invite-response-text">{{item.responseText}}</text>
-            <view class="invite-response-btn" wx:if="{{item.hasResponse}}" data-id="{{item.id}}" bindtap="onViewInviteResponses">
-              <text class="invite-response-btn-text">查看应战</text>
+          <text class="invite-item-closed" wx:if="{{item.hasClosedReason}}">{{item.closedReasonText}}</text>
+          <view class="invite-manage-row" wx:if="{{item.canManage}}">
+            <view class="invite-manage-btn" data-id="{{item.id}}" catchtap="onOpenInviteManage">
+              <text class="invite-manage-btn-text">管理名单</text>
             </view>
           </view>
           <text class="invite-item-created">{{item.createdText}}</text>
@@ -249,7 +254,10 @@
               <text class="public-item-team">{{item.teamName}}</text>
               <text class="public-item-city">{{item.cityText}}</text>
             </view>
-            <text class="public-badge" wx:if="{{item.hasBadge}}">{{item.badgeText}}</text>
+            <view class="public-tag-box">
+              <text class="invite-status {{item.statusClass}}">{{item.statusText}}</text>
+              <text class="public-badge" wx:if="{{item.hasBadge}}">{{item.badgeText}}</text>
+            </view>
           </view>
           <text class="public-item-title">{{item.titleText}}</text>
           <view class="invite-item-row">

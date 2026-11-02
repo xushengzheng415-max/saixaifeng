@@ -50,3 +50,22 @@
 执行修改入口 `node --check`、WXML 限制扫描及相关业务测试。交付文件清单、接口契约、隔离测试证据、未完成项、Git 提交与部署状态，不能用桩件通过替代真机/线上验收。
 
 本次授权为后端接线开发交接，不包含生产部署或生产数据迁移。发布前按 AGENTS.md 另行取得当前任务授权；云函数以最新线上包差量修改，保留配置。若涉及 webLoginApi，对实际拟上传包运行 `check-referee-backend-package.cjs`（含报名上传防回退检查）。未涉及 uploadFile 不调整其配置或依赖。发布后按项目规则回下载比对，并同步对应已登记测试端。
+
+## 实施结果（2026-11-02 补记）
+
+本次交接已在本轮完成落地，口径与实现登记见
+[`../FRIENDLY_MATCH_DATA_MODEL_2026-11-02.md`](../FRIENDLY_MATCH_DATA_MODEL_2026-11-02.md)，
+发布清单与线上包比对结论见 [`../releases/friendly-match-complete-20261102.md`](../releases/friendly-match-complete-20261102.md)。
+
+- 分支：`feature/friendly-match-complete-20261102`（worktree `E:\Documents\sxf-football-wt-friendly`，基线 `main e5bbe66a`）；未推送、未合并、未部署。
+- 后端：新增 `signUpInvite`、`cancelInviteSignup`、`getMyInviteStatus`、`listInviteSignups`、`checkInInviteSignup`、`proxyCheckInInvite`、`removeInviteSignup`、`confirmInvite`、`cancelInvite`、`abandonInvite`、`remindInviteSignups`；加固 `createInvite`（发起队管理者校验）、`getInvite`（身份脱敏 + 服务端状态口径）、`listSignins`（管理者鉴权）、`respondInvite`（补队伍标识 kind/teamId/teamName）、`listTeamInvites`/`listPublicInvites`（三计数拆分、公开列表含 accepted）。
+- 三数字与状态机：报名数（H5 姓名+手机号）、签到数（管理页勾选/代签）、应战数（对方接战）分别存储与返回；状态机 open/accepted/confirmed/cancelled/closed 由服务端持有，前端只映射文案；历史缺字段一律「待确认」。
+- 客户端：H5 `service-account-h5/friendly-signin.html` 改为报名/查状态/取消报名；小程序新增管理页 `pages/discover/invite-manage/`，发起页改为 canvas 海报 + H5 报名二维码 + 复制链接；未做球员端小程序详情页和小程序码。
+- 通知：取消/流局/成局/提醒走服务号模板消息（沿用 `SXF_INVITE_TEMPLATE_ID` / `SXF_SIGNIN_TEMPLATE_ID`），小程序订阅消息留接口位 `miniProgramSubscribe:'not-enabled'`。
+- 自检：`tools/test-friendly-invite-flow.cjs` 83 项通过、`tools/test-invite-qr.cjs` + `tools/check-invite-qr.py` 27/27；真机与线上未验证。
+
+### 与本交接原有待确认项的差异
+
+- 第 5 项「未报名直接签到如何处理」已按用户 2026-11-02 口径落地为**代签只加签到数、不补报名数**（`proxyCheckInInvite`，`source:'proxy'`、`proxy:true`），不再列为待确认。
+- 「比赛/报名同源」问题未在本次收口：`quickCreateMatch`/`signUpForMatch`（`friendly_matches` + `friendly_match_signups`）与邀约链路仍是两条集合，本次未合并，inviteId 与 matchId 不得互换。
+

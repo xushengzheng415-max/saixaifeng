@@ -89,6 +89,264 @@ function formatBattleCry(style, team, opponent, when) {
   }
 }
 
+// ======== 约球口径与状态机（2026-11-02 用户确认）========
+// 三个数字彻底拆开，互不代用：
+//   报名数 signupCount   ：球员在 H5 填姓名 + 手机号
+//   签到数 checkinCount  ：球队端管理页现场勾选（含代签）
+//   应战数 acceptedCount ：对方球队点「接战」，响应记录带 teamId / teamName
+// 状态机由服务端持有，前端只展示状态文案与 canSignUp 结果，不再自行推导：
+//   open ──对方接战──▶ accepted ──发起方点成局──▶ confirmed
+//   open / accepted / confirmed ──发起方取消──▶ cancelled（终态，必须通知已报名球员）
+//   open / accepted / confirmed ──人工流局──▶ closed（终态）
+var INVITE_STATE = { OPEN: 'open', ACCEPTED: 'accepted', CONFIRMED: 'confirmed', CANCELLED: 'cancelled', CLOSED: 'closed' }
+var INVITE_STATE_TEXT = { open: '报名中', accepted: '已接战', confirmed: '已成局', cancelled: '已取消', closed: '已关闭' }
+var SIGNUP_ACTIVE_STATES = [INVITE_STATE.OPEN, INVITE_STATE.ACCEPTED, INVITE_STATE.CONFIRMED]
+var TERMINAL_STATES = [INVITE_STATE.CANCELLED, INVITE_STATE.CLOSED]
+var RESPONSE_KIND = { TEAM: 'team', SIGNUP: 'signup' }
+var SIGNUP_STATUS = { ACTIVE: 'signup', PRESENT: 'present', CANCELLED: 'cancelled', REMOVED: 'removed' }
+var MANAGER_ROLES = ['owner', 'manager', 'coach', 'headcoach', 'head_coach', 'admin', 'captain', 'leader', 'organizer']
+
+// healthCheck 暴露的 action 清单，便于线上发布后读回核对
+var FRIENDLY_ACTIONS = [
+  'generateBattleCry', 'createInvite', 'getInvite', 'respondInvite', 'signIn', 'listSignins',
+  'quickCreateMatch', 'getMatch', 'signUpForMatch', 'generateMatchReport', 'generateReportBg',
+  'deleteFriendlyMatch', 'promoteFriendlyMatch', 'listTeamInvites', 'listPublicInvites',
+  'respondPublicInvite', 'teamFriendlyStats', 'listTeamVenues', 'upsertTeamVenue',
+  'deleteTeamVenue', 'setDefaultTeamVenue',
+  'signUpInvite', 'cancelInviteSignup', 'getMyInviteStatus', 'listInviteSignups',
+  'checkInInviteSignup', 'proxyCheckInInvite', 'removeInviteSignup',
+  'confirmInvite', 'cancelInvite', 'abandonInvite', 'remindInviteSignups',
+  'healthCheck'
+]
+
+function inviteStatusOf(row) {
+  return text(row && row.status) || INVITE_STATE.OPEN
+}
+
+function inviteStatusText(status) {
+  return INVITE_STATE_TEXT[text(status)] || '状态待确认'
+}
+
+// 历史邀约没有该字段时不显示 0：返回 null，由页面显示「待确认」
+function countOrNull(value) {
+  return typeof value === 'number' && isFinite(value) ? value : null
+}
+
+function phoneDigits(value) {
+  return text(value).replace(/\D/g, '')
+}
+
+function isMainlandPhone(value) {
+  return /^1\d{10}$/.test(phoneDigits(value))
+}
+
+function maskPhone(value) {
+  const digits = phoneDigits(value)
+  if (digits.length !== 11) return ''
+  return digits.slice(0, 3) + '****' + digits.slice(7)
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// 截止时间按 Asia/Shanghai（UTC+8）解析，与小程序 discover-model 口径一致；
+// 云端默认 UTC，直接用 new Date() 会把“当天 23:59 截止”判早 8 小时
+function shanghaiEpoch(value) {
+  const match = text(value).match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/)
+  if (!match) return null
+  const hour = match[4] === undefined ? 23 : Number(match[4])
+  const minute = match[5] === undefined ? 59 : Number(match[5])
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), hour - 8, minute)
+}
+
+// 服务端统一计算邀约的报名可见状态：前端不再自行判断截止/满员/状态
+function inviteSignupState(invite) {
+  const status = inviteStatusOf(invite)
+  const knownCount = typeof invite.signupCount === 'number' && invite.signupCountKnown !== false
+  const signupCount = knownCount ? invite.signupCount : null
+  const maxPlayers = Number(invite.maxPlayers) || 0
+  const full = knownCount && maxPlayers > 0 && invite.signupCount >= maxPlayers
+  const deadlineEpoch = shanghaiEpoch(invite.deadline)
+  const expired = deadlineEpoch !== null && deadlineEpoch < Date.now()
+  const stateAllowed = SIGNUP_ACTIVE_STATES.indexOf(status) >= 0
+  const checkinKnown = typeof invite.checkinCount === 'number' && invite.checkinCountKnown !== false
+  let closedReason = ''
+  if (TERMINAL_STATES.indexOf(status) >= 0) closedReason = status === INVITE_STATE.CANCELLED ? '邀约已取消' : '邀约已关闭'
+  else if (!stateAllowed) closedReason = '当前状态不可报名'
+  else if (expired) closedReason = '已过报名截止时间'
+  else if (full) closedReason = '报名人数已满'
+  return {
+    status,
+    statusText: inviteStatusText(status),
+    signupCount,
+    signupCountKnown: knownCount,
+    checkinCount: checkinKnown ? invite.checkinCount : null,
+    checkinCountKnown: checkinKnown,
+    acceptedCount: countOrNull(invite.acceptedCount),
+    maxPlayers,
+    deadline: text(invite.deadline),
+    expired,
+    full,
+    terminal: TERMINAL_STATES.indexOf(status) >= 0,
+    canSignUp: stateAllowed && !expired && !full,
+    signupClosedReason: closedReason
+  }
+}
+
+// 历史邀约缺计数时的处理（不得把缺失记成 0）：
+// - 只读展示：signupCountKnown=false → 页面显示「待确认」
+// - 首次写入且有完整响应行可核对（未触发 100 条扫描上限）时，按响应行重算并标记 known=true
+async function ensureInviteCounters(invite, rows) {
+  const patch = {}
+  const signupUnknown = typeof invite.signupCount !== 'number' || invite.signupCountKnown === false
+  const checkinUnknown = typeof invite.checkinCount !== 'number' || invite.checkinCountKnown === false
+  const canRecount = Array.isArray(rows) && rows.length < 100
+  if (signupUnknown) {
+    patch.signupCount = canRecount ? activeSignupCount(rows) : (typeof invite.signupCount === 'number' ? invite.signupCount : 0)
+    patch.signupCountKnown = canRecount
+    if (canRecount) patch.signupCountSource = 'recount'
+  }
+  if (checkinUnknown) {
+    patch.checkinCount = canRecount ? presentSignupCount(rows) : (typeof invite.checkinCount === 'number' ? invite.checkinCount : 0)
+    patch.checkinCountKnown = canRecount
+    if (canRecount) patch.checkinCountSource = 'recount'
+  }
+  if (typeof invite.acceptedCount !== 'number') patch.acceptedCount = 0
+  if (!Object.keys(patch).length) return
+  await db.collection(INVITES_COLLECTION).doc(invite._id).update({ data: patch }).catch(() => null)
+  Object.assign(invite, patch)
+}
+
+async function loadInviteById(inviteId) {
+  if (!text(inviteId)) return null
+  const res = await db.collection(INVITES_COLLECTION).doc(text(inviteId)).get().catch(() => null)
+  return (res && res.data) || null
+}
+
+// 历史邀约没有 status 字段：写操作前补成 open，避免条件更新（where status）匹配不到而误判失败
+async function ensureInviteStatus(invite) {
+  if (!invite || text(invite.status)) return
+  await db.collection(INVITES_COLLECTION).doc(invite._id)
+    .update({ data: { status: INVITE_STATE.OPEN, statusUpdatedAt: new Date(), statusSource: 'legacy_normalize' } })
+    .catch(() => null)
+  invite.status = INVITE_STATE.OPEN
+}
+
+async function loadInviteByToken(token) {
+  if (!text(token)) return null
+  const res = await db.collection(INVITES_COLLECTION).where({ signinToken: text(token) }).limit(1).get().catch(() => null)
+  return (res && res.data && res.data[0]) || null
+}
+
+function userIdentitySet(user, openid) {
+  return new Set([user && user._id, user && user.phone, user && user.phoneNumber, user && user.openId,
+    user && user.openid, user && user.wechatOpenId, openid]
+    .map(value => text(value)).filter(Boolean))
+}
+
+// 管理者判定：球队所有者 / 成员关系里的管理角色 / 球队尚未登记所有者时的历史成员兼容
+async function resolveTeamManager(teamId, caller) {
+  const targetTeamId = text(teamId)
+  if (!targetTeamId) return { ok: false, code: 'INVALID_PARAM', message: '缺少球队信息' }
+  const userRes = await db.collection(USERS_COLLECTION).doc(text(caller && caller.userId)).get().catch(() => null)
+  const user = userRes && userRes.data
+  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先完成手机号登录' }
+  const identities = userIdentitySet(user, caller && caller.openid)
+  const teamRes = await db.collection('teams').doc(targetTeamId).get().catch(() => null)
+  const team = teamRes && teamRes.data
+  if (!team) return { ok: false, code: 'NOT_FOUND', message: '球队不存在' }
+
+  const ownerKeys = [team.ownerId, team.ownerUserId, team.claimedByUserId].map(value => text(value)).filter(Boolean)
+  if (ownerKeys.some(key => identities.has(key))) return { ok: true, team, via: 'owner' }
+
+  const memberRes = await db.collection('team_memberships').where({ teamId: targetTeamId }).limit(50).get().catch(() => null)
+  const members = (memberRes && memberRes.data) || []
+  const mine = members.filter(row => {
+    const status = text(row.status || 'active').toLowerCase()
+    if (['active', 'accepted', 'claimed'].indexOf(status) < 0) return false
+    return identities.has(text(row.userId)) || identities.has(text(row.memberUserId)) ||
+      identities.has(text(row.phone)) || identities.has(text(row.phoneNumber))
+  })
+  if (mine.length) {
+    const managerHit = mine.some(row => {
+      const role = text(row.role || row.memberRole || row.staffRole || row.position).toLowerCase()
+      if (MANAGER_ROLES.indexOf(role) >= 0) return true
+      return row.canManage === true || row.isManager === true || row.canWrite === true
+    })
+    if (managerHit) return { ok: true, team, via: 'membership' }
+    // 兼容：球队尚未登记所有者时，历史有效成员关系暂按可管理处理（不扩大到读取其他球队）
+    if (!ownerKeys.length) return { ok: true, team, via: 'legacy_member' }
+  }
+  return { ok: false, code: 'FORBIDDEN', message: '只有该队管理者可以操作约球' }
+}
+
+// 发起球队管理者才能管理这条邀约
+async function assertInviteManager(invite, caller) {
+  const teamId = text(invite && invite.teamId)
+  if (!teamId) return { ok: false, result: fail('DATA_READ_FAILED', '邀约缺少发起球队，暂无法核对权限') }
+  if (!caller || !caller.openid) return { ok: false, result: fail('UNAUTHORIZED', '请先登录') }
+  if (!caller.userId) return { ok: false, result: fail('UNAUTHORIZED', '请先完成手机号登录') }
+  const check = await resolveTeamManager(teamId, caller)
+  if (!check.ok) return { ok: false, result: fail(check.code, check.message) }
+  return { ok: true, team: check.team, via: check.via }
+}
+
+async function resolveOpenidByPhone(phone, userId) {
+  const digits = phoneDigits(phone)
+  if (digits) {
+    for (const field of ['phone', 'phoneNumber']) {
+      const res = await db.collection(USERS_COLLECTION).where({ [field]: digits }).limit(1).get().catch(() => null)
+      const user = res && res.data && res.data[0]
+      if (user) return text(user.wechatOpenId || user.openId || user.openid)
+    }
+  }
+  if (text(userId)) {
+    const res = await db.collection(USERS_COLLECTION).doc(text(userId)).get().catch(() => null)
+    const user = res && res.data
+    if (user) return text(user.wechatOpenId || user.openId || user.openid)
+  }
+  return ''
+}
+
+async function loadSignupResponses(inviteId, limit) {
+  const res = await db.collection(RESPONSES_COLLECTION).where({ inviteId }).limit(limit || 100).get().catch(() => null)
+  const rows = ((res && res.data) || []).map(row => ({
+    row,
+    stamp: Number(new Date(row.createdAt || row.respondedAt || 0)) || 0
+  }))
+  rows.sort((a, b) => b.stamp - a.stamp)
+  return rows.map(item => item.row)
+}
+
+// 响应行角色归一：历史行可能没有 kind，只能按旧 status 推断
+// 旧 signIn 写 status=present 且无 kind → 报名；其余（accepted / rejected / pending）→ 队伍应战
+function responseKindOf(row) {
+  const kind = text(row && row.kind)
+  if (kind) return kind
+  const status = text(row && row.status).toLowerCase()
+  if (['present', 'signup', 'signed', 'signedin', 'joined', 'registered'].indexOf(status) >= 0) {
+    return RESPONSE_KIND.SIGNUP
+  }
+  return RESPONSE_KIND.TEAM
+}
+
+function isActiveSignup(row) {
+  return responseKindOf(row) === RESPONSE_KIND.SIGNUP &&
+    [SIGNUP_STATUS.ACTIVE, SIGNUP_STATUS.PRESENT].indexOf(text(row.status)) >= 0
+}
+
+// 报名数：只统计球员报名行（不含队伍应战行、已取消、已移除）
+function activeSignupCount(rows) {
+  return (Array.isArray(rows) ? rows : []).filter(isActiveSignup).length
+}
+
+// 签到数：只统计现场已签到行
+function presentSignupCount(rows) {
+  return (Array.isArray(rows) ? rows : []).filter(row =>
+    responseKindOf(row) === RESPONSE_KIND.SIGNUP && text(row.status) === SIGNUP_STATUS.PRESENT).length
+}
+
 // ======== 网络工具 ========
 async function bridgePost(action, payload) {
   const baseUrl = String(CONFIG.bridgeUrl || '').replace(/\/+$/, '')
@@ -521,9 +779,8 @@ async function generateReportBg(event) {
 }
 
 // A2: 教练创建约球邀约（含战书）
+// 2026-11-02：发起人必须是该队管理者（所有者或成员关系中的管理角色），不再接受任意 teamId。
 async function createInvite(event) {
-  const wxContext = cloud.getWXContext()
-  const userId = text(event.userId) || text(wxContext.OPENID)
   const {
     teamId, teamName,
     opponentName = '',
@@ -537,6 +794,13 @@ async function createInvite(event) {
   if (!teamId || !teamName) return fail('INVALID_PARAM', '缺少球队信息')
   if (!matchDate) return fail('INVALID_PARAM', '请选择比赛日期')
 
+  const caller = await resolveCallerIdentity()
+  if (!caller.openid) return fail('UNAUTHORIZED', '请先登录')
+  if (!caller.userId) return fail('UNAUTHORIZED', '请先完成手机号登录')
+  const manager = await resolveTeamManager(text(teamId), caller)
+  if (!manager.ok) return fail(manager.code, manager.message)
+  const userId = caller.userId
+
   const signinToken = randomToken(32)
   const signinUrl = `${CONFIG.h5BaseUrl}friendly-signin.html?token=${signinToken}`
 
@@ -549,7 +813,8 @@ async function createInvite(event) {
   }
 
   const record = {
-    teamId, teamName,
+    teamId: text(teamId),
+    teamName: text(teamName) || text(manager.team && (manager.team.name || manager.team.teamName)),
     createdByUserId: userId,
     opponentName, matchDate, matchTime, venue,
     venueAddress: text(venueAddress),
@@ -557,9 +822,18 @@ async function createInvite(event) {
     longitude: Number(longitude) || 0,
     maxPlayers: Math.min(50, Math.max(1, Number(maxPlayers) || 20)),
     deadline,
-    status: 'open',
+    status: INVITE_STATE.OPEN,
+    statusUpdatedAt: new Date(),
+    statusUpdatedBy: userId,
     signinToken,
     signinUrl,
+    // 2026-11-02：三个数字拆开存储；signedInCount 仅保留历史兼容，不再写入新语义
+    signupCount: 0,
+    signupCountKnown: true,
+    checkinCount: 0,
+    checkinCountKnown: true,
+    acceptedCount: 0,
+    rejectedCount: 0,
     signedInCount: 0,
     battleCry: resolvedBattleCry,  // 新增：战书
     createdAt: new Date()
@@ -570,125 +844,265 @@ async function createInvite(event) {
 
   setTimeout(() => notifyTeamPlayers(inviteId, record).catch(e => console.warn('[friendly] notify fail', e && e.message)), 0)
 
-  return ok({ inviteId, signinUrl, signinToken, battleCry: resolvedBattleCry })
+  return ok({
+    inviteId,
+    signinUrl,
+    signinToken,
+    battleCry: resolvedBattleCry,
+    teamId: record.teamId,
+    status: record.status,
+    statusText: inviteStatusText(record.status),
+    maxPlayers: record.maxPlayers,
+    deadline: text(deadline)
+  })
 }
 
-// A3: H5 拿邀约详情
+// A3: H5 拿邀约详情（按身份脱敏）
+// 2026-11-02：默认只回报名方需要的白名单字段，绝不带 signinToken / signinUrl / 创建人；
+// 只有发起球队管理者用 inviteId 读取时才补充分享链接与取消原因。
 async function getInvite(event) {
   const token = text(event.token)
-  if (!token) return fail('INVALID_PARAM', '缺少签到凭证')
-  const res = await db.collection(INVITES_COLLECTION).where({ signinToken: token }).limit(1).get()
-  if (!res.data.length) return fail('NOT_FOUND', '邀约不存在或已过期')
-  return ok(res.data[0])
+  const inviteId = text(event.inviteId)
+  if (!token && !inviteId) return fail('INVALID_PARAM', '缺少邀约凭证')
+
+  const invite = token ? await loadInviteByToken(token) : await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在或已过期')
+
+  const caller = await resolveCallerIdentity().catch(() => ({ openid: '', userId: '' }))
+  let managerView = false
+  if (caller.userId && text(invite.teamId)) {
+    const check = await resolveTeamManager(text(invite.teamId), caller).catch(() => ({ ok: false }))
+    managerView = Boolean(check && check.ok)
+  }
+
+  const state = inviteSignupState(invite)
+  const payload = {
+    inviteId: text(invite._id),
+    teamId: text(invite.teamId),
+    teamName: text(invite.teamName),
+    opponentName: text(invite.opponentName),
+    matchDate: text(invite.matchDate),
+    matchTime: text(invite.matchTime),
+    venue: text(invite.venue),
+    venueAddress: text(invite.venueAddress),
+    latitude: Number(invite.latitude) || 0,
+    longitude: Number(invite.longitude) || 0,
+    battleCry: invite.battleCry || null,
+    // 服务端算好的报名口径，前端不再自行推导截止/满员/状态
+    status: state.status,
+    statusText: state.statusText,
+    signupCount: state.signupCount,
+    signupCountKnown: state.signupCountKnown,
+    checkinCount: state.checkinCount,
+    checkinCountKnown: state.checkinCountKnown,
+    acceptedCount: state.acceptedCount,
+    maxPlayers: state.maxPlayers,
+    deadline: state.deadline,
+    expired: state.expired,
+    full: state.full,
+    terminal: state.terminal,
+    canSignUp: state.canSignUp,
+    signupClosedReason: state.signupClosedReason,
+    managerView
+  }
+
+  if (managerView) {
+    payload.signinToken = text(invite.signinToken)
+    payload.signinUrl = text(invite.signinUrl)
+    payload.createdByUserId = text(invite.createdByUserId)
+    payload.cancelReason = text(invite.cancelReason)
+    payload.statusUpdatedAt = invite.statusUpdatedAt || null
+    payload.acceptedTeamId = text(invite.acceptedTeamId)
+    payload.acceptedTeamName = text(invite.acceptedTeamName)
+  }
+
+  // 我的报名状态：H5 传手机号后返回，避免球员重复填表或不明状态
+  const myPhone = phoneDigits(event.userPhone)
+  if (myPhone && isMainlandPhone(myPhone)) {
+    const rows = await loadSignupResponses(text(invite._id), 100)
+    const mine = rows.find(row => text(row.kind) === RESPONSE_KIND.SIGNUP && phoneDigits(row.phoneKey) === myPhone)
+    payload.mySignup = mine
+      ? { signupId: text(mine._id), status: text(mine.status), statusText: signupStatusText(mine.status), side: text(mine.side) }
+      : null
+  }
+
+  return ok(payload)
 }
 
-// A4: 对手响应战书（接收 / 拒绝）
+function signupStatusText(status) {
+  const value = text(status)
+  if (value === SIGNUP_STATUS.ACTIVE) return '已报名'
+  if (value === SIGNUP_STATUS.PRESENT) return '已签到'
+  if (value === SIGNUP_STATUS.CANCELLED) return '已取消报名'
+  if (value === SIGNUP_STATUS.REMOVED) return '已被移出名单'
+  return '未报名'
+}
+
+// A4: 对手响应战书（接战 / 无法应战）
+// 2026-11-02：响应记录必须带队伍标识（teamId / teamName），kind='team'；
+// 接战是成局入口之一 → open 时置 accepted，并把首个接战队伍写回邀约。
 async function respondInvite(event) {
   const token = text(event.token)
   const status = text(event.status)  // 'accepted' | 'rejected'
+  const opponentTeamId = text(event.teamId || event.opponentTeamId)
   const opponentTeamName = text(event.opponentTeamName) || text(event.teamName) || '对手'
-  const opponentUserId = text(event.userId) || text(cloud.getWXContext().OPENID)
+  const wxContext = cloud.getWXContext()
+  const opponentUserId = text(event.userId) || text(wxContext.OPENID)
   const opponentUserName = text(event.userName) || '对方球员'
 
   if (!token) return fail('INVALID_PARAM', '缺少战书凭证')
   if (status !== 'accepted' && status !== 'rejected') return fail('INVALID_PARAM', '状态非法，只能 accepted / rejected')
 
-  const inviteRes = await db.collection(INVITES_COLLECTION).where({ signinToken: token }).limit(1).get()
-  if (!inviteRes.data.length) return fail('NOT_FOUND', '战书不存在')
-  const invite = inviteRes.data[0]
-  if (invite.status !== 'open') return fail('CLOSED', '战书已关闭')
+  const invite = await loadInviteByToken(token)
+  if (!invite) return fail('NOT_FOUND', '战书不存在')
+  const currentStatus = inviteStatusOf(invite)
+  if (TERMINAL_STATES.indexOf(currentStatus) >= 0) return fail('CLOSED', '战书已关闭')
 
-  // 幂等：同一对手不重复响应
-  const existRes = await db.collection(RESPONSES_COLLECTION).where({ inviteId: invite._id, userId: opponentUserId }).limit(1).get()
-  if (existRes.data.length) {
-    if (existRes.data[0].status === status) {
-      return ok({ alreadyResponded: true, responseId: existRes.data[0]._id })
-    }
+  // 幂等：同一对手（优先按 teamId，其次按 userId）不重复响应
+  const existing = await loadSignupResponses(invite._id, 100)
+  const mine = existing.find(row => {
+    if (text(row.kind) !== RESPONSE_KIND.TEAM) return false
+    if (opponentTeamId) return text(row.teamId) === opponentTeamId
+    return text(row.userId) === opponentUserId
+  })
+  if (mine && text(mine.status) === status) {
+    return ok({ alreadyResponded: true, responseId: text(mine._id), status })
   }
 
-  // 写响应记录
-  const addRes = await db.collection(RESPONSES_COLLECTION).add({
-    data: {
-      inviteId: invite._id,
-      userId: opponentUserId,
-      userName: opponentUserName,
-      teamName: opponentTeamName,
-      status: status,
-      respondedAt: new Date()
-    }
-  })
+  let responseId = ''
+  if (mine) {
+    await db.collection(RESPONSES_COLLECTION).doc(mine._id).update({
+      data: { status, teamId: opponentTeamId, teamName: opponentTeamName, kind: RESPONSE_KIND.TEAM, respondedAt: new Date() }
+    })
+    responseId = text(mine._id)
+  } else {
+    const addRes = await db.collection(RESPONSES_COLLECTION).add({
+      data: {
+        inviteId: invite._id,
+        userId: opponentUserId,
+        userName: opponentUserName,
+        // 队伍标识（2026-11-02 口径）：teamId 来自小程序/H5 传入，teamName 用于展示
+        teamId: opponentTeamId,
+        teamName: opponentTeamName,
+        kind: RESPONSE_KIND.TEAM,
+        status,
+        respondedAt: new Date(),
+        createdAt: new Date()
+      }
+    })
+    responseId = text(addRes._id)
+  }
 
-  // 更新邀约：accepted → 计数 +1，rejected 也写个标记
   const updateData = {
     lastResponseAt: new Date(),
     lastResponseStatus: status,
     lastRespondedBy: opponentTeamName
   }
-  if (status === 'accepted') updateData.acceptedCount = _.inc(1)
+  if (status === 'accepted') {
+    updateData.acceptedCount = _.inc(1)
+    // 接战即成局入口：open → accepted，首个接战队伍写回邀约，供管理页展示
+    if (currentStatus === INVITE_STATE.OPEN) {
+      updateData.status = INVITE_STATE.ACCEPTED
+      updateData.statusUpdatedAt = new Date()
+      updateData.statusUpdatedBy = opponentUserId
+    }
+    if (!text(invite.acceptedTeamId)) {
+      updateData.acceptedTeamId = opponentTeamId
+      updateData.acceptedTeamName = opponentTeamName
+    }
+  }
   if (status === 'rejected') updateData.rejectedCount = _.inc(1)
   await db.collection(INVITES_COLLECTION).doc(invite._id).update({ data: updateData })
 
   // 推通知给发起方（异步）
   setTimeout(() => notifyCreatorOfResponse(invite, status, opponentTeamName).catch(e => console.warn('[friendly] notify creator fail', e && e.message)), 0)
 
-  return ok({ responseId: addRes._id, alreadyResponded: false, status: status })
+  return ok({ responseId, alreadyResponded: false, status, inviteStatus: status === 'accepted' && currentStatus === INVITE_STATE.OPEN ? INVITE_STATE.ACCEPTED : currentStatus })
 }
 
-// A5: 球员签到（保留旧接口，向后兼容）
+// A5: 球员签到（旧接口，保留向后兼容）
+// 2026-11-02：旧接口视为「报名并到场」，写入 kind=signup / status=present，
+// 同时受截止、状态、满员与幂等约束；新链路请用 signUpInvite + checkInInviteSignup。
 async function signIn(event) {
   const wxContext = cloud.getWXContext()
   const token = text(event.token)
   const userId = text(event.userId) || text(wxContext.OPENID)
-  const userName = text(event.userName)
+  const userName = text(event.userName) || '球员'
   const userPhone = text(event.userPhone)
+  const phoneKey = phoneDigits(userPhone)
 
   if (!token || !userId) return fail('INVALID_PARAM', '缺少签到凭证或用户标识')
 
-  const inviteRes = await db.collection(INVITES_COLLECTION).where({ signinToken: token }).limit(1).get()
-  if (!inviteRes.data.length) return fail('NOT_FOUND', '邀约不存在')
-  const invite = inviteRes.data[0]
-  if (invite.status !== 'open') return fail('CLOSED', '邀约已关闭')
+  const invite = await loadInviteByToken(token)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在')
+  await ensureInviteStatus(invite)
+  const state = inviteSignupState(invite)
+  if (TERMINAL_STATES.indexOf(state.status) >= 0) return fail('CLOSED', state.signupClosedReason || '邀约已关闭')
+  if (state.expired) return fail('CLOSED', '已过报名截止时间')
+  if (state.full) return fail('FULL', '报名人数已满')
 
-  const existRes = await db.collection(RESPONSES_COLLECTION).where({ inviteId: invite._id, userId }).limit(1).get()
-  if (existRes.data.length) return ok({ alreadySignedIn: true, responseId: existRes.data[0]._id })
+  const rows = await loadSignupResponses(invite._id, 100)
+  const mine = rows.find(row => {
+    const sameKind = [RESPONSE_KIND.SIGNUP, ''].indexOf(text(row.kind)) >= 0
+    if (!sameKind) return false
+    if (userId && text(row.userId) === userId) return true
+    return Boolean(phoneKey) && phoneDigits(row.phoneKey) === phoneKey
+  })
+  if (mine && [SIGNUP_STATUS.ACTIVE, SIGNUP_STATUS.PRESENT].indexOf(text(mine.status)) >= 0) {
+    return ok({ alreadySignedIn: true, responseId: text(mine._id), status: text(mine.status) })
+  }
 
+  await ensureInviteCounters(invite, rows)
   const addRes = await db.collection(RESPONSES_COLLECTION).add({
     data: {
-      inviteId: invite._id, userId, userName, userPhone,
-      respondedAt: new Date(), status: 'present'
+      inviteId: invite._id,
+      userId, userName,
+      userPhone: phoneKey ? maskPhone(phoneKey) : '',
+      phoneKey,
+      teamId: '',
+      teamName: '',
+      kind: RESPONSE_KIND.SIGNUP,
+      side: text(event.side) || 'own',
+      status: SIGNUP_STATUS.PRESENT,
+      source: 'legacy_sign_in',
+      checkedInAt: new Date(),
+      createdAt: new Date(),
+      respondedAt: new Date()
     }
   })
 
-  await db.collection(INVITES_COLLECTION).doc(invite._id).update({
-    data: { signedInCount: _.inc(1) }
-  })
+  const guard = await db.collection(INVITES_COLLECTION)
+    .where({ _id: invite._id, signupCount: _.lt(Number(invite.maxPlayers) || 50), status: _.in(SIGNUP_ACTIVE_STATES) })
+    .update({ data: { signupCount: _.inc(1), checkinCount: _.inc(1), signedInCount: _.inc(1) } })
+  if (!guard || !guard.stats || guard.stats.updated !== 1) {
+    await db.collection(RESPONSES_COLLECTION).doc(addRes._id).remove().catch(() => null)
+    return fail('FULL', '报名人数已满')
+  }
 
-  return ok({ responseId: addRes._id, alreadySignedIn: false })
+  return ok({ responseId: addRes._id, alreadySignedIn: false, status: SIGNUP_STATUS.PRESENT })
 }
 
-// A6: 教练查看响应列表
-// 2026-10-27 补齐鉴权：原来任何拿到 inviteId 的人都能读到全部响应（含手机号）与签到凭证；
-// 现在只允许发起球队的所有者/有效成员读取，并剔除 signinToken / signinUrl / 手机号。
+// A6: 教练查看报名与响应（旧接口，保留向后兼容）
+// 2026-11-02：鉴权改由 assertInviteManager（发起球队管理者）统一校验，
+// 返回仍按旧字段，但不含 signinToken / signinUrl / 手机号原文；需要新口径请用 listInviteSignups。
 async function listSignins(event) {
   const inviteId = text(event.inviteId)
   if (!inviteId) return fail('INVALID_PARAM', '缺少邀约 ID')
   const caller = await resolveCallerIdentity()
-  if (!caller.openid) return fail('UNAUTHORIZED', '请先登录')
-  if (!caller.userId) return fail('UNAUTHORIZED', '请先完成手机号登录')
-  const inviteRes = await db.collection(INVITES_COLLECTION).doc(inviteId).get().catch(() => null)
-  if (!inviteRes || !inviteRes.data) return fail('NOT_FOUND', '邀约不存在')
-  const invite = inviteRes.data
-  const teamId = text(invite.teamId)
-  if (!teamId) return fail('DATA_READ_FAILED', '邀约缺少发起球队，暂无法核对权限')
-  if (!await callerBelongsToTeam(teamId, caller)) return fail('FORBIDDEN', '只有发起球队可以查看报名与响应')
+  const invite = await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在')
+  const permission = await assertInviteManager(invite, caller)
+  if (!permission.ok) return permission.result
 
-  const signinRes = await db.collection(RESPONSES_COLLECTION)
-    .where({ inviteId }).orderBy('respondedAt', 'asc').limit(100).get()
-  const responses = ((signinRes && signinRes.data) || []).map(row => ({
+  const rows = await loadSignupResponses(invite._id, 100)
+  const responses = rows.map(row => ({
     responseId: text(row._id),
     userName: text(row.userName),
     teamName: text(row.teamName),
+    kind: responseKindOf(row),
+    side: text(row.side),
     status: text(row.status),
+    statusText: signupStatusText(row.status),
     respondedAt: row.respondedAt || null
   }))
 
@@ -989,21 +1403,31 @@ async function listTeamInvites(event) {
     ? text(team.logoTransparentFileId || team.logoTransparentUrl || team.logoFileId || team.logoUrl || team.logo)
     : ''
 
-  const invites = rows.map(row => ({
-    inviteId: text(row._id),
-    matchDate: text(row.matchDate),
-    matchTime: text(row.matchTime),
-    venue: text(row.venue),
-    venueAddress: text(row.venueAddress),
-    maxPlayers: Number(row.maxPlayers) || 0,
-    signedInCount: Number(row.signedInCount) || 0,
-    deadline: text(row.deadline),
-    status: text(row.status) || 'open',
-    battleCryText: text(row.battleCry && row.battleCry.text),
-    // 跨队应战计数（2026-10-27 公开约球）：发起方据此判断是否有人应战，不含具体账号
-    acceptedCount: Number(row.acceptedCount) || 0,
-    createdAt: row.createdAt || null
-  }))
+  const invites = rows.map(row => {
+    const state = inviteSignupState(row)
+    return {
+      inviteId: text(row._id),
+      matchDate: text(row.matchDate),
+      matchTime: text(row.matchTime),
+      venue: text(row.venue),
+      venueAddress: text(row.venueAddress),
+      maxPlayers: state.maxPlayers,
+      // 三个数字拆开：报名 / 签到 / 应战；历史缺字段时为 null，页面显示「待确认」
+      signupCount: state.signupCount,
+      signupCountKnown: state.signupCountKnown,
+      checkinCount: state.checkinCount,
+      acceptedCount: state.acceptedCount,
+      // 历史兼容字段，不再代表报名数
+      signedInCount: Number(row.signedInCount) || 0,
+      deadline: state.deadline,
+      status: state.status,
+      statusText: state.statusText,
+      canSignUp: state.canSignUp,
+      signupClosedReason: state.signupClosedReason,
+      battleCryText: text(row.battleCry && row.battleCry.text),
+      createdAt: row.createdAt || null
+    }
+  })
 
   return ok({
     teamId,
@@ -1012,16 +1436,6 @@ async function listTeamInvites(event) {
     total: invites.length,
     invites
   })
-}
-
-// 截止时间按 Asia/Shanghai（UTC+8）解析，与小程序 discover-model 口径一致；
-// 云端默认 UTC，直接用 new Date() 会把“当天 23:59 截止”判早 8 小时
-function shanghaiEpoch(value) {
-  const match = text(value).match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/)
-  if (!match) return null
-  const hour = match[4] === undefined ? 23 : Number(match[4])
-  const minute = match[5] === undefined ? 59 : Number(match[5])
-  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), hour - 8, minute)
 }
 
 // 城市口径：同城只按发起主体（球队）登记城市比较，不用定位城市（定位需额外隐私声明）。
@@ -1053,8 +1467,8 @@ async function loadTeamBriefs(teamIds) {
 }
 
 // 跨队公开约球列表（2026-10-27 用户确认公开）：只读、脱敏。
-// 只列 status=open 且未过截止时间的邀约；不返回 signinToken / signinUrl / 手机号 / 创建人账号，
-// 也不返回精确地址文本，避免公开列表成为联系方式与凭证的泄露面。
+// 2026-11-02：已接战（accepted）仍留在公开列表，后续球队可继续应战，由发起方决定；
+// 不返回 signinToken / signinUrl / 手机号 / 创建人账号，也不返回精确地址文本。
 async function listPublicInvites(event) {
   const caller = await resolveCallerIdentity()
   // 公开浏览只要求小程序上下文有 openid（游客也能看），不要求完成手机号登录
@@ -1069,7 +1483,7 @@ async function listPublicInvites(event) {
   let scanLimited = false
   try {
     const res = await db.collection(INVITES_COLLECTION)
-      .where({ status: 'open' })
+      .where({ status: _.in([INVITE_STATE.OPEN, INVITE_STATE.ACCEPTED]) })
       .limit(SCAN_LIMIT)
       .get()
     rows = (res && res.data) || []
@@ -1098,6 +1512,7 @@ async function listPublicInvites(event) {
 
   const page = sorted.slice(offset, offset + limit).map(row => {
     const team = teamMap[text(row.teamId)] || null
+    const state = inviteSignupState(row)
     return {
       inviteId: text(row._id),
       teamId: text(row.teamId),
@@ -1108,10 +1523,12 @@ async function listPublicInvites(event) {
       matchTime: text(row.matchTime),
       venue: text(row.venue),
       // 公开列表只给场地名，不给详细地址
-      maxPlayers: Number(row.maxPlayers) || 0,
-      signedInCount: Number(row.signedInCount) || 0,
-      deadline: text(row.deadline),
-      status: text(row.status) || 'open',
+      maxPlayers: state.maxPlayers,
+      signupCount: state.signupCount,
+      signupCountKnown: state.signupCountKnown,
+      deadline: state.deadline,
+      status: state.status,
+      statusText: state.statusText,
       battleCryText: text(row.battleCry && row.battleCry.text),
       createdAt: row.createdAt || null
     }
@@ -1141,14 +1558,16 @@ async function respondPublicInvite(event) {
   const inviteRes = await db.collection(INVITES_COLLECTION).doc(inviteId).get().catch(() => null)
   const invite = inviteRes && inviteRes.data
   if (!invite) return fail('NOT_FOUND', '邀约不存在或已取消')
-  if (text(invite.status) !== 'open') return fail('CLOSED', '该邀约已关闭')
+  const currentStatus = inviteStatusOf(invite)
+  // 已接战（accepted）仍接受后续球队应战，终态（cancelled / closed）不再接受
+  if (TERMINAL_STATES.indexOf(currentStatus) >= 0) return fail('CLOSED', '该邀约已关闭')
   const deadline = shanghaiEpoch(invite.deadline)
   if (deadline !== null && deadline < Date.now()) return fail('CLOSED', '该邀约已过报名截止时间')
   if (text(invite.teamId) === teamId) return fail('INVALID_PARAM', '不能应战本队发起的邀约')
 
   // 幂等：按 inviteId 读取后在函数内比对 teamId，避免新增复合索引
-  const exist = await db.collection(RESPONSES_COLLECTION).where({ inviteId }).limit(50).get().catch(() => null)
-  const mine = ((exist && exist.data) || []).find(row => text(row.teamId) === teamId)
+  const existing = await loadSignupResponses(invite._id, 100)
+  const mine = existing.find(row => text(row.kind) === RESPONSE_KIND.TEAM && text(row.teamId) === teamId)
   if (mine) return ok({ alreadyResponded: true, responseId: text(mine._id), status: text(mine.status) || 'accepted' })
 
   const teamRes = await db.collection('teams').doc(teamId).get().catch(() => null)
@@ -1158,26 +1577,43 @@ async function respondPublicInvite(event) {
   const addRes = await db.collection(RESPONSES_COLLECTION).add({
     data: {
       inviteId,
+      // 队伍标识（2026-11-02 口径）：应战方必须有 teamId + teamName
       teamId,
+      teamName,
       userId: caller.userId,
       userName: '',
-      teamName,
+      kind: RESPONSE_KIND.TEAM,
       status: 'accepted',
       source: 'public_list',
-      respondedAt: new Date()
+      respondedAt: new Date(),
+      createdAt: new Date()
     }
   })
-  await db.collection(INVITES_COLLECTION).doc(inviteId).update({
-    data: {
-      acceptedCount: _.inc(1),
-      lastResponseAt: new Date(),
-      lastResponseStatus: 'accepted',
-      lastRespondedBy: teamName
-    }
-  })
+  const updateData = {
+    acceptedCount: _.inc(1),
+    lastResponseAt: new Date(),
+    lastResponseStatus: 'accepted',
+    lastRespondedBy: teamName
+  }
+  // 接战即为成局入口之一：open → accepted，并记录首个接战队伍
+  if (currentStatus === INVITE_STATE.OPEN) {
+    updateData.status = INVITE_STATE.ACCEPTED
+    updateData.statusUpdatedAt = new Date()
+    updateData.statusUpdatedBy = caller.userId
+  }
+  if (!text(invite.acceptedTeamId)) {
+    updateData.acceptedTeamId = teamId
+    updateData.acceptedTeamName = teamName
+  }
+  await db.collection(INVITES_COLLECTION).doc(inviteId).update({ data: updateData })
   setTimeout(() => notifyCreatorOfResponse(invite, 'accepted', teamName).catch(e => console.warn('[friendly] notify creator fail', e && e.message)), 0)
 
-  return ok({ responseId: addRes._id, alreadyResponded: false, status: 'accepted' })
+  return ok({
+    responseId: addRes._id,
+    alreadyResponded: false,
+    status: 'accepted',
+    inviteStatus: currentStatus === INVITE_STATE.OPEN ? INVITE_STATE.ACCEPTED : currentStatus
+  })
 }
 
 async function teamFriendlyStats(event) {
@@ -1344,6 +1780,579 @@ async function listTeamVenues(event) {
   return ok({ venues })
 }
 
+// ======== 报名 / 签到 / 名单（2026-11-02 用户确认口径）========
+
+// 报名相关通知：取消 / 成局 / 流局 / 开赛前提醒，统一走服务号模板消息（沿用既有模板 ID）
+async function notifyInviteSignups(invite, kind, reason) {
+  const templateId = CONFIG.signinTemplateId || CONFIG.inviteTemplateId
+  const rows = await loadSignupResponses(invite._id, 100)
+  const targets = rows.filter(isActiveSignup)
+  const firstText = {
+    cancelled: `「${text(invite.teamName)}」的约球已取消`,
+    closed: `「${text(invite.teamName)}」的约球已关闭`,
+    confirmed: `「${text(invite.teamName)}」的约球已成局`,
+    reminder: '约球开赛提醒'
+  }[kind] || '约球通知'
+  const remarkText = {
+    cancelled: reason ? `取消原因：${reason}` : '本场约球已取消，无需到场',
+    closed: reason ? `关闭原因：${reason}` : '本场约球已流局，无需到场',
+    confirmed: '比赛已确认，请按时到场',
+    reminder: '记得带上球衣和护具'
+  }[kind] || ''
+
+  let sent = 0
+  let skipped = 0
+  let failed = 0
+  for (const row of targets) {
+    const openid = await resolveOpenidByPhone(row.phoneKey || row.userPhone, row.userId)
+    if (!openid || !templateId) { skipped += 1; continue }
+    try {
+      await sendTemplate(openid, templateId, {
+        first: { value: firstText, color: kind === 'cancelled' || kind === 'closed' ? '#E53935' : '#2E7D32' },
+        keyword1: { value: text(invite.teamName) },
+        keyword2: { value: `${text(invite.matchDate)} ${text(invite.matchTime)}`.trim() },
+        keyword3: { value: text(invite.venue) || '待确认' },
+        keyword4: { value: remarkText },
+        remark: { value: '点击查看约球详情 ›', color: '#888888' }
+      }, text(invite.signinUrl) || '')
+      sent += 1
+    } catch (error) {
+      failed += 1
+    }
+    if (sent && sent % 5 === 0) await sleep(300)
+  }
+  console.log(`[friendly] notify signups invite=${text(invite._id)} kind=${kind} sent=${sent} skipped=${skipped} failed=${failed}`)
+  return { kind, total: targets.length, sent, skipped, failed, templateConfigured: Boolean(templateId) }
+}
+
+// 球员在 H5 报名：姓名 + 手机号必填，按手机号幂等；最后一席用条件更新防超卖
+async function signUpInvite(event) {
+  const token = text(event.token)
+  const inviteId = text(event.inviteId)
+  const userName = text(event.userName).slice(0, 20)
+  const userPhone = phoneDigits(event.userPhone)
+  const side = text(event.side) === 'opponent' ? 'opponent' : 'own'
+
+  if (!token && !inviteId) return fail('INVALID_PARAM', '缺少邀约凭证')
+  if (!userName) return fail('INVALID_PARAM', '请填写姓名')
+  if (!isMainlandPhone(userPhone)) return fail('INVALID_PARAM', '请填写正确的 11 位手机号')
+
+  const invite = token ? await loadInviteByToken(token) : await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在或已取消')
+  await ensureInviteStatus(invite)
+
+  const state = inviteSignupState(invite)
+  if (TERMINAL_STATES.indexOf(state.status) >= 0) return fail('CLOSED', state.signupClosedReason || '当前不可报名')
+  if (state.expired) return fail('CLOSED', '已过报名截止时间')
+  if (state.full) return fail('FULL', '报名人数已满')
+
+  const rows = await loadSignupResponses(invite._id, 100)
+  const mine = rows.find(row => text(row.kind) === RESPONSE_KIND.SIGNUP && phoneDigits(row.phoneKey) === userPhone)
+  if (mine && [SIGNUP_STATUS.ACTIVE, SIGNUP_STATUS.PRESENT].indexOf(text(mine.status)) >= 0) {
+    return ok({
+      alreadySignedUp: true,
+      signupId: text(mine._id),
+      status: text(mine.status),
+      statusText: signupStatusText(mine.status),
+      signupCount: state.signupCount,
+      signupCountKnown: state.signupCountKnown,
+      maxPlayers: state.maxPlayers
+    })
+  }
+
+  await ensureInviteCounters(invite, rows)
+  const maxPlayers = Number(invite.maxPlayers) || 50
+  const guard = await db.collection(INVITES_COLLECTION)
+    .where({ _id: invite._id, status: _.in(SIGNUP_ACTIVE_STATES), signupCount: _.lt(maxPlayers) })
+    .update({ data: { signupCount: _.inc(1), lastSignupAt: new Date() } })
+  if (!guard || !guard.stats || guard.stats.updated !== 1) {
+    return fail('FULL', '报名人数已满')
+  }
+
+  const payload = {
+    inviteId: invite._id,
+    userId: '',
+    userName,
+    userPhone: maskPhone(userPhone),
+    phoneKey: userPhone,
+    teamId: '',
+    teamName: '',
+    kind: RESPONSE_KIND.SIGNUP,
+    side,
+    status: SIGNUP_STATUS.ACTIVE,
+    source: text(event.source) || 'h5_signup',
+    createdAt: new Date(),
+    respondedAt: new Date()
+  }
+
+  let signupId = ''
+  try {
+    if (mine) {
+      await db.collection(RESPONSES_COLLECTION).doc(mine._id).update({
+        data: {
+          userName, userPhone: maskPhone(userPhone), phoneKey: userPhone, side,
+          status: SIGNUP_STATUS.ACTIVE, source: text(event.source) || 'h5_signup',
+          createdAt: new Date(), respondedAt: new Date(), cancelledAt: ''
+        }
+      })
+      signupId = text(mine._id)
+    } else {
+      const addRes = await db.collection(RESPONSES_COLLECTION).add({ data: payload })
+      signupId = text(addRes._id)
+    }
+  } catch (error) {
+    // 写响应失败要回滚占位，避免名额被永久占用
+    await db.collection(INVITES_COLLECTION).doc(invite._id).update({ data: { signupCount: _.inc(-1) } }).catch(() => null)
+    return fail('DATA_WRITE_FAILED', '报名失败，请重试')
+  }
+
+  // 返回最新计数：条件更新后重新读一次，避免把本地旧值当结果回给前端
+  const fresh = (await loadInviteById(invite._id)) || invite
+  const latest = inviteSignupState(fresh)
+  return ok({
+    signupId,
+    alreadySignedUp: false,
+    status: SIGNUP_STATUS.ACTIVE,
+    statusText: signupStatusText(SIGNUP_STATUS.ACTIVE),
+    signupCount: latest.signupCount,
+    signupCountKnown: latest.signupCountKnown,
+    maxPlayers
+  })
+}
+
+// 球员在 H5 取消报名：按手机号定位，释放名额
+async function cancelInviteSignup(event) {
+  const token = text(event.token)
+  const inviteId = text(event.inviteId)
+  const userPhone = phoneDigits(event.userPhone)
+  if (!token && !inviteId) return fail('INVALID_PARAM', '缺少邀约凭证')
+  if (!isMainlandPhone(userPhone)) return fail('INVALID_PARAM', '请填写报名时使用的手机号')
+
+  const invite = token ? await loadInviteByToken(token) : await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在或已取消')
+
+  const rows = await loadSignupResponses(invite._id, 100)
+  const mine = rows.find(row => text(row.kind) === RESPONSE_KIND.SIGNUP && phoneDigits(row.phoneKey) === userPhone)
+  if (!mine) return fail('NOT_FOUND', '没有找到这条报名记录')
+  const currentStatus = text(mine.status)
+  if (currentStatus === SIGNUP_STATUS.CANCELLED || currentStatus === SIGNUP_STATUS.REMOVED) {
+    return ok({ signupId: text(mine._id), status: currentStatus, statusText: signupStatusText(currentStatus), already: true })
+  }
+
+  await db.collection(RESPONSES_COLLECTION).doc(mine._id).update({
+    data: { status: SIGNUP_STATUS.CANCELLED, cancelledAt: new Date(), cancelReason: text(event.reason).slice(0, 40) }
+  })
+  if (currentStatus === SIGNUP_STATUS.ACTIVE || currentStatus === SIGNUP_STATUS.PRESENT) {
+    const updated = await db.collection(INVITES_COLLECTION)
+      .where({ _id: invite._id, signupCount: _.gt(0) })
+      .update({ data: { signupCount: _.inc(-1) } })
+    if (currentStatus === SIGNUP_STATUS.PRESENT) {
+      await db.collection(INVITES_COLLECTION)
+        .where({ _id: invite._id, checkinCount: _.gt(0) })
+        .update({ data: { checkinCount: _.inc(-1) } })
+    }
+    if (!updated || !updated.stats || updated.stats.updated !== 1) {
+      console.warn('[friendly] cancel signup count guard miss invite=' + text(invite._id))
+    }
+  }
+
+  const fresh = (await loadInviteById(invite._id)) || invite
+  const state = inviteSignupState(fresh)
+  return ok({
+    signupId: text(mine._id),
+    status: SIGNUP_STATUS.CANCELLED,
+    statusText: signupStatusText(SIGNUP_STATUS.CANCELLED),
+    signupCount: state.signupCount,
+    signupCountKnown: state.signupCountKnown
+  })
+}
+
+// H5 查看自己的报名状态
+async function getMyInviteStatus(event) {
+  const token = text(event.token)
+  const inviteId = text(event.inviteId)
+  const userPhone = phoneDigits(event.userPhone)
+  if (!token && !inviteId) return fail('INVALID_PARAM', '缺少邀约凭证')
+  if (!isMainlandPhone(userPhone)) return fail('INVALID_PARAM', '请填写报名时使用的手机号')
+  const invite = token ? await loadInviteByToken(token) : await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在或已取消')
+  const rows = await loadSignupResponses(invite._id, 100)
+  const mine = rows.find(row => text(row.kind) === RESPONSE_KIND.SIGNUP && phoneDigits(row.phoneKey) === userPhone)
+  const state = inviteSignupState(invite)
+  return ok({
+    inviteId: text(invite._id),
+    teamName: text(invite.teamName),
+    matchDate: text(invite.matchDate),
+    matchTime: text(invite.matchTime),
+    venue: text(invite.venue),
+    status: state.status,
+    statusText: state.statusText,
+    canSignUp: state.canSignUp,
+    signupClosedReason: state.signupClosedReason,
+    signupCount: state.signupCount,
+    signupCountKnown: state.signupCountKnown,
+    maxPlayers: state.maxPlayers,
+    deadline: state.deadline,
+    mySignup: mine
+      ? {
+        signupId: text(mine._id),
+        userName: text(mine.userName),
+        side: text(mine.side),
+        status: text(mine.status),
+        statusText: signupStatusText(mine.status),
+        canCancel: [SIGNUP_STATUS.ACTIVE, SIGNUP_STATUS.PRESENT].indexOf(text(mine.status)) >= 0 &&
+          TERMINAL_STATES.indexOf(state.status) < 0
+      }
+      : null
+  })
+}
+
+// 球队端管理页：报名名单（分页 + 角色区分）
+async function listInviteSignups(event) {
+  const inviteId = text(event.inviteId)
+  if (!inviteId) return fail('INVALID_PARAM', '缺少邀约 ID')
+  const caller = await resolveCallerIdentity()
+  const invite = await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在')
+  const permission = await assertInviteManager(invite, caller)
+  if (!permission.ok) return permission.result
+
+  const pageSize = Math.min(50, Math.max(5, Number(event.pageSize) || 20))
+  const page = Math.max(1, Number(event.page) || 1)
+  const filter = ['all', 'signup', 'present', 'team'].indexOf(text(event.filter)) >= 0 ? text(event.filter) : 'all'
+  const withPhone = event.withPhone === true
+
+  const rows = await loadSignupResponses(invite._id, 100)
+  const scanLimited = rows.length >= 100
+  const decorated = rows.map(row => {
+    const kind = responseKindOf(row)
+    const status = text(row.status)
+    const isPresent = status === SIGNUP_STATUS.PRESENT
+    return {
+      responseId: text(row._id),
+      kind,
+      kindText: kind === RESPONSE_KIND.TEAM ? '队伍应战' : '球员报名',
+      side: text(row.side),
+      sideText: text(row.side) === 'opponent' ? '对方' : (kind === RESPONSE_KIND.TEAM ? '对方球队' : '本方'),
+      userName: text(row.userName),
+      teamId: text(row.teamId),
+      teamName: text(row.teamName),
+      phoneMasked: text(row.userPhone) || maskPhone(row.phoneKey),
+      phoneFull: withPhone ? phoneDigits(row.phoneKey) : '',
+      status,
+      statusText: kind === RESPONSE_KIND.TEAM
+        ? (status === 'accepted' ? '已接战' : (status === 'rejected' ? '无法应战' : signupStatusText(status)))
+        : signupStatusText(status),
+      present: isPresent,
+      source: text(row.source),
+      proxy: row.proxy === true,
+      createdAt: row.createdAt || row.respondedAt || null
+    }
+  })
+
+  const counts = {
+    all: decorated.length,
+    signup: decorated.filter(item => item.kind === RESPONSE_KIND.SIGNUP && [SIGNUP_STATUS.ACTIVE, SIGNUP_STATUS.PRESENT].indexOf(item.status) >= 0).length,
+    present: decorated.filter(item => item.present).length,
+    team: decorated.filter(item => item.kind === RESPONSE_KIND.TEAM).length
+  }
+  const filtered = filter === 'all' ? decorated
+    : filter === 'signup' ? decorated.filter(item => item.kind === RESPONSE_KIND.SIGNUP && [SIGNUP_STATUS.ACTIVE, SIGNUP_STATUS.PRESENT].indexOf(item.status) >= 0)
+      : filter === 'present' ? decorated.filter(item => item.present)
+        : decorated.filter(item => item.kind === RESPONSE_KIND.TEAM)
+
+  const start = (page - 1) * pageSize
+  const state = inviteSignupState(invite)
+  return ok({
+    inviteId: text(invite._id),
+    invite: {
+      teamId: text(invite.teamId),
+      teamName: text(invite.teamName),
+      opponentName: text(invite.opponentName),
+      matchDate: text(invite.matchDate),
+      matchTime: text(invite.matchTime),
+      venue: text(invite.venue),
+      venueAddress: text(invite.venueAddress),
+      deadline: state.deadline,
+      status: state.status,
+      statusText: state.statusText,
+      maxPlayers: state.maxPlayers,
+      signupCount: state.signupCount,
+      signupCountKnown: state.signupCountKnown,
+      checkinCount: state.checkinCount,
+      checkinCountKnown: state.checkinCountKnown,
+      acceptedCount: state.acceptedCount,
+      acceptedTeamName: text(invite.acceptedTeamName),
+      cancelReason: text(invite.cancelReason),
+      closeReason: text(invite.closeReason),
+      signinUrl: text(invite.signinUrl),
+      canSignUp: state.canSignUp,
+      signupClosedReason: state.signupClosedReason,
+      terminal: state.terminal
+    },
+    rows: filtered.slice(start, start + pageSize),
+    counts,
+    filter,
+    page,
+    pageSize,
+    total: filtered.length,
+    hasMore: start + pageSize < filtered.length,
+    scanLimited
+  })
+}
+
+// 管理页勾选签到 / 取消签到（幂等）
+async function checkInInviteSignup(event) {
+  const inviteId = text(event.inviteId)
+  const responseId = text(event.responseId)
+  if (!inviteId || !responseId) return fail('INVALID_PARAM', '缺少邀约或报名记录')
+  const caller = await resolveCallerIdentity()
+  const invite = await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在')
+  const permission = await assertInviteManager(invite, caller)
+  if (!permission.ok) return permission.result
+  // 签到不受报名截止时间限制（比赛日现场勾选可能已过报名截止），但终态邀约不得再签到
+  if (TERMINAL_STATES.indexOf(inviteStatusOf(invite)) >= 0) {
+    return fail('CLOSED', inviteStatusText(inviteStatusOf(invite)) + '的邀约不可再签到')
+  }
+
+  const res = await db.collection(RESPONSES_COLLECTION).doc(responseId).get().catch(() => null)
+  const row = res && res.data
+  if (!row || text(row.inviteId) !== inviteId) return fail('NOT_FOUND', '报名记录不存在')
+  if (text(row.kind) !== RESPONSE_KIND.SIGNUP) return fail('INVALID_DATA', '只有球员报名可以签到')
+  const wantPresent = event.present === false ? false : true
+  const currentStatus = text(row.status)
+  if ([SIGNUP_STATUS.CANCELLED, SIGNUP_STATUS.REMOVED].indexOf(currentStatus) >= 0) {
+    return fail('INVALID_DATA', '该报名已取消或被移出，不能签到')
+  }
+  const isPresent = currentStatus === SIGNUP_STATUS.PRESENT
+  if (isPresent === wantPresent) {
+    return ok({ responseId, present: isPresent, already: true, checkinCount: countOrNull(invite.checkinCount) })
+  }
+
+  await ensureInviteCounters(invite, await loadSignupResponses(invite._id, 100))
+  const maxPlayers = Number(invite.maxPlayers) || 50
+  if (wantPresent) {
+    const guard = await db.collection(INVITES_COLLECTION)
+      .where({ _id: invite._id, checkinCount: _.lt(maxPlayers) })
+      .update({ data: { checkinCount: _.inc(1) } })
+    if (!guard || !guard.stats || guard.stats.updated !== 1) return fail('FULL', '签到人数已达上限')
+    await db.collection(RESPONSES_COLLECTION).doc(responseId).update({
+      data: { status: SIGNUP_STATUS.PRESENT, checkedInAt: new Date(), checkedInBy: caller.userId }
+    })
+  } else {
+    const guard = await db.collection(INVITES_COLLECTION)
+      .where({ _id: invite._id, checkinCount: _.gt(0) })
+      .update({ data: { checkinCount: _.inc(-1) } })
+    if (!guard || !guard.stats || guard.stats.updated !== 1) {
+      console.warn('[friendly] uncheck guard miss invite=' + inviteId)
+    }
+    await db.collection(RESPONSES_COLLECTION).doc(responseId).update({
+      data: { status: SIGNUP_STATUS.ACTIVE, checkedInAt: '', checkedInBy: '' }
+    })
+  }
+
+  const fresh = (await loadInviteById(invite._id)) || invite
+  const state = inviteSignupState(fresh)
+  return ok({
+    responseId,
+    present: wantPresent,
+    already: false,
+    checkinCount: state.checkinCount,
+    checkinCountKnown: state.checkinCountKnown
+  })
+}
+
+// 管理页代签：现场到场但没在 H5 报名的人，只计入签到数（不增加报名数）
+async function proxyCheckInInvite(event) {
+  const inviteId = text(event.inviteId)
+  const userName = text(event.userName).slice(0, 20)
+  if (!inviteId) return fail('INVALID_PARAM', '缺少邀约 ID')
+  if (!userName) return fail('INVALID_PARAM', '请填写到场球员姓名')
+  const caller = await resolveCallerIdentity()
+  const invite = await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在')
+  const permission = await assertInviteManager(invite, caller)
+  if (!permission.ok) return permission.result
+  if (TERMINAL_STATES.indexOf(inviteStatusOf(invite)) >= 0) {
+    return fail('CLOSED', inviteStatusText(inviteStatusOf(invite)) + '的邀约不可再代签')
+  }
+
+  const userPhone = phoneDigits(event.userPhone)
+  const rows = await loadSignupResponses(invite._id, 100)
+  const existing = userPhone
+    ? rows.find(row => text(row.kind) === RESPONSE_KIND.SIGNUP && phoneDigits(row.phoneKey) === userPhone)
+    : null
+  if (existing && [SIGNUP_STATUS.ACTIVE, SIGNUP_STATUS.PRESENT].indexOf(text(existing.status)) >= 0) {
+    // 已有报名：代签等价于勾选签到
+    return checkInInviteSignup(Object.assign({}, event, { responseId: text(existing._id), present: true }))
+  }
+
+  await ensureInviteCounters(invite, rows)
+  const guard = await db.collection(INVITES_COLLECTION)
+    .where({ _id: invite._id, checkinCount: _.lt(Number(invite.maxPlayers) || 50) })
+    .update({ data: { checkinCount: _.inc(1) } })
+  if (!guard || !guard.stats || guard.stats.updated !== 1) return fail('FULL', '签到人数已达上限')
+
+  const addRes = await db.collection(RESPONSES_COLLECTION).add({
+    data: {
+      inviteId: invite._id,
+      userId: '',
+      userName,
+      userPhone: userPhone ? maskPhone(userPhone) : '',
+      phoneKey: userPhone,
+      teamId: '',
+      teamName: '',
+      kind: RESPONSE_KIND.SIGNUP,
+      side: text(event.side) === 'opponent' ? 'opponent' : 'own',
+      status: SIGNUP_STATUS.PRESENT,
+      source: 'proxy',
+      proxy: true,
+      checkedInAt: new Date(),
+      checkedInBy: caller.userId,
+      createdAt: new Date(),
+      respondedAt: new Date()
+    }
+  })
+
+  const fresh = (await loadInviteById(invite._id)) || invite
+  const state = inviteSignupState(fresh)
+  return ok({
+    responseId: text(addRes._id),
+    present: true,
+    proxy: true,
+    checkinCount: state.checkinCount,
+    checkinCountKnown: state.checkinCountKnown
+  })
+}
+
+// 管理页移除报名（不动已审核的历史，只解绑本条报名）
+async function removeInviteSignup(event) {
+  const inviteId = text(event.inviteId)
+  const responseId = text(event.responseId)
+  if (!inviteId || !responseId) return fail('INVALID_PARAM', '缺少邀约或报名记录')
+  const caller = await resolveCallerIdentity()
+  const invite = await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在')
+  const permission = await assertInviteManager(invite, caller)
+  if (!permission.ok) return permission.result
+
+  const res = await db.collection(RESPONSES_COLLECTION).doc(responseId).get().catch(() => null)
+  const row = res && res.data
+  if (!row || text(row.inviteId) !== inviteId) return fail('NOT_FOUND', '报名记录不存在')
+  if (text(row.kind) !== RESPONSE_KIND.SIGNUP) return fail('INVALID_DATA', '只有球员报名可以移除')
+  const currentStatus = text(row.status)
+  if (currentStatus === SIGNUP_STATUS.REMOVED) {
+    return ok({ responseId, removed: true, already: true, signupCount: countOrNull(invite.signupCount) })
+  }
+
+  await db.collection(RESPONSES_COLLECTION).doc(responseId).update({
+    data: {
+      status: SIGNUP_STATUS.REMOVED,
+      removedAt: new Date(),
+      removedBy: caller.userId,
+      removeReason: text(event.reason).slice(0, 40)
+    }
+  })
+  if ([SIGNUP_STATUS.ACTIVE, SIGNUP_STATUS.PRESENT].indexOf(currentStatus) >= 0) {
+    await db.collection(INVITES_COLLECTION)
+      .where({ _id: invite._id, signupCount: _.gt(0) })
+      .update({ data: { signupCount: _.inc(-1) } })
+  }
+  if (currentStatus === SIGNUP_STATUS.PRESENT) {
+    await db.collection(INVITES_COLLECTION)
+      .where({ _id: invite._id, checkinCount: _.gt(0) })
+      .update({ data: { checkinCount: _.inc(-1) } })
+  }
+
+  const fresh = (await loadInviteById(invite._id)) || invite
+  const state = inviteSignupState(fresh)
+  return ok({
+    responseId,
+    removed: true,
+    already: false,
+    signupCount: state.signupCount,
+    checkinCount: state.checkinCount
+  })
+}
+
+// 状态机推进：成局 / 取消 / 流局，均需发起球队管理者
+async function updateInviteStatus(event, targetStatus) {
+  const inviteId = text(event.inviteId)
+  if (!inviteId) return fail('INVALID_PARAM', '缺少邀约 ID')
+  const caller = await resolveCallerIdentity()
+  const invite = await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在')
+  const permission = await assertInviteManager(invite, caller)
+  if (!permission.ok) return permission.result
+
+  const currentStatus = inviteStatusOf(invite)
+  if (currentStatus === targetStatus) {
+    return ok({ inviteId, status: currentStatus, statusText: inviteStatusText(currentStatus), already: true })
+  }
+  await ensureInviteStatus(invite)
+  if (TERMINAL_STATES.indexOf(currentStatus) >= 0) {
+    return fail('CLOSED', '当前状态为' + inviteStatusText(currentStatus) + '，不可再变更')
+  }
+  const allowedFrom = targetStatus === INVITE_STATE.CONFIRMED
+    ? [INVITE_STATE.OPEN, INVITE_STATE.ACCEPTED]
+    : [INVITE_STATE.OPEN, INVITE_STATE.ACCEPTED, INVITE_STATE.CONFIRMED]
+  if (allowedFrom.indexOf(currentStatus) < 0) return fail('CLOSED', '当前状态不可变更为' + inviteStatusText(targetStatus))
+
+  const reason = text(event.reason).slice(0, 40)
+  const patch = {
+    status: targetStatus,
+    statusUpdatedAt: new Date(),
+    statusUpdatedBy: caller.userId
+  }
+  if (targetStatus === INVITE_STATE.CANCELLED) patch.cancelReason = reason
+  if (targetStatus === INVITE_STATE.CLOSED) patch.closeReason = reason
+  if (targetStatus === INVITE_STATE.CONFIRMED) patch.confirmedAt = new Date()
+
+  const guard = await db.collection(INVITES_COLLECTION)
+    .where({ _id: invite._id, status: currentStatus })
+    .update({ data: patch })
+  if (!guard || !guard.stats || guard.stats.updated !== 1) {
+    return fail('CONFLICT', '状态已被其他操作变更，请刷新后重试')
+  }
+
+  // 取消 / 流局 / 成局都要通知已报名球员（用户确认口径：取消必须通知）
+  const notify = await notifyInviteSignups(invite, targetStatus, reason).catch(error => ({
+    kind: targetStatus, total: 0, sent: 0, skipped: 0, failed: 0, error: error && error.message
+  }))
+
+  return ok({
+    inviteId,
+    status: targetStatus,
+    statusText: inviteStatusText(targetStatus),
+    from: currentStatus,
+    reason,
+    notify
+  })
+}
+
+async function confirmInvite(event) { return updateInviteStatus(event, INVITE_STATE.CONFIRMED) }
+async function cancelInvite(event) { return updateInviteStatus(event, INVITE_STATE.CANCELLED) }
+async function abandonInvite(event) { return updateInviteStatus(event, INVITE_STATE.CLOSED) }
+
+// 开赛前提醒报名球员（管理页手动触发；定时触发器未配置，需线上单独登记）
+async function remindInviteSignups(event) {
+  const inviteId = text(event.inviteId)
+  if (!inviteId) return fail('INVALID_PARAM', '缺少邀约 ID')
+  const caller = await resolveCallerIdentity()
+  const invite = await loadInviteById(inviteId)
+  if (!invite) return fail('NOT_FOUND', '邀约不存在')
+  const permission = await assertInviteManager(invite, caller)
+  if (!permission.ok) return permission.result
+  if (TERMINAL_STATES.indexOf(inviteStatusOf(invite)) >= 0) return fail('CLOSED', '该邀约已结束，无需提醒')
+
+  const notify = await notifyInviteSignups(invite, 'reminder', text(event.note)).catch(error => ({
+    kind: 'reminder', total: 0, sent: 0, skipped: 0, failed: 0, error: error && error.message
+  }))
+  await db.collection(INVITES_COLLECTION).doc(invite._id).update({ data: { remindedAt: new Date() } }).catch(() => null)
+  return ok({ inviteId, notify })
+}
+
 // ======== 主入口 ========
 exports.main = async (event, context) => {
   const action = text(event.action) || text(event.type)
@@ -1369,7 +2378,31 @@ exports.main = async (event, context) => {
     case 'upsertTeamVenue': return upsertTeamVenue(event)
     case 'deleteTeamVenue': return deleteTeamVenue(event)
     case 'setDefaultTeamVenue': return setDefaultTeamVenue(event)
-    case 'healthCheck': return ok({ ok: true, version: '1.7.0', battleCryStyles: Object.keys(BATTLE_CRY_PRESETS), aiEnabled: typeof cloud.ai === 'function', aiModels: CONFIG.aiModels, aiImageModel: CONFIG.aiImageModel, configured: Boolean(CONFIG.bridgeUrl) })
+    // 报名（H5 姓名+手机号）/ 签到（管理页勾选）/ 名单 / 状态机
+    case 'signUpInvite': return signUpInvite(event)
+    case 'cancelInviteSignup': return cancelInviteSignup(event)
+    case 'getMyInviteStatus': return getMyInviteStatus(event)
+    case 'listInviteSignups': return listInviteSignups(event)
+    case 'checkInInviteSignup': return checkInInviteSignup(event)
+    case 'proxyCheckInInvite': return proxyCheckInInvite(event)
+    case 'removeInviteSignup': return removeInviteSignup(event)
+    case 'confirmInvite': return confirmInvite(event)
+    case 'cancelInvite': return cancelInvite(event)
+    case 'abandonInvite': return abandonInvite(event)
+    case 'remindInviteSignups': return remindInviteSignups(event)
+    case 'healthCheck': return ok({
+      ok: true,
+      version: '1.8.0',
+      actions: FRIENDLY_ACTIONS,
+      inviteStates: Object.values(INVITE_STATE),
+      battleCryStyles: Object.keys(BATTLE_CRY_PRESETS),
+      aiEnabled: typeof cloud.ai === 'function',
+      aiModels: CONFIG.aiModels,
+      aiImageModel: CONFIG.aiImageModel,
+      configured: Boolean(CONFIG.bridgeUrl),
+      templateConfigured: Boolean(CONFIG.inviteTemplateId || CONFIG.signinTemplateId),
+      miniProgramSubscribe: 'not-enabled' // 小程序订阅消息接口位（本次未接，预留给后续）
+    })
     default: return fail('UNKNOWN_ACTION', `未知 action: ${action}`)
   }
 }

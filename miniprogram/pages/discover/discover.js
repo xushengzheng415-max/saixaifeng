@@ -1288,40 +1288,19 @@ Page({
     })
   },
 
-  // 发起方查看应战队伍（listSignins 已加鉴权，只回传脱敏字段）
+  // 发起方管理约球：进入球队端管理页
+  // （报名名单、现场勾签到、代签、移除报名、取消邀约、成局 / 流局、提醒、复制报名链接）
   onViewInviteResponses: function (event) {
     var id = String((event.currentTarget.dataset || {}).id || '')
     if (!id) return
-    wx.showLoading({ title: '读取应战…', mask: true })
-    wx.cloud.callFunction({
-      name: 'friendlyMatchCenter',
-      data: { action: 'listSignins', inviteId: id }
-    }).then(function (response) {
-      wx.hideLoading()
-      var result = (response && response.result) || {}
-      if (!result.ok) {
-        var code = String(result.code || '')
-        var message = String(result.message || '应战列表读取失败')
-        if (code === 'UNKNOWN_ACTION') message = '应战列表接口待发布'
-        else if (code === 'FORBIDDEN') message = '只有发起球队可以查看应战队伍'
-        wx.showModal({ title: '应战队伍', content: message, showCancel: false })
-        return
-      }
-      var rows = (result.data && result.data.responses) || []
-      if (!rows.length) {
-        wx.showModal({ title: '应战队伍', content: '还没有球队应战。可把海报分享到微信群，扩大到更多球队。', showCancel: false })
-        return
-      }
-      var lines = rows.slice(0, 8).map(function (row) {
-        return (String(row.teamName || '') || '球队待核验') + (row.status === 'accepted' ? ' · 已应战' : ' · 已签到')
-      })
-      if (rows.length > 8) lines.push('等共 ' + rows.length + ' 支球队')
-      wx.showModal({ title: '应战队伍', content: lines.join('\n'), showCancel: false })
-    }).catch(function (error) {
-      wx.hideLoading()
-      wx.showModal({ title: '应战队伍', content: '读取失败，请稍后重试。', showCancel: false })
-      console.warn('[discover] 应战列表失败', error && (error.errMsg || error.message))
+    wx.navigateTo({
+      url: '/pages/discover/invite-manage/invite-manage?inviteId=' + encodeURIComponent(id)
     })
+  },
+
+  // 卡片整卡点击与「管理」按钮共用同一入口
+  onOpenInviteManage: function (event) {
+    this.onViewInviteResponses(event)
   },
 
   // ===== 页签与筛选 =====

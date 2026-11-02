@@ -1,0 +1,88 @@
+# 发现板块约球系统完善 · 发布清单（2026-11-02）
+
+状态：**本地开发与自检完成，未提交推送、未合并 main/preview、未部署**。
+代码分支 `feature/friendly-match-complete-20261102`（worktree `E:\Documents\sxf-football-wt-friendly`，基线 `main e5bbe66a`）。
+数据模型与接口口径见 [`../FRIENDLY_MATCH_DATA_MODEL_2026-11-02.md`](../FRIENDLY_MATCH_DATA_MODEL_2026-11-02.md)。
+
+## 一、变更文件
+
+| 文件 | 变更 |
+| --- | --- |
+| `cloudfunctions/friendlyMatchCenter/index.js` | +1147/−114 行：新增 11 个 action、加固 `createInvite`/`getInvite`/`respondInvite`/`signIn`/`listSignins`/`listTeamInvites`/`listPublicInvites`/`respondPublicInvite`；`healthCheck` 暴露 action 清单与 `miniProgramSubscribe:'not-enabled'` |
+| `service-account-h5/friendly-signin.html` | 重写为 H5 报名页（报名 / 查看本人报名 / 取消报名 / 接战） |
+| `miniprogram/pages/discover/discover.js`、`.wxml`、`.wxss`、`discover-model.js` | 本队卡进入管理页；三个数字拆分展示，「待确认」口径；公开卡显示服务端状态 |
+| `miniprogram/pages/discover/invite-create/invite-create.{js,wxml,wxss}` | canvas 海报（含 H5 报名二维码）、保存相册、复制报名链接、进入管理名单 |
+| `miniprogram/pages/discover/invite-manage/*`（新增） | 球队端管理页：名单分页筛选、勾签到/取消签到、代签、移除报名、成局/取消/流局、现场提醒 |
+| `miniprogram/pages/discover/invite-qr.js`（新增） | 纯 JS 二维码编码器（字节模式 ECC M，版本 1~10），不新增依赖 |
+| `miniprogram/app.json` | pages 数组在 `invite-create` 后追加 `pages/discover/invite-manage/invite-manage`，其余保持 main 原内容 |
+| `tools/check-invite-qr.py`、`tools/test-invite-qr.cjs` | 二维码编码交叉验证（Python `qrcode` 逐模块比对） |
+| `tools/test-friendly-invite-flow.cjs` | 云端链路内存桩自检，83 项 |
+| `docs/FRIENDLY_MATCH_DATA_MODEL_2026-11-02.md`、本篇 | 数据模型与发布登记 |
+
+未改动：`cloudfunctions/webLoginApi`（H5 走既有 `friendlySignInWorkflow` relay，新增 action 无需重发）、`cloudfunctions/friendlyMatchCenter/package.json`、`package-lock.json`、`data-center/`、其他云函数、PC 后台、平台后台。
+
+## 二、云函数差量发布清单
+
+### 2.1 线上现状（只读读回，2026-11-02）
+
+| 项 | 值 |
+| --- | --- |
+| 函数 | `friendlyMatchCenter`，上次修改 2026-10-26 22:46:19，状态「部署完成」 |
+| 运行时 / 内存 / 超时 | Nodejs18.15 / 256 MB / 120 s |
+| 自动安装依赖 | **FALSE**（node_modules 随包发布） |
+| 环境变量 | **无**（`SXF_INVITE_TEMPLATE_ID`、`SXF_SIGNIN_TEMPLATE_ID` 均未配置） |
+| 触发器 | 无 |
+| 线上包 | `index.js` 52,998 B SHA-256 `74826B0A…B8355`；`package.json`/`package-lock.json` 与本地**完全一致**（SHA-256 `5AA0FDF6…`、`85C4C847…`）；`node_modules` 5,829 文件 / 约 22.9 MB；**无 `data-center/` 目录** |
+| 线上 action 数 | 20（含 `healthCheck`） |
+
+只读下载目录：`E:\Documents\_sxf-online-baseline\friendlyMatchCenter-20261102`（仓库外，不提交）。
+
+### 2.2 线上包与 main 基线比对
+
+- 线上 `index.js` → `main e5bbe66a` 的 `index.js`：`+199 / −25`，差异集中在
+  `shanghaiEpoch`、`cityKey`、`teamCityOf`、`teamLogoOf`、`loadTeamBriefs`、`listPublicInvites`、`respondPublicInvite`
+  七处；其中 **`listPublicInvites`、`respondPublicInvite` 从未上线**（线上是 2026-10-26 版本）。
+- `main e5bbe66a` → 本次工作副本：`+1147 / −114`，只落在邀约相关函数与主入口注册，未触碰 AI 生文/生图、比赛记录、场地管理等无关段落。
+- 线上包缺 `data-center/`，而 `main` 的 `teamFriendlyStats` 会 `require('./data-center/team-history.cjs')`
+  （函数内懒加载）。**只替换 `index.js` 会让 `teamFriendlyStats` 抛 MODULE_NOT_FOUND**，必须同时补依赖闭包。
+- 依赖闭包（`team-history.cjs` → `hub-contract.cjs`、`reader.cjs`、动态 `import('./statistics.mjs')`；`statistics.mjs` 无本地依赖）共 4 个文件，取自 main 基线（worktree 内 clean，无 platform-ops 改动）：
+
+| 文件 | 大小 | SHA-256 |
+| --- | --- | --- |
+| `data-center/team-history.cjs` | 9,337 B | `C6BE258B…806BF` |
+| `data-center/hub-contract.cjs` | 8,375 B | `F8E626DA…56A390` |
+| `data-center/reader.cjs` | 2,941 B | `5C9A0494…59DB8` |
+| `data-center/statistics.mjs` | 35,675 B | `7481C3F0…A776EC` |
+
+- **风险声明**：主工作区 `E:\Documents\sxf-football`（`codex/platform-ops`）的
+  `cloudfunctions/friendlyMatchCenter/data-center/` 有未提交改动（`service.cjs` 修改 + 十余个未跟踪模块）。
+  这些改动**不进入本次发布**；本次发布包只从上述 worktree 基线取 4 个文件。
+  同时提醒：`friendlyMatchCenter` 不在 `tools/sync-data-center.mjs` 的 consumers 列表里，
+  其副本是 main 的一次性快照，与 `data-center/shared` 的当前版本不一致（`statistics.mjs`、`reader.cjs` 有差异）。
+  是否把该函数纳入同步治理，需另行决定。
+
+### 2.3 拟发布包组装（最后一步执行，需单独授权）
+
+1. 复制线上基线包到新目录（保留 `node_modules`、`package.json`、`package-lock.json` 原样）：
+   `E:\Documents\_sxf-online-baseline\friendlyMatchCenter-publish-20261102`。
+2. 用本次 `index.js` 覆盖该目录 `index.js`；新建 `data-center/` 并放入上表 4 个文件，其余不动。
+3. 对拟上传目录执行 `node --check index.js`，并对 `data-center/*.cjs/*.mjs` 逐个 `node --check`。
+4. `sxf-cloud football run fn code update friendlyMatchCenter --dir <拟发布目录>`（不改运行环境/内存/超时/环境变量/触发器）。
+5. 更新前后各读一次 `fn detail`，确认 **自动安装依赖仍为 FALSE**；若被 CLI 改写，立即按 AGENTS 受控配置改回 FALSE 并复核。
+6. 回下载线上包，比对 `index.js` 与 4 个 `data-center` 文件 SHA-256，确认 `package.json`/`node_modules` 未变。
+7. 调用 `healthCheck` 读回 `version`、`actions`（应为 33 项，含 11 个新 action）、`inviteStates`（五态）、
+   `templateConfigured`（当前环境变量为空 → 预期 `false`）、`miniProgramSubscribe:'not-enabled'`。
+8. 用测试球队/测试球员走一遍：创建 → H5 报名 → 管理页名单 → 勾签到 → 取消 → 通知统计；不写真实邀约。
+
+### 2.4 其他端口（本次均未发布）
+
+- `service-account-h5/friendly-signin.html`：随服务号 H5 静态资源发布，需与正式站 `/service-account-h5/` 一起上线后再用真实 token 验证。
+- 小程序：`pages/discover/*` 与 `app.json` 变更需重新上传开发版；体验版/正式版按 AGENTS「正式发布后同步测试端」另行处理。
+- PC 后台、平台后台：本次无改动。
+
+## 三、自检结果（本地）
+
+- `node --check`：`friendlyMatchCenter/index.js`、`discover.js`、`discover-model.js`、`invite-create.js`、`invite-manage.js`、`invite-qr.js` 全部通过。
+- `node tools/test-friendly-invite-flow.cjs`：**通过 83 项，失败 0 项**（含 19 段用例：鉴权、脱敏、报名幂等、分页与明文开关、勾签到/代签、接战、人工成局与通知、终态封锁、防超卖、截止校验、历史「待确认」、旧接口 `listSignins` 鉴权、公开列表跨队应战、WXML 表达式合规、事件处理函数对齐）。
+- `node tools/test-invite-qr.cjs` + `python tools/check-invite-qr.py`：3 组样本 × 8 掩码，与 Python `qrcode` 逐模块一致 **27/27**。
+- 未能验证：真机小程序交互与 canvas 导出（未上传开发版）、真实服务号模板消息（环境变量未配置）、真实 H5 线上页面、线上云函数行为（未部署）。

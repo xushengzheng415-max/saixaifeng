@@ -37,9 +37,10 @@
     "pages/invite/invite",
     "pages/workspace/select/select",
     "pages/workspace/switch/switch",
-    "pages/workspace/temp-team/temp-team"
-    ,"pages/workspace/restricted/restricted"
-    ,"pages/common/official-webview"
+    "pages/workspace/temp-team/temp-team",
+    "pages/workspace/restricted/restricted",
+    "pages/common/official-webview",
+    "pages/discover/invite-manage/invite-manage"
   ],
   "window": {
     "backgroundTextStyle": "light",
