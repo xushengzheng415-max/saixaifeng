@@ -286,7 +286,7 @@
       if (current && !ready) note = '当前展示的卡面暂不可用，请重新生成'
       return {
         kind: 'skin', id: String(card.templateId), title: card.title || '卡库皮肤',
-        note: note, thumb: card.backgroundUrl || card.cardUrl || '',
+        note: note, thumb: card.backgroundUrl || '',
         current: current, allowed: ready, locked: !ready,
         stateText: current ? '当前使用' : ready ? '可选' : card.status === 'locked' ? '未解锁' : '待制作',
         revision: Number(card.revision || 0), templateVersion: Number(card.templateVersion || 0),
@@ -449,33 +449,16 @@
     }, extra || {})
   }
 
+  // 背景预览只看卡面本身，不合成球员照片；直接使用后台发布的背景图。
   function previewCard() {
     var settings = state.settings
     if (!settings) return
     var selection = settings.selection
-    if (!settings.tier) { toast('球员积分待核定，暂不能预览'); return }
     if (!selection) { toast('请先选择卡面背景'); return }
-    $('btn-preview').disabled = true
-    var task = selection.kind === 'skin'
-      ? Api.previewPreloadedCard({
-        playerId: settings.playerId,
-        templateId: selection.id,
-        templateVersion: selection.templateVersion,
-        crop: cropValues(),
-        tier: settings.tier
-      })
-      : Api.previewCard(settingsPayload())
-    task.then(function (result) {
-      if (result && result.imageData) {
-        $('preview-image').src = result.imageData
-        show('preview-mask', true)
-      } else {
-        toast('该卡面暂不支持预览，请直接保存')
-      }
-    }).catch(function (error) {
-      if (error.code === 'PLAYER_CARD_BACKGROUND_LOCKED') toast('该背景未解锁')
-      else toast(error.message || '预览失败，请重试')
-    }).then(function () { updateSettingsButtons() })
+    if (!selection.thumb) { toast('该背景暂无预览图，请直接保存'); return }
+    $('preview-image').src = selection.thumb
+    $('preview-image').alt = '卡面背景预览'
+    show('preview-mask', true)
   }
 
   function saveCard() {
