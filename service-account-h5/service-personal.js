@@ -122,7 +122,7 @@
    '<button class="me-pp-entry" data-action="homeParticipationProfile">'+homeIcon('list')+'<span class="me-pp-entry-text"><strong>我的参赛资料</strong><small id="ppProfileNote">赛事 · 组别 · 球队 · 号码</small></span><i aria-hidden="true">›</i></button>'+
    '<button class="me-pp-entry" data-action="homeParticipationPass">'+homeIcon('shield')+'<span class="me-pp-entry-text"><strong>我的电子参赛证</strong><small id="ppPassNote">正式名单通过后可出示</small></span><i aria-hidden="true">›</i></button>'+
    '<button class="me-pp-entry" data-action="homeParticipationInsurance">'+homeIcon('event')+'<span class="me-pp-entry-text"><strong>赛事保险资料</strong><small id="ppInsuranceNote">保单上传 · 可选购买引导</small></span><i aria-hidden="true">›</i></button>'+
-  '</div><p class="me-pp-foot">只显示本人或监护球员的参赛关系，结果以主办方审核的正式名单为准</p></section>'
+  '</div><div id="ppPending" class="me-pp-pending"></div><p class="me-pp-foot">只显示本人或监护球员的参赛关系，结果以主办方审核的正式名单为准</p></section>'
  }
  function loadParticipation(force){
   if(state.view!=='player')return Promise.resolve(null)
@@ -136,13 +136,19 @@
  function participationItems(){return (state.participation&&state.participation.items)||[]}
  function playerParticipation(){return participationItems().filter(function(item){return item.playerId===state.playerId})}
  function paintParticipationHome(failed){
-  var summary=document.getElementById('homeParticipationSummary'),profileNote=document.getElementById('ppProfileNote'),passNote=document.getElementById('ppPassNote'),insNote=document.getElementById('ppInsuranceNote')
+  var summary=document.getElementById('homeParticipationSummary'),profileNote=document.getElementById('ppProfileNote'),passNote=document.getElementById('ppPassNote'),insNote=document.getElementById('ppInsuranceNote'),pendingBox=document.getElementById('ppPending')
   if(!summary||!profileNote||!passNote)return
   var items=playerParticipation(),latest=items[0]||null,eligible=items.filter(function(item){return item.pass&&item.pass.eligible}),pendingIns=items.filter(function(item){return item.insurance&&item.insurance.canUpload})
-  summary.textContent=failed?'暂不可用':items.length?items.length+' 项参赛':'暂无参赛'
+  var pending=(state.participation&&state.participation.pending)||null,pendingCount=(pending&&Number(pending.count))||0
+  summary.textContent=failed?'暂不可用':items.length?items.length+' 项参赛'+(pendingCount?' · 待补 '+pendingCount+' 项':''):(pendingCount?'待补 '+pendingCount+' 项':'暂无参赛')
   profileNote.textContent=failed?'参赛资料暂不可用':latest?latest.tournamentName+' · '+latest.stateText:'报名通过后在此查看参赛资料'
   passNote.textContent=failed?'参赛证暂不可用':eligible.length?eligible.length+' 张可出示':items.length?'正式名单通过后可出示':'暂无可用参赛证'
   if(insNote)insNote.textContent=failed?'保险资料暂不可用':pendingIns.length?pendingIns.length+' 项待上传保单':items.some(function(item){return item.insurance&&item.insurance.required})?'保单已齐或待核对':'本赛事未要求保险'
+  if(pendingBox)pendingBox.innerHTML=(failed||!pendingCount||!pending.items)?'':'<h3 class="pp-sub">待补 '+pendingCount+' 项</h3><ul class="pp-pending-list">'+pending.items.map(pendingRowHtml).join('')+'</ul>'
+ }
+ function pendingRowHtml(task){
+  var detail=[task.teamName,task.playerName||((task.pendingCount||0)>1?task.pendingCount+'名球员':''),task.reason].filter(Boolean).join(' · ')
+  return '<li class="pp-pending-item"><a href="'+esc(task.url)+'"><span><strong>'+esc(task.title||task.kindLabel||'待补资料')+'</strong><small>'+esc(detail||'点击进入补交')+'</small></span><i aria-hidden="true">›</i></a></li>'
  }
  function participationTone(value){return ['ok','pending','warn','muted'].indexOf(value)>=0?value:'muted'}
  function participationFact(label,value){return '<div><span>'+esc(label)+'</span><b>'+esc(value||'—')+'</b></div>'}

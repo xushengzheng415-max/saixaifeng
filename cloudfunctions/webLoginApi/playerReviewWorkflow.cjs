@@ -25,9 +25,30 @@ module.exports=function createWorkflow({cloud,db,secret}){
  async function players(teamId){const all=await read('players',db.command.or([{teamId},{teamCode:teamId}]));return all.filter(p=>!removed(p))}
  async function deliver(task){
   const timestamp=Date.now(),nonce=crypto.randomBytes(16).toString('hex')
-  if(!secret)return {status:'configuration_required',error:'服务号签名未配置；站内通知已创建'}
+  if(!secret)return {status:'queued',channel:'inbox',errorCode:'SERVICE_SIGNATURE_REQUIRED',errorMessage:'服务号签名未配置，微信未发送'}
   const proof=crypto.createHmac('sha256',secret).update(['playerReviewTask',task._id,timestamp,nonce].join('|')).digest('hex')
-  try{const r=await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyPlayerReviewTask',taskId:task._id,bridgeTimestamp:timestamp,bridgeNonce:nonce,bridgeProof:proof}});return r.result&&r.result.data||{status:'failed',error:'微信通知未发送，可重试'}}catch(e){return {status:'failed',error:'微信通知未发送，可重试'}}
+  try{
+   const r=await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyPlayerReviewTask',taskId:task._id,bridgeTimestamp:timestamp,bridgeNonce:nonce,bridgeProof:proof}})
+   const data=r&&r.result&&r.result.data
+   if(data&&data.status)return data
+   return {status:'queued',channel:'inbox',errorCode:text(r&&r.result&&r.result.code)||'SERVICE_NO_RESULT',errorMessage:'微信通道未返回结果'}
+  }catch(e){return {status:'queued',channel:'inbox',errorCode:'SERVICE_CALL_FAILED',errorMessage:text(e&&e.message)||'微信通知未发送'}}
+ }
+ const THROTTLE_MS=10*60*1000
+ const CHANNEL_LABELS={service_subscribe:'服务号订阅通知',service_custom:'服务号客服消息',service_template:'服务号模板消息',inbox:'站内待办'}
+ const FAIL_LABELS={SERVICE_BINDING_REQUIRED:'家长未绑定服务号',BINDING_CONFLICT:'服务号绑定存在冲突',SERVICE_BRIDGE_REQUIRED:'服务号固定出口未配置',SERVICE_SIGNATURE_REQUIRED:'服务号签名未配置',SERVICE_CREDENTIALS_REQUIRED:'服务号凭据未配置',INTERACTION_UNKNOWN:'未记录家长最近互动时间',INTERACTION_EXPIRED:'家长最近互动已超过48小时',TASK_ONLY:'家长未绑定服务号'}
+ function deliveryText(delivery){
+  const status=text(delivery&&delivery.status),channel=text(delivery&&delivery.channel),code=text(delivery&&delivery.errorCode)
+  if(status==='delivered')return '已推送（'+(CHANNEL_LABELS[channel]||'服务号')+'）'
+  if(status==='partial')return '部分接收人已推送，其余已放入站内待办'
+  const reason=code?'（原因：'+(FAIL_LABELS[code]||code)+'）':''
+  return (status==='failed'?'发送失败':'已放入站内待办')+reason
+ }
+ async function recentNotification({tournamentId,teamId,kind,playerId}){
+  try{
+   const rows=await read('player_review_tasks',{tournamentId,kind},{maxRows:500}),windowStart=Date.now()-THROTTLE_MS
+   return rows.filter(row=>row.status==='open'&&text(row.teamId)===text(teamId)&&text(row.playerId)===text(playerId)&&stamp(row.lastNotify&&row.lastNotify.at)>windowStart).sort((a,b)=>stamp(b.lastNotify&&b.lastNotify.at)-stamp(a.lastNotify&&a.lastNotify.at))[0]||null
+  }catch(error){console.warn('[playerReviewWorkflow] throttle lookup skipped:',error.message||error);return null}
  }
  async function createTask({tournament,team,player,kind,reason,actorId,requestId,divisionId}){
   const list=kind==='claim'? (await players(team._id)).filter(p=>!claims(p).length):[player]
@@ -38,7 +59,18 @@ module.exports=function createWorkflow({cloud,db,secret}){
   const id=crypto.createHash('sha256').update([actorId,tournament._id,team._id,player&&player._id||'',kind,requestId].join('|')).digest('hex')
   let task=await get('player_review_tasks',id)
   if(task && task.actorId!==actorId)return fail('TASK_CONFLICT','通知请求冲突，请重试')
+  // 同一球员同一事项 10 分钟内只送一次：重复点击返回上一次真实通道与结果，不重复推送。
+  const throttlePlayerId=kind==='claim'?'':text(player&&player._id)
+  if(task&&stamp(task.lastNotify&&task.lastNotify.at)>Date.now()-THROTTLE_MS){
+   const last=task.lastNotify||{}
+   return {success:true,data:{taskId:id,recipientType,recipientCount:task.recipientUserIds.length,playerCount:task.playerIds.length,dedupe:'recent',throttled:true,channels:{inbox:'exists',serviceAccount:text(last.status)||'queued',channel:text(last.channel)||'inbox'},channel:text(last.channel)||'inbox',delivery:last,message:'刚刚已发送（'+deliveryText(last)+'），请勿重复提醒'}}
+  }
   if(!task){
+   const prior=await recentNotification({tournamentId:tournament._id,teamId:team._id,kind,playerId:throttlePlayerId})
+   if(prior){
+    const last=prior.lastNotify||{}
+    return {success:true,data:{taskId:text(prior._id),recipientType,recipientCount:(prior.recipientUserIds||[]).length,playerCount:(prior.playerIds||[]).length,dedupe:'recent',throttled:true,channels:{inbox:'exists',serviceAccount:text(last.status)||'queued',channel:text(last.channel)||'inbox'},channel:text(last.channel)||'inbox',delivery:last,message:'刚刚已发送（'+deliveryText(last)+'），请勿重复提醒'}}
+   }
    const now=db.serverDate()
    task={_id:id,sport:'football',tournamentId:tournament._id,teamId:team._id,divisionId:text(divisionId),playerId:player&&player._id||'',playerIds:list.map(p=>p._id),kind,reason:text(reason),recipientType,recipientUserIds:recipients,actorId,title:kind==='claim'?'请组织未认领球员认领':kind==='rejected'?'球员资料已驳回':'请补全球员资料',tournamentName:text(tournament.name||tournament.tournamentName),teamName:text(team.name||team.teamName),playerName:text(player&&player.name),status:'open',revision:1,createdAt:now,updateTime:now}
    const data={...task};delete data._id
@@ -50,7 +82,18 @@ module.exports=function createWorkflow({cloud,db,secret}){
    await db.collection('messages').doc(messageId).set({data:{sport:'football',orgId:text(team.orgId||team.organizationId),userId,teamId:team._id,category:'team',title:task.title,subtitle:task.teamName+'：'+(kind==='claim'?task.playerIds.length+'名球员尚未认领，请联系球员或监护人认领':task.playerName+'；'+task.reason),path:'/pages/team/player-detail/player-detail?teamId='+encodeURIComponent(team._id)+'&id='+encodeURIComponent(task.playerId||task.playerIds[0]),webPath:taskUrl(id),taskId:id,dedupeKey:messageId,createTime:task.createdAt,createdAt:task.createdAt,updateTime:db.serverDate()}})
   }
   const service=await deliver(task)
-  return {success:true,data:{taskId:id,recipientType,recipientCount:task.recipientUserIds.length,playerCount:task.playerIds.length,channels:{inbox:'created',serviceAccount:service.status},delivery:service,message:'站内通知已创建'}}
+  const detail=deliveryText(service)
+  // 通道与结果日志只含任务号、通道名和错误码，便于线上只读核对，不含凭据。
+  console.log('[playerReviewWorkflow] delivery',id,JSON.stringify({status:text(service&&service.status),channel:text(service&&service.channel),errorCode:text(service&&service.errorCode)}))
+  // 发送历史：谁在何时提醒了哪个球员的哪件事、走了哪条通道、结果如何，管理员界面据此如实显示。
+  try{
+   const updated=await get('player_review_tasks',id)
+   const history=(Array.isArray(updated&&updated.notifyHistory)?updated.notifyHistory:[]).filter(Boolean).slice(-49)
+   const entry={by:actorId,at:new Date(),kind,reason:text(reason),channel:text(service&&service.channel)||'inbox',status:text(service&&service.status)||'queued',errorCode:text(service&&service.errorCode),message:detail}
+   history.push(entry)
+   await db.collection('player_review_tasks').doc(id).update({data:{notifyHistory:history,lastNotify:entry,lastNotifiedAt:new Date(),updateTime:db.serverDate()}})
+  }catch(error){console.warn('[playerReviewWorkflow] notify history write failed:',error.message||error)}
+  return {success:true,data:{taskId:id,recipientType,recipientCount:task.recipientUserIds.length,playerCount:task.playerIds.length,channels:{inbox:'created',serviceAccount:text(service&&service.status)||'queued',channel:text(service&&service.channel)||'inbox',delivery:service},channel:text(service&&service.channel)||'inbox',delivery:service,message:'站内待办已创建；'+detail}}
  }
  async function organizer(event,context){
   const {tournament,relations,allowedTeam,actorId}=context,action=event.rosterAction
