@@ -30,8 +30,23 @@
 
 线上数据不受本轮前端改动影响。若要拿到新的对阵内容（相邻组交叉 `A1-B2 / C1-D2 / B1-A2 / D1-C2`、三四名赛与决赛的新场序），仍需在该赛事按「重置赛事时间 → 重新保存并确认抽签（会清空旧赛程）→ 生成对阵 → 自动排程 → 下载赛程填写表」重生成；旧对阵属于受保护历史数据，未获授权不做批量替换。
 
+## 对齐重发（正式 + 测试，以本节为准）
+
+首次发布后，正式与测试的线上 `pc-release.json` 仍记录旧的 `sourceCommit`，用户要求直接对齐正式版，故以当前 `main`/`preview` 同一提交 `8b5cf664` 重新构建两站并重发（绝对路径上传，各 407 个文件）：
+
+| 通道 | 入口 | `index.html` SHA-256 | `pc-release.json` |
+|---|---|---|---|
+| 正式 `/admin/` | `/admin/assets/index-DAlGyDTc.js` | `13C8E508…95E0C7` | `sourceCommit=8b5cf664`，`formalBaselineCommit=8b5cf664`，`pcSourceSha256=ef32fb09…`，`sourceDirty=false` |
+| 测试 `/preview/admin/` | `/preview/admin/assets/index-C_zASndt.js` | `FE9B79AD…CC6D456` | `sourceCommit=8b5cf664`，`pcSourceSha256=ef32fb09…`，`sourceDirty=false` |
+
+线上入口与本地构建 SHA-256 逐一相等；入口 JS、填写表所在分块 `TournamentScheduleV2-CU3h4i0U.js`、`pc-release.json` 均 HTTP 200；`check-pc-alignment.mjs --live` 返回 `sourceAligned=true`；`smoke.cjs` 正式与 `--preview` 各 8 项 `passed`。
+
+线上包内代码核对：`TournamentScheduleV2-CU3h4i0U.js` 同时包含 `赛程填写表` 文件名与比较器 `stageRankOf → 轮次 → 小组 → matchNo`，说明线上「下载赛程填写表」用的是新排序规则，而不是旧的 `matchNo` 单键排序。
+
+上一节中 `index-DBtxv7by.js`、`index-PTIQwVZ4.js` 及对应摘要是首次发布记录，已被本节数值取代。
+
 ## 发布过程记录
 
 发布用的临时异常：`sxf-cloud.ps1` 会 `Push-Location` 到仓库根再执行 `tcb`，因此相对路径 `web-admin-vue/dist` 实际取的是根工作区（`codex/platform-ops`）的构建产物。首次预览上传因此写入了错误的构建，已立即用绝对路径重新上传 407 个文件并读回正确入口；正式发布改用绝对路径 `…\schedule-formal-20261102\web-admin-vue\dist`。后续发布一律使用绝对路径。
 
-源码提交 `3964f4c5`（code，preview 与 main 同源）；本记录提交只增加文档与知识库白名单，不改变 PC 源码摘要，因此两站无需重新构建。
+源码提交 `3964f4c5`（修复）与 `8b5cf664`（发布记录 + 对齐基线）。线上两站均以 `8b5cf664` 构建，`pc-release.json` 的 `sourceCommit`、`formalBaselineCommit` 与仓库分支一致；后续只追加文档的提交不改变 PC 源码摘要，不会使两站失效。
