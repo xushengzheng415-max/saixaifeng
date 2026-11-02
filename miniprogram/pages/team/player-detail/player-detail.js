@@ -13,6 +13,40 @@ function withTimeout(request, timeout) {
 
 function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 
+function repeatGlyph(glyph, count) {
+  var text = ''
+  var total = count > 0 ? count : 0
+  for (var index = 0; index < total; index++) text += glyph
+  return text
+}
+
+// 转会评估身价：云端只给结论，页面只排版，不自算。
+function valuationView(valuation) {
+  var view = { visible: false, pending: false, hasMoney: false, money: '', moneyEmpty: '不展示', trendArrow: '', trendClass: 'trend-flat', hasTier: false, tier: '', tierValue: '', hasStars: false, starOn: '', starHalf: false, starOff: '☆☆☆☆☆', starsText: '—', note: '' }
+  if (!valuation || typeof valuation !== 'object') return view
+  view.visible = valuation.index != null
+  view.pending = !view.visible
+  if (!view.visible) {
+    view.note = '待评估：生涯数据不完整，不按 0 计'
+    return view
+  }
+  view.hasMoney = valuation.money != null && !!valuation.moneyText
+  view.money = view.hasMoney ? String(valuation.moneyText) : '不展示'
+  view.trendArrow = valuation.trendArrow === '↑' || valuation.trendArrow === '↓' ? valuation.trendArrow : '→'
+  view.trendClass = valuation.trendTone === 'up' ? 'trend-up' : valuation.trendTone === 'down' ? 'trend-down' : 'trend-flat'
+  view.hasTier = !!valuation.tier
+  view.tier = view.hasTier ? String(valuation.tier) : ''
+  view.tierValue = valuation.index == null ? '—' : String(valuation.tierValue == null ? valuation.index : valuation.tierValue)
+  view.hasStars = valuation.stars != null
+  var full = typeof valuation.starsFull === 'number' ? valuation.starsFull : Math.floor(valuation.stars || 0)
+  view.starHalf = valuation.starHalf === true
+  view.starOn = repeatGlyph('★', full)
+  view.starOff = repeatGlyph('☆', Math.max(0, 5 - full - (view.starHalf ? 1 : 0)))
+  view.starsText = view.hasStars ? Number(valuation.stars).toFixed(1) + ' / 5' : '—'
+  view.note = valuation.minor === true ? '青训球员仅展示评级，不展示金额' : '业余球员 100 元起，按指数分段计价 · 评估参考值，非成交价'
+  return view
+}
+
 function display(value, fallback) {
   if (value === 0) return '0'
   return value ? String(value) : (fallback || '待完善')
@@ -32,6 +66,7 @@ Page({
     cardLoading: false, cardStateText: '', cardCanRetry: false, hasFallbackPhoto: false, httpsNativeFonts: true,
     stats: { appearances: '—', goals: '—', yellowCards: '—', redCards: '—' },
     cardScore: { level:'待核定', points:'—', progress:'生涯积分待核定', canCustomize:false },
+    valuation: valuationView(null),
     statisticsNote: '',
     detailItems: [],
     canManage: false,
@@ -194,7 +229,7 @@ Page({
     if (playerCard && (playerCard.reasonCodes || []).some(function(code){return code.indexOf('MATCH_DURATION_') === 0})) progressText = '比赛时长来源待核对，升级进度待核定'
     if (ready && progress) progressText = progress.nextAt == null ? '已达金卡' : '距下一级 ' + progress.pointsToNext + ' 分'
     var cardScore = { level:ready ? ({bronze:'铜卡', silver:'银卡', gold:'金卡'}[playerCard.tier] || '待核定') : '待核定', points:ready ? String(playerCard.points) : '—', progress:progressText, hasProgress:ready && progress && typeof progress.percent === 'number', progressWidth:ready && progress ? progress.percent + '%' : '', canCustomize:ready && playerCard.canChangeBackground === true }
-    this.setData({ loading: false, errorText: '', hasFallbackPhoto: !!player.photoUrl, player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, cardScore:cardScore, statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
+    this.setData({ loading: false, errorText: '', hasFallbackPhoto: !!player.photoUrl, player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, cardScore:cardScore, valuation: valuationView(dataCenter && dataCenter.valuation), statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
     wx.setNavigationBarTitle({ title: player.name || '球员详情' })
   },
 
@@ -244,6 +279,6 @@ Page({
 
   loadVisualFixture: function() {
     this.setData({ visualQa: true, playerId: 'visual-player', teamId: 'visual-team' })
-    this.hydrate({ id:'visual-player',name:'张子墨',jerseyName:'ZIMO',jerseyNumber:'10',photoUrl:'',birthDate:'2014-03-18',gender:'male',nationality:'中国',hometown:'河南郑州',position:'MF',strongFoot:'right',height:148,weight:39,guardianName:'张先生',guardianRelation:'father',guardianPhoneMasked:'138****6721',profileStatusText:'资料完整',claimStatusText:'未认领',isUnclaimed:true,identityStatus:'verified',portraitStatus:'complete',remark:'球队长期球员档案' }, { id:'visual-team',name:'赛小蜂 U12 竞技队',logo:'/images/logo.png',code:'SXF-U12' }, { appearances:12,goals:6,yellowCards:1,redCards:0 }, true)
+    this.hydrate({ id:'visual-player',name:'张子墨',jerseyName:'ZIMO',jerseyNumber:'10',photoUrl:'',birthDate:'2014-03-18',gender:'male',nationality:'中国',hometown:'河南郑州',position:'MF',strongFoot:'right',height:148,weight:39,guardianName:'张先生',guardianRelation:'father',guardianPhoneMasked:'138****6721',profileStatusText:'资料完整',claimStatusText:'未认领',isUnclaimed:true,identityStatus:'verified',portraitStatus:'complete',remark:'球队长期球员档案' }, { id:'visual-team',name:'赛小蜂 U12 竞技队',logo:'/images/logo.png',code:'SXF-U12' }, { appearances:12,goals:6,yellowCards:1,redCards:0 }, true, { coverage:{ status:'complete' }, valuation:{ index:1040, tier:'S', tierValue:40, money:null, moneyText:'', stars:4, starsFull:4, starHalf:false, trendArrow:'↑', trendTone:'up', minor:true } })
   }
 })

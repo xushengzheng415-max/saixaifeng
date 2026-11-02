@@ -1,9 +1,9 @@
 {
   "pages": [
-    "pages/login/login",
     "pages/home/home",
+    "pages/login/login",
     "pages/discover/discover",
-    "pages/discover/record/record",
+    "pages/discover/invite-create/invite-create",
     "pages/login/agreement/agreement",
     "pages/event/index",
     "pages/teams/index",
@@ -14,6 +14,7 @@
     "pages/data/index",
     "pages/data-center/index",
     "pages/onboarding/onboarding",
+    "pages/player-self-onboard/index",
     "pages/onboarding/first-use",
     "pages/guide/team-info/team-info",
     "pages/guide/referee-info/referee-info",
@@ -38,6 +39,7 @@
     "pages/workspace/switch/switch",
     "pages/workspace/temp-team/temp-team"
     ,"pages/workspace/restricted/restricted"
+    ,"pages/common/official-webview"
   ],
   "window": {
     "backgroundTextStyle": "light",
@@ -75,6 +77,21 @@
     ]
   },
   "subpackages": [
+    {
+      "root": "packageDiscover",
+      "pages": [
+        "pages/record/record"
+      ]
+    },
+    {
+      "root": "packageCard",
+      "pages": [
+        "pages/main/main",
+        "pages/album-sign/album-sign",
+        "pages/lineup/lineup",
+        "pages/battle-log/battle-log"
+      ]
+    },
     {
       "root": "packageA",
       "pages": [
@@ -139,11 +156,26 @@
         "monitor/monitor",
         "review/review",
         "exception/exception",
-        "rules/rules"
+        "rules/rules",
+        "quick-create/quick-create",
+        "quick-signup/quick-signup",
+        "scorebook/scorebook",
+        "data/data",
+        "valuation/valuation",
+        "transfer/market/market",
+        "transfer/player/player"
       ]
     }
   ],
   "sitemapLocation": "sitemap.json",
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于在发起约球时选择比赛场地位置，方便对手导航到场"
+    }
+  },
+  "requiredPrivateInfos": [
+    "chooseLocation"
+  ],
   "style": "v2",
   "lazyCodeLoading": "requiredComponents"
 }

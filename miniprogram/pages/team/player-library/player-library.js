@@ -1,4 +1,5 @@
 var workspace = require('../../../utils/workspace')
+var nav = require('../../../utils/nav')
 
 Page({
   data: {
@@ -15,7 +16,7 @@ Page({
       this.loadVisualFixture()
       return
     }
-    this.setData({ teamId: String(options.teamId || '') })
+    this.setData({ teamId: String(options.teamId || ''), highlightPending: options.pendingTeamConfirm === '1' })
   },
   onShow: function() { if (this.data.teamId && !this.data.visualQa) this.loadPlayers(true) },
   loadPlayers: function(silent) {
@@ -30,6 +31,11 @@ Page({
         that.setData({ loading: false, errorText: '', teamId: result.team.id, teamName: result.team.name, teamLogo: result.team.logo || '', canManage: result.canManage, allPlayers: result.players || [], completeCount: completeCount, pendingCount: pendingCount, exceptionCount: exceptionCount, totalCount: completeCount + pendingCount + exceptionCount, hasPending: Boolean(pendingCount), pendingImportCount:Number(result.pendingImportCount || 0), hasPendingImport:Boolean(result.hasPendingImport), pendingJoins: result.pendingJoins || [], reviewingId: '' })
         that.applyPendingJoins()
         that.applyFilters()
+        if (that.data.highlightPending) {
+          if (that.data.showPendingJoin) { wx.showToast({ title: '有 ' + that.data.pendingJoinCount + ' 位球员待确认入队', icon: 'none', duration: 3000 }) }
+          else if (that.data.canManage) { wx.showToast({ title: '暂无待确认的入队申请', icon: 'none', duration: 2000 }) }
+          that.setData({ highlightPending: false })
+        }
       }).catch(function(error) { that.setData({ loading: false, errorText: error.message || '球员库加载失败，请重试' }) }).finally(function() { that._loadingRequest = null })
     return this._loadingRequest
   },
@@ -45,7 +51,12 @@ Page({
   },
   onSearch: function(e) { this.setData({ query: e.detail.value || '' }); this.applyFilters() },
   setFilter: function(e) { var filter=e.currentTarget.dataset.filter || 'all';this.setData({ filter:filter,filterAllClass:filter==='all'?'active':'',filterPendingClass:filter==='pending'?'active':'',filterExceptionClass:filter==='exception'?'active':'' }); this.applyFilters() },
-  onBack: function() { wx.navigateBack() },
+  // 从服务号「加入团队申请审批提醒」直接进入本页时页面栈只有一页，navigateBack 会退出小程序回到服务号。
+  // 这里改为回到小程序内的球队主页（本页的上一级），用户再逐级返回都在小程序里。
+  onBack: function() {
+    var teamId = String(this.data.teamId || '')
+    nav.back(teamId ? '/pages/team/team?teamId=' + encodeURIComponent(teamId) + '&fromNotify=1' : '/pages/teams/index')
+  },
   invitePlayer: function() { if (!this.data.canManage) return wx.showToast({ title: '当前身份没有邀请权限', icon: 'none' }); wx.navigateTo({ url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(this.data.teamId) }) },
   addPlayer: function() { if (!this.data.canManage) return wx.showToast({ title: '当前身份只可查看球员资料', icon: 'none' }); wx.navigateTo({ url: '/pages/team/player-add/player-add?teamId=' + encodeURIComponent(this.data.teamId) + '&teamName=' + encodeURIComponent(this.data.teamName) }) },
   inviteParent: function() { if (!this.data.canManage) return wx.showToast({ title: '当前身份没有邀请权限', icon: 'none' }); var target = this.data.allPlayers.filter(function(item) { return item.needsParentCompletion })[0]; if (!target) return wx.showToast({ title: '暂无需要补充资料的球员', icon: 'none' }); wx.navigateTo({ url: '/pages/team/parent-collaboration/parent-collaboration?teamId=' + encodeURIComponent(this.data.teamId) + '&playerId=' + encodeURIComponent(target.id) }) },

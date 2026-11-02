@@ -224,6 +224,22 @@ Page({
     })
   },
 
+  // tabBar 页面必须显式声明分享，否则右上角菜单"发送给朋友"为灰不可点
+  onShareAppMessage: function () {
+    return {
+      title: '赛小蜂足球 · 我的球队',
+      path: '/pages/teams/index',
+      imageUrl: '/images/brand/logo-saixiaofeng-football.png'
+    }
+  },
+
+  onShareTimeline: function () {
+    return {
+      title: '赛小蜂足球 · 我的球队',
+      imageUrl: '/images/brand/logo-saixiaofeng-football.png'
+    }
+  },
+
   formatDemoCards: function() { this.setData({teams:this.data.teams.map(function(item) { return entryCards.format(Object.assign({},item,{type:'team',playerCountState:'ready',badgeText:'',actionText:'查看示例'})) })}) },
 
   loadGuestDemo: function() {

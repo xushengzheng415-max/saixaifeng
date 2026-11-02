@@ -4,6 +4,7 @@
   "backgroundTextStyle": "light",
   "usingComponents": {
     "workspace-entry-card": "/components/workspace-entry-card/index",
-    "quick-create-sheet": "/components/quick-create-sheet/index"
+    "quick-create-sheet": "/components/quick-create-sheet/index",
+    "guest-experience": "/components/guest-experience/index"
   }
 }

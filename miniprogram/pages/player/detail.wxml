@@ -54,29 +54,38 @@
       <switch checked="{{isCaptain}}" bindchange="toggleCaptain" color="#2E7D32" />
     </view>
 
-    <!-- 身份证号 -->
+    <!-- 证件类型 -->
     <view class="form-item">
-      <text class="label">身份证号</text>
-      <input class="input" placeholder="请输入18位身份证号" value="{{idCard}}" bindinput="onIdCardInput" maxlength="18" />
-      <text class="auto-hint">输入身份证号自动识别出生日期和年龄</text>
+      <text class="label">证件类型 *</text>
+      <picker mode="selector" range="{{documentTypeLabels}}" value="{{documentTypeIndex}}" bindchange="onDocumentTypeChange">
+        <view class="picker-value">{{documentTypeLabel}}</view>
+      </picker>
+    </view>
+
+    <!-- 证件号 -->
+    <view class="form-item">
+      <text class="label">{{idCardLabel}}</text>
+      <input class="input" placeholder="{{idCardPlaceholder}}" value="{{idCard}}" bindinput="onIdCardInput" maxlength="{{idCardMaxlength}}" />
+      <text class="auto-hint" wx:if="{{showIdCardAutoHint}}">输入身份证号自动识别出生日期和年龄</text>
+      <text class="auto-hint" wx:if="{{isPassport}}">护照号 5-12 位字母或数字</text>
     </view>
 
     <!-- 出生日期 -->
     <view class="form-item">
       <text class="label">出生日期</text>
-      <view class="auto-field" wx:if="{{birthDate}}">
+      <view class="auto-field" wx:if="{{showAutoBirthDate}}">
         <text class="auto-value">{{birthDate}}</text>
         <text class="auto-badge">自动识别</text>
       </view>
       <picker mode="date" value="{{birthDate}}" bindchange="onBirthDateChange" wx:else>
-        <view class="picker-value">{{birthDate || '请选择出生日期'}}</view>
+        <view class="picker-value">{{birthDateDisplay}}</view>
       </picker>
     </view>
 
     <!-- 年龄 -->
     <view class="form-item">
       <text class="label">年龄</text>
-      <view class="auto-field" wx:if="{{age}}">
+      <view class="auto-field" wx:if="{{showAutoAge}}">
         <text class="auto-value">{{age}}岁</text>
         <text class="auto-badge">自动识别</text>
       </view>
@@ -93,7 +102,7 @@
     <view class="form-item">
       <text class="label">国籍</text>
       <picker mode="selector" range="{{nationalities}}" bindchange="onNationalityChange">
-        <view class="picker-value">{{nationality || '中国'}}</view>
+        <view class="picker-value">{{nationality || '待确认'}}</view>
       </picker>
     </view>
 

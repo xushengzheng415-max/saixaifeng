@@ -50,6 +50,7 @@ Page({
       scorersByDivision[divId].push(row)
       seen[divId]=1
     })
+    ;((result.boards || {}).scopes || []).forEach(function(scope){if(scope.divisionId){scorersByDivision[scope.divisionId]=(scope.goals || []).map(function(row){return Object.assign({},row,{name:row.playerName,goals:row.value})});seen[scope.divisionId]=1}})
     var divisions=(result.divisions || []).filter(function(row){return row.id && seen[row.id]}).map(function(row){return {id:row.id,name:row.name}})
     Object.keys(seen).forEach(function(divId){if(divId && !divisions.some(function(row){return row.id===divId}))divisions.push({id:divId,name:divId})})
     this.rankData={divisions:divisions,groupsByDivision:groupsByDivision,knockoutByDivision:knockoutByDivision,scorersByDivision:scorersByDivision,scorers:(result.scorers || []).slice(),discipline:{players:(result.discipline && result.discipline.players) || [],teams:(result.discipline && result.discipline.teams) || []}}
@@ -189,6 +190,7 @@ Page({
     var next=days.slice();next[index]=Object.assign({},day,{current:current,position:current+1})
     this.setData({days:next})
   },
+  onData:function(event){if(!this.data.rankAllowed)return;var tab=event.currentTarget.dataset.tab;var page=tab==='scorebook'?'scorebook/scorebook':'data/data';wx.navigateTo({url:'/pages/tournament/'+page+'?id='+encodeURIComponent(this.tournamentId)+'&shared=1&tab='+encodeURIComponent(tab)})},
   onModule:function(event){wx.navigateTo({url:'/pages/tournament/shared/manage?id='+encodeURIComponent(this.tournamentId)+'&mode='+event.currentTarget.dataset.id})},
   onBack:function(){wx.switchTab({url:'/pages/event/index'})}
 })

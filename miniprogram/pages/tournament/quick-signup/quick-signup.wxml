@@ -1,0 +1,67 @@
+<view class="qs-page">
+
+  <!-- 加载态 -->
+  <view wx:if="{{loading}}" class="qs-loading">加载中…</view>
+
+  <!-- 错误态 -->
+  <view wx:elif="{{loadError}}" class="qs-error">{{loadError}}</view>
+
+  <block wx:else>
+
+    <!-- 比赛信息卡 -->
+    <view class="qs-match-card">
+      <view class="qs-vs">
+        <view class="qs-team">
+          <view class="qs-team-badge home">{{homeShort}}</view>
+          <text class="qs-team-name">{{teamName}}</text>
+        </view>
+        <view class="qs-vs-mark">VS</view>
+        <view class="qs-team">
+          <view class="qs-team-badge away">{{awayShort}}</view>
+          <text class="qs-team-name">{{opponentName || '对手待定'}}</text>
+        </view>
+      </view>
+      <view class="qs-match-meta">
+        <text class="qs-meta-item">📅 {{matchDate}} {{matchTime}}</text>
+        <text class="qs-meta-item">📍 {{venue}}</text>
+        <text class="qs-meta-item">👥 已报 {{signedUpCount}}/{{maxPlayers}} 人</text>
+      </view>
+    </view>
+
+    <!-- 已报名成功态 -->
+    <block wx:if="{{signed}}">
+      <view class="qs-done-card">
+        <view class="qs-done-icon">✅</view>
+        <view class="qs-done-title">报名成功！</view>
+        <view class="qs-done-text">{{userName}}，比赛当天记得到场踢球哦</view>
+        <view class="qs-done-text sub">到场后由球队管理员勾选签到，放鸽子会被记账 😉</view>
+      </view>
+    </block>
+
+    <!-- 报名表单 -->
+    <block wx:elif="{{!closed}}">
+      <view class="qs-form-card">
+        <view class="qs-form-row">
+          <text class="qs-label">姓名</text>
+          <input class="qs-input" placeholder="你的名字" value="{{userName}}" bindinput="onNameInput" />
+        </view>
+        <view class="qs-divider"></view>
+        <view class="qs-form-row">
+          <text class="qs-label">手机号</text>
+          <input class="qs-input" type="number" placeholder="方便队长联系你" value="{{userPhone}}" bindinput="onPhoneInput" />
+        </view>
+      </view>
+
+      <view class="qs-submit {{submitBtnClass}}" bindtap="onSignup">确认报名</view>
+    </block>
+
+    <!-- 报名截止/满员 -->
+    <view wx:elif="{{closed}}" class="qs-done-card">
+      <view class="qs-done-icon">😔</view>
+      <view class="qs-done-title">报名已结束</view>
+      <view class="qs-done-text">{{closedReason}}</view>
+    </view>
+
+  </block>
+
+</view>

@@ -1,4 +1,4 @@
-﻿// app.js - 小程序入口
+// app.js - 小程序入口
 
 // 简单日志 mock（兼容真机）
 var logger = {

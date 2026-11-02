@@ -1,0 +1,14 @@
+<view class="guide-mask" wx:if="{{visible}}" catchtap="close">
+  <view class="guide-card" catchtap="">
+    <view class="guide-skip" catchtap="close">跳过</view>
+    <view class="guide-icon">{{steps[step].icon}}</view>
+    <view class="guide-title">{{steps[step].title}}</view>
+    <view class="guide-desc">{{steps[step].desc}}</view>
+    <view class="guide-dots">
+      <view class="guide-dot {{step === 0 ? 'active' : ''}}"></view>
+      <view class="guide-dot {{step === 1 ? 'active' : ''}}"></view>
+      <view class="guide-dot {{step === 2 ? 'active' : ''}}"></view>
+    </view>
+    <button class="guide-btn" catchtap="next">{{step === 2 ? '我知道了' : '下一步'}}</button>
+  </view>
+</view>

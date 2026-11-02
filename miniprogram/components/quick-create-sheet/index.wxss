@@ -3,3 +3,6 @@
 .sheet-primary{display:flex;align-items:center;justify-content:center;padding:0 24rpx;line-height:1.4}
 .sheet-skip{display:flex;align-items:center;justify-content:center;line-height:1.4;padding:10rpx 0 10rpx 24rpx}
 .pc-address button{display:flex;align-items:center;justify-content:center;line-height:1.4;min-height:52rpx;padding:0 14rpx}
+/* 队徽裁剪/去背景用的隐藏 Canvas 2D，不参与布局 */
+.logo-cutout-canvas{position:fixed;left:-2000px;top:-2000px;width:600px;height:600px;pointer-events:none}
+.logo-row>view>text+text{line-height:1.5}

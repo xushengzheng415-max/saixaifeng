@@ -2,12 +2,9 @@
   <image class="bg-image" src="/images/login-bg.jpg" mode="aspectFill"></image>
   <view class="login-shade"></view>
 
-  <view class="guest-home" style="{{guestHomeStyle}}" role="button" aria-label="免登录浏览首页" bindtap="goToGuestHome">
-    <image src="/images/icons/home-entry-white.svg" mode="aspectFit"></image>
-  </view>
-
   <view class="content-overlay">
     <view class="login-card">
+      <text class="login-audience">球员、球队管理者和赛事组织者使用</text>
       <text wx:if="{{restoringSession}}" class="restore-status">正在恢复登录…</text>
       <view wx:elif="{{restoreError}}" class="restore-error">
         <text>{{restoreError}}</text>
@@ -18,7 +15,7 @@
       <view class="login-action">
         <button class="phone-btn" open-type="getPhoneNumber" bindgetphonenumber="loginWithPhone" disabled="{{loginDisabled}}">{{loginButtonText}}</button>
       </view>
-      <text class="phone-auth-note">手机号用于识别唯一账号并加载已有权限</text>
+      <text class="phone-auth-note">手机号用于识别账号、关联管理权限</text>
 
       <view class="agreement-row">
         <view class="checkbox {{checkboxClass}}" bindtap="toggleAgreement">
@@ -31,6 +28,10 @@
       </view>
 
       </block>
+      <view class="guest-entry-btn" role="button" aria-label="免登录浏览公开赛事与球队" bindtap="goToGuestHome">
+        <text class="guest-entry-main">先逛逛（免登录浏览）</text>
+        <text class="guest-entry-hint">公开赛事、赛程赛果与球队信息可直接浏览；发布、报名、管理球队才需要手机号登录</text>
+      </view>
     </view>
   </view>
 </view>

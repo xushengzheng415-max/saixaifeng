@@ -1,6 +1,10 @@
 <view class="page">
-  <image class="stadium-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <image class="stadium-bg" src="/packageDiscover/images/runtime/record-adult-bg.jpg" mode="aspectFill"></image>
   <view class="shade"></view>
+
+  <view class="nav-back" bindtap="onGoBack">
+    <view class="nav-back-arrow"></view>
+  </view>
 
   <view class="content">
 
@@ -20,18 +24,70 @@
 
         <input class="opponent-input" value="{{opponentName}}" placeholder="{{opponentPlaceholder}}" placeholder-class="opponent-placeholder" bindinput="onOpponentInput" maxlength="20" />
 
-        <view class="start-btn" bindtap="onStartRecord">
-          <text class="start-btn-text">开始记分</text>
+        <view class="seg-block">
+          <view class="seg-row">
+            <text class="seg-label">计分</text>
+            <view class="seg-group">
+              <view class="seg-item {{item.cls}}" wx:for="{{modeOptions}}" wx:key="v" data-v="{{item.v}}" bindtap="onPickMode">
+                <text class="seg-item-text">{{item.label}}</text>
+              </view>
+            </view>
+          </view>
+          <view class="seg-row">
+            <text class="seg-label">节数</text>
+            <view class="seg-group">
+              <view class="seg-item {{item.cls}}" wx:for="{{periodOptions}}" wx:key="v" data-v="{{item.v}}" bindtap="onPickPeriods">
+                <text class="seg-item-text">{{item.label}}</text>
+              </view>
+            </view>
+          </view>
+          <view class="seg-row">
+            <text class="seg-label">每节</text>
+            <view class="seg-group">
+              <view class="seg-item {{item.cls}}" wx:for="{{minuteOptions}}" wx:key="v" data-v="{{item.v}}" bindtap="onPickMinutes">
+                <text class="seg-item-text">{{item.label}}</text>
+              </view>
+            </view>
+          </view>
         </view>
-        <text class="prepare-note">时间默认现在 · 进球者可以跳过</text>
+
+        <view class="start-btn" bindtap="onStartRecord">
+          <text class="start-btn-text">开始第1节</text>
+        </view>
+        <text class="prepare-note">默认 2节×10分钟 正计时 · 进球者可跳过</text>
       </view>
     </view>
 
     <!-- 记分：两队大按钮，长按减分 -->
     <view class="stage" wx:if="{{isRecording}}">
       <view class="record-head">
-        <text class="record-clock">{{elapsedText}}</text>
-        <text class="record-mode">友谊赛 · 不计排名</text>
+        <text class="record-clock">{{clockText}}</text>
+        <text class="record-mode" wx:if="{{showPeriodBadge}}">{{periodText}}</text>
+        <text class="record-mode" wx:if="{{!showPeriodBadge}}">友谊赛 · 不计排名</text>
+      </view>
+      <text class="record-sub">{{totalText}}</text>
+
+      <!-- 节间休息 -->
+      <view class="clock-controls" wx:if="{{phaseBreak}}">
+        <view class="break-btn" bindtap="onStartPeriod">
+          <text class="break-btn-text">{{startPeriodText}}</text>
+        </view>
+      </view>
+
+      <!-- 进行中/暂停/未开表 -->
+      <view class="clock-controls" wx:if="{{!phaseBreak}}">
+        <view class="ctrl-btn primary" bindtap="onStartPeriod" wx:if="{{phaseIdle}}">
+          <text class="ctrl-btn-text">{{startPeriodText}}</text>
+        </view>
+        <view class="ctrl-btn" bindtap="onPauseToggle" wx:if="{{phaseRunning}}">
+          <text class="ctrl-btn-text">暂停</text>
+        </view>
+        <view class="ctrl-btn primary" bindtap="onPauseToggle" wx:if="{{phasePaused}}">
+          <text class="ctrl-btn-text">继续</text>
+        </view>
+        <view class="ctrl-btn" bindtap="onEndPeriod" wx:if="{{showPeriodBtns}}">
+          <text class="ctrl-btn-text">结束本节</text>
+        </view>
       </view>
 
       <view class="score-board">
@@ -71,7 +127,23 @@
 
     <!-- 战报 -->
     <view class="stage" wx:if="{{isReport}}">
-      <view class="report-card">
+
+      <!-- Canvas 海报合成区 -->
+      <view class="poster-wrap" wx:if="{{posterCanvasVisible}}">
+        <canvas type="2d" id="friendlyPoster" class="poster-canvas"></canvas>
+        <view class="poster-actions" wx:if="{{posterReady}}">
+          <button class="poster-action-btn" bindtap="onPickPosterPhoto">换照片</button>
+          <button class="poster-action-btn style" bindtap="onPickPosterStyle">{{styleBtnText}}</button>
+          <button class="poster-action-btn ai" bindtap="onGenAiPoster" disabled="{{aiBgLoading}}">{{aiBgBtnText}}</button>
+          <button class="poster-action-btn" bindtap="onSavePoster">保存图片</button>
+        </view>
+        <view class="poster-actions" wx:if="{{!posterReady}}">
+          <text class="poster-loading">生成战报海报中…</text>
+        </view>
+      </view>
+
+      <!-- 仅当海报无法绘制时才显示文字战报卡，正常情况不重复展示 -->
+      <view class="report-card" wx:if="{{showTextReport}}">
         <text class="report-tag">战报 · 友谊赛</text>
         <view class="report-teams">
           <text class="report-team">{{teamName}}</text>
@@ -80,6 +152,7 @@
         </view>
         <text class="report-result {{reportResultClass}}">{{reportResultText}}</text>
         <text class="report-meta">{{reportDateText}} · {{reportDurationText}}</text>
+        <text class="report-story" wx:if="{{reportStoryText}}">{{reportStoryText}}</text>
 
         <view class="report-scorers" wx:if="{{hasScorers}}">
           <text class="report-scorers-title">进球</text>
@@ -89,7 +162,10 @@
           </view>
         </view>
         <text class="report-empty" wx:if="{{!hasScorers}}">{{scorerEmptyText}}</text>
+      </view>
 
+      <!-- 海报模式下只保留归档状态，不再重复展示比分与简讯 -->
+      <view class="report-status" wx:if="{{!showTextReport}}">
         <text class="report-state">{{saveStateText}}</text>
         <view class="report-retry" wx:if="{{saveFailed}}" bindtap="onRetrySave">重试归档</view>
       </view>

@@ -1,7 +1,7 @@
 <view class="onboarding-page">
   <image class="stadium-bg" src="/images/runtime/mobile-login-emerald-stadium-v1.jpg" mode="aspectFill"></image>
   <view class="stadium-mask"></view>
-  <canvas canvas-id="crestCropCanvas" class="hidden-canvas" width="600" height="600"></canvas>
+  <canvas type="2d" id="crestCropCanvas" class="hidden-canvas"></canvas>
 
   <view class="content">
     <view class="training-back" wx:if="{{isTrainingServiceStep}}" bindtap="backToSceneSelection">
@@ -27,10 +27,6 @@
       <view class="scene-card {{sceneTeamClass}}" data-scene="team" bindtap="selectScene">
         <image class="scene-icon" src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image>
         <view><text class="scene-title">管理球队</text></view>
-      </view>
-      <view class="scene-card {{sceneTrainingClass}}" data-scene="training" bindtap="selectScene">
-        <image class="scene-icon" src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"></image>
-        <view><text class="scene-title">青训教务</text></view>
       </view>
     </view>
 
@@ -124,20 +120,24 @@
         <view><text class="created-team-name">{{createdTeamName}}</text><text class="team-tag">球队管理</text></view>
       </view>
 
-      <view class="success-actions"><view><image src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit"></image><text>维护球队资料</text></view><view><image src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit"></image><text>邀请管理成员</text></view><view><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"></image><text>加入赛事</text></view></view>
+      <view class="success-actions"><view><image src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit"></image><text>维护球队资料</text></view><view><image src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit"></image><text>邀请队员入队</text></view><view><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"></image><text>加入赛事</text></view></view>
+      <view style="margin-top:24rpx;font-size:25rpx;line-height:1.6;color:#54735f;text-align:center">把二维码发给队友，登记后到球员库确认入队</view>
+      <view class="self-join" bindtap="joinSelfTeam"><text class="self-join-link {{selfJoinClass}}">{{selfJoinText}}</text></view>
     </view>
 
-    <view class="white-panel success-panel" wx:if="{{isEventSuccessStep}}"><view class="success-mark"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit" style="width:86rpx;height:86rpx"></image></view><view class="success-title">赛事空间创建成功</view><view class="team-summary"><image class="success-logo" wx:if="{{hasCreatedEventLogo}}" src="{{createdEventLogo}}" mode="aspectFit"></image><view class="success-logo fallback-logo" wx:if="{{!hasCreatedEventLogo}}"><image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit" style="width:74rpx;height:74rpx"></image></view><view><text class="created-team-name">{{createdEventName}}</text><text class="team-tag">赛事主办</text></view></view><view class="success-actions"><view><image src="/images/runtime/icons/brand-v2-15.png" mode="aspectFit"></image><text>完善赛事设置</text></view><view><image src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit"></image><text>邀请参赛球队</text></view><view><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"></image><text>配置竞赛组别</text></view></view></view>
+    <view class="white-panel success-panel" wx:if="{{isEventSuccessStep}}"><view class="success-mark"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit" style="width:86rpx;height:86rpx"></image></view><view class="success-title">赛事空间创建成功</view><view class="team-summary"><image class="success-logo" wx:if="{{hasCreatedEventLogo}}" src="{{createdEventLogo}}" mode="aspectFit"></image><view class="success-logo fallback-logo" wx:if="{{!hasCreatedEventLogo}}"><image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit" style="width:74rpx;height:74rpx"></image></view><view><text class="created-team-name">{{createdEventName}}</text><text class="team-tag">赛事主办</text></view></view><view class="success-actions"><view><image src="/images/runtime/icons/brand-v2-15.png" mode="aspectFit"></image><text>完善赛事设置</text></view><view><image src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit"></image><text>邀请参赛球队</text></view><view><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"></image><text>配置竞赛组别</text></view></view><view class="pc-guide"><view class="pc-guide-title">建议在电脑端继续办赛</view><view class="pc-guide-hint">组别设置、赛程编排、报名管理在电脑端操作更高效</view><button class="pc-guide-button" bindtap="copyEventPcLink">复制电脑端网址</button><view class="pc-guide-url">www.sxffootball.cn/admin/</view></view></view>
 
     <view class="error-card" wx:if="{{errorVisible}}">{{errorText}}</view>
     <button class="primary-button" wx:if="{{isSceneStep}}" bindtap="saveSceneAndContinue" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <button class="primary-button team-save-button" wx:if="{{isTeamProfileStep}}" bindtap="createTeam" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <button class="primary-button" wx:if="{{isEventProfileStep}}" bindtap="createEventSpace" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <button class="primary-button" wx:if="{{isTrainingProfileStep}}" bindtap="createTrainingWorkspace" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
-    <button class="primary-button" wx:if="{{isTeamSuccessStep}}" bindtap="enterTeamHome" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <button class="primary-button" wx:if="{{isTeamSuccessStep}}" bindtap="inviteTeamPlayers" disabled="{{isSubmitting}}">邀请队员入队</button>
+    <button class="secondary-button" wx:if="{{isTeamSuccessStep}}" bindtap="enterTeamHome" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <button class="primary-button" wx:if="{{isEventSuccessStep}}" bindtap="enterEventSpace" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <button class="primary-button" wx:if="{{isTrainingSuccessStep}}" bindtap="enterTrainingHome" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <view class="bottom-tip" wx:if="{{isSceneStep}}">已有业务关系的账号将自动进入对应工作空间</view>
+    <view class="bottom-link" wx:if="{{isSceneStep}}" bindtap="openTutorial">查看操作教程</view>
     <view class="bottom-tip" wx:if="{{isTeamProfileStep}}">后续可在球队资料中随时修改</view>
     <view class="bottom-tip" wx:if="{{isTeamSuccessStep}}">以后可在“我的”中切换或新增其他工作空间</view>
     <view class="bottom-tip" wx:if="{{isEventProfileStep}}">复杂赛制、批量球队与完整规则建议在电脑端完成</view><view class="bottom-tip" wx:if="{{isEventSuccessStep}}">以后可在“我的”中切换或新增其他工作空间</view>

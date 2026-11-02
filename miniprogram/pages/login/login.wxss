@@ -36,24 +36,6 @@ page {
   background: linear-gradient(180deg, rgba(0,18,11,.02), rgba(0,30,17,.12) 52%, rgba(0,28,15,.64));
 }
 
-.guest-home {
-  position: fixed;
-  z-index: 10;
-  left: 28rpx;
-  top: 54px;
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1rpx solid rgba(255,255,255,.4);
-  border-radius: 50%;
-  background: rgba(0,42,24,.5);
-  box-shadow: 0 8rpx 22rpx rgba(0,0,0,.18);
-}
-
-.guest-home image { width: 44rpx; height: 44rpx; }
-
 .content-overlay {
   position: relative;
   z-index: 2;
@@ -142,7 +124,12 @@ page {
 .checkbox.checked { border-color: #078443; background: #078443; }
 .agreement-text { color: #7a847e; font-size: 20rpx; }
 .agreement-link { margin: 0 2rpx; color: #078443; font-size: 20rpx; }
+.guest-entry-btn{display:block;margin-top:26rpx;padding:22rpx 24rpx;border:2rpx solid rgba(7,132,67,0.38);border-radius:16rpx;background:rgba(255,255,255,0.9)}
+.guest-entry-main{display:block;color:#078443;font-size:28rpx;font-weight:700;text-align:center}
+.guest-entry-hint{display:block;margin-top:8rpx;color:#5c6f63;font-size:22rpx;line-height:1.5;text-align:center}
 .guest-review-note { display: block; margin-top: 24rpx; color: #b1b8b3; font-size: 19rpx; }
 .restore-status{display:block;padding:16rpx 0;font-size:29rpx;color:#42634e;line-height:1.5}
 .restore-error>text{display:block;font-size:26rpx;color:#7b5145;line-height:1.6;margin-bottom:22rpx}
 .restore-error .restore-phone{margin:22rpx 0 0;font-size:25rpx;color:#087b3d}
+
+.login-audience{display:block;margin:0 0 24rpx;color:#42634e;font-size:25rpx;line-height:1.6;text-align:center}

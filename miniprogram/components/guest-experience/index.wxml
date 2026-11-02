@@ -1,0 +1,61 @@
+<view class="experience">
+  <view class="experience-hero" style="{{topStyle}}">
+    <image class="hero-photo" src="{{roleHero}}" mode="aspectFill"/>
+    <view class="hero-shade"></view>
+    <image class="experience-logo" src="/images/brand/logo-saixiaofeng-football.png" mode="aspectFit" aria-label="赛小蜂足球"/>
+    <view class="experience-kicker">游客体验</view>
+    <text class="experience-title">先了解，再开始</text>
+    <text class="experience-subtitle">球队怎么管，比赛怎么办</text>
+  </view>
+
+  <view class="experience-body">
+    <view class="role-tabs" role="tablist" aria-label="功能角色">
+      <view wx:for="{{roleTabs}}" wx:key="id" class="role-tab {{item.itemClass}}" role="tab" aria-selected="{{item.selected}}" data-id="{{item.id}}" bindtap="selectRole">{{item.label}}</view>
+    </view>
+    <view class="role-intro"><image src="{{roleIcon}}" mode="aspectFit"/><text>{{roleHeading}}</text></view>
+    <view class="center-entry" bindtap="publicEvents" role="button" aria-label="打开赛事中心">
+      <view class="center-entry-icon"><image src="/images/icons/event.svg" mode="aspectFit"/></view>
+      <view class="center-entry-copy">
+        <text class="center-entry-title">赛事中心</text>
+        <text class="center-entry-subtitle">公开赛事、赛程比分与榜单，免登录直接看</text>
+      </view>
+      <text class="center-entry-action">进入 ›</text>
+    </view>
+    <view class="journey"><view wx:for="{{journey}}" wx:key="number"><text class="journey-number">{{item.number}}</text><text>{{item.label}}</text></view></view>
+
+    <view class="feature-grid">
+      <view wx:for="{{features}}" wx:key="id" class="feature-tile {{item.itemClass}}" data-id="{{item.id}}" bindtap="selectFeature" role="button" aria-pressed="{{item.selected}}">
+        <image class="feature-cover" src="{{item.cover}}" mode="aspectFill" lazy-load="{{true}}"/>
+        <view class="tile-copy">
+        <view class="tile-heading"><image src="{{item.icon}}" mode="aspectFit"/><text class="availability" wx:if="{{item.hasAvailability}}">{{item.availability}}</text><text class="tile-arrow" wx:else>›</text></view>
+        <text class="tile-title">{{item.title}}</text><text class="tile-summary">{{item.summary}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="feature-detail">
+      <view class="detail-top"><text class="detail-title">{{feature.title}}</text><text class="device-label">{{feature.device}}</text></view>
+      <text class="detail-description">{{feature.detail}}</text>
+
+      <view class="feature-illustration effect-illustration">
+        <view class="effect-scene">
+          <image wx:if="{{!effectImageFailed}}" class="effect-image" src="{{effectImage}}" mode="aspectFill" binderror="onEffectImageError"/>
+          <view class="effect-shade"></view>
+          <text class="effect-badge">功能效果示意</text>
+          <view class="effect-caption"><text>{{feature.previewLabel}}</text><text>{{feature.previewTitle}}</text></view>
+          <button wx:if="{{effectImageFailed}}" class="effect-retry" size="mini" bindtap="retryEffectImage">重新加载配图</button>
+        </view>
+        <view class="preview-panel effect-fields"><view class="preview-row" wx:for="{{feature.rows}}" wx:key="name"><text class="preview-row-name">{{item.name}}</text><text class="preview-row-value {{item.tone}}">{{item.value}}</text></view></view>
+        <text class="illustration-note">概念配图，不代表真实球员卡或比赛数据</text>
+      </view>
+
+      <text class="process-title">怎么使用</text>
+      <view class="process-list"><view wx:for="{{process}}" wx:key="number"><text class="process-number">{{item.number}}</text><text>{{item.label}}</text></view></view>
+      <text class="feature-note">{{feature.note}}</text>
+    </view>
+
+    <view class="public-entry" bindtap="publicEvents" role="button"><view><text>看看正在进行的赛事</text><text>赛程、比分与榜单</text></view><text>赛事中心 ›</text></view>
+    <button class="experience-login" style="width:100%;max-width:none;margin-left:0;margin-right:0;" bindtap="login">登录使用</button>
+    <text class="guest-footnote">浏览介绍无需登录</text>
+  </view>
+</view>

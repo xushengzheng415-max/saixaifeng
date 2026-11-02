@@ -1,18 +1,21 @@
 // custom-tab-bar/index.js
 // 赛小蜂 - 机构工作空间五中心导航
+// 2026-10-26：第四位统一为「发现」（成人/青少年不再拆分模式，原“球场/成长”命名与缺失的 growth 图标一并收敛）
 var workspace = require('../utils/workspace')
 function isOrganizerView() {
   return workspace.hasAuthenticatedUser() && workspace.getPortalRole(workspace.readContext()) === 'organizer'
 }
-var WORKSPACE_TABS = [
+
+var TABS = [
   { id: 'home', text: '首页', icon: '/images/runtime/icons/brand-v1-tab-home.png', activeIcon: '/images/runtime/icons/brand-v1-tab-home.png', path: '/pages/home/home' },
   { id: 'event', text: '赛事', icon: '/images/runtime/icons/brand-v1-tab-event.png', activeIcon: '/images/runtime/icons/brand-v1-tab-event.png', path: '/pages/event/index' },
   { id: 'team', text: '球队', icon: '/images/runtime/icons/brand-v1-tab-team.png', activeIcon: '/images/runtime/icons/brand-v1-tab-team.png', path: '/pages/teams/index' },
   { id: 'discover', text: '发现', icon: '/images/runtime/icons/brand-v1-tab-discover.png', activeIcon: '/images/runtime/icons/brand-v1-tab-discover.png', path: '/pages/discover/discover' },
   { id: 'profile', text: '我的', icon: '/images/runtime/icons/brand-v1-tab-profile.png', activeIcon: '/images/runtime/icons/brand-v1-tab-profile.png', path: '/pages/profile/profile' }
 ]
+
 function buildTabs(selectedIndex) {
-  var tabs = WORKSPACE_TABS
+  var tabs = TABS
   var sel = selectedIndex !== undefined ? selectedIndex : 0
   var organizer = isOrganizerView()
   return tabs.map(function(tab, idx) {

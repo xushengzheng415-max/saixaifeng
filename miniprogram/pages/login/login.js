@@ -1,6 +1,5 @@
 // pages/login/login.js - 手机号主账号登录
 var workspace = require('../../utils/workspace')
-var AUTH_SESSION_VERSION = 'phone-canonical-v1'
 var AUTH_STORAGE_KEYS = [
   'userInfo', 'userId', 'phoneNumber', 'phone', 'email',
   'hasPassword', 'currentCardId', 'currentTeam', 'currentTeamId',
@@ -25,13 +24,11 @@ Page({
     checkboxClass: '',
     loginButtonText: '手机号快捷登录',
     loginDisabled: true,
-    localVisualQa: false,
-    guestHomeStyle: ''
+    localVisualQa: false
   },
 
   onLoad: function(options) {
     this._unloaded = false
-    this.updateGuestHomePosition()
     if (isDevtools() && options && options.visualQa === '1') {
       this.setData({
         localVisualQa: true,
@@ -59,20 +56,6 @@ Page({
   onUnload: function() {
     this._unloaded = true
     this._restoreGeneration = (this._restoreGeneration || 0) + 1
-  },
-
-  updateGuestHomePosition: function() {
-    var top = 54
-    try {
-      var menuRect = wx.getMenuButtonBoundingClientRect()
-      var systemInfo = wx.getSystemInfoSync()
-      var statusBarHeight = Number(systemInfo.statusBarHeight || 0)
-      var menuTop = Number(menuRect && menuRect.top || 0)
-      top = Math.max(menuTop + 6, statusBarHeight + 18, 46)
-    } catch (error) {
-      console.warn('[login] 游客入口安全区读取失败，使用兼容位置:', error)
-    }
-    this.setData({ guestHomeStyle: 'top:' + top + 'px;' })
   },
 
   callCloud: function(name, data, success, fail, timeout) {
@@ -189,28 +172,14 @@ Page({
       this.setData({restoringSession:false,restoreError:'账号资料未完整返回，请重试',showPhoneLogin:false})
       return
     }
-    var userInfo = {
-      _id: user._id || '',
-      openId: user.openId || this.data.openId || '',
-      phone: user.phone || user.phoneNumber || '',
-      phoneNumber: user.phoneNumber || user.phone || '',
-      orgId: user.orgId || user.organizationId || '',
-      nickName: user.nickName || '用户',
-      avatarUrl: user.avatarUrl || '',
-      loginTime: new Date().toISOString()
+    // 会话写入统一走 workspace.persistLoginSession：切换账号时先清理上一账号的
+    // 认证与工作空间数据，再写入新会话，与认领页手机号验证后的写入保持一致。
+    var persisted = workspace.persistLoginSession(Object.assign({}, user, { openId: user.openId || this.data.openId || '' }))
+    if (!persisted) {
+      this.setData({restoringSession:false,restoreError:'账号资料未完整返回，请重试',showPhoneLogin:false})
+      return
     }
-    var previous=wx.getStorageSync('userInfo') || {}
-    var sameAccount=wx.getStorageSync('authSessionVersion')===AUTH_SESSION_VERSION && !wx.getStorageSync('userLoggedOut') && String(previous._id || '')===String(userInfo._id) && String(previous.phone || previous.phoneNumber || '')===String(userInfo.phone)
-    if(!sameAccount)this.clearAuthSession()
-    wx.removeStorageSync('userLoggedOut')
-    wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
-    wx.setStorageSync('userInfo', userInfo)
-    wx.setStorageSync('openId', userInfo.openId)
-    wx.setStorageSync('userId', userInfo._id)
-    wx.setStorageSync('phone', userInfo.phone)
-    wx.setStorageSync('phoneNumber', userInfo.phoneNumber)
-    var app = getApp()
-    if (app && app.globalData) app.globalData.userInfo = userInfo
+    var sameAccount = persisted.sameAccount
     this.setData({restoringSession:true,showPhoneLogin:false,restoreError:''})
     if (showSuccess) wx.showToast({ title: '登录成功', icon: 'success' })
     if(sameAccount && workspace.readContext())this.goToHome(true)
@@ -218,6 +187,12 @@ Page({
   },
 
   goToPostLogin: function() {
+    // 认领邀请自身负责手机号与归属核验，不以尚未拥有球队作为建队条件。
+    var taskPath = (this.data.redirectUrl || wx.getStorageSync('loginRedirectUrl') || '').split('?')[0]
+    if (['/pages/team/claim-code/claim-code', '/pages/team/prebuilt-invite/prebuilt-invite'].indexOf(taskPath) >= 0) {
+      this.goToHome(true)
+      return
+    }
     var that = this
     this.callCloud('onboardingWorkspace', { action: 'state' }, function(res) {
       var result = res.result || {}
@@ -227,8 +202,14 @@ Page({
       // Direct invitations keep their task context. A role choice is a view,
       // never a substitute for the invitation or a grant of permissions.
       if (result.success && !signupRedirect && !teamMemberRedirect && !teamPlayerRedirect && !workspace.hasPortalRole()) {
-        wx.redirectTo({url:'/pages/onboarding/first-use'})
-        return
+        // 已有球队关系（含刚完成认领）直接按球队管理者视角进入，
+        // 不再要求先选择“赛事组织者/球队管理者”再建队；该选择只影响展示视角，
+        // 不授予任何资源权限，之后仍可在“我的”里切换。
+        if (result.hasTeamRelation) workspace.rememberPortalRole('team_coach')
+        else {
+          wx.redirectTo({url:'/pages/onboarding/first-use'})
+          return
+        }
       }
       if (result.success && result.requiresOnboarding) {
         if (teamPlayerRedirect) {

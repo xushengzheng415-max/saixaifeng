@@ -1,5 +1,5 @@
 <view class="page">
-  <image class="stadium-bg" src="/images/runtime/home-roles-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <image class="stadium-bg" src="/images/runtime/home-stadium-v4.jpg" mode="aspectFill"></image>
   <view class="shade"></view>
   <view class="content">
     <view class="topbar">

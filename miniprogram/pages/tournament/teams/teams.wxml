@@ -22,9 +22,105 @@
       </view>
     </scroll-view>
 
+    <view wx:if="{{rankLoading}}" class="rank-card">榜单加载中…</view>
+    <view wx:elif="{{rankError}}" class="rank-card"><text>{{rankError}}</text><button bindtap="loadRankings">重新加载</button></view>
+    <view class="rank-card" wx:elif="{{hasRankData}}">
+      <text class="cc-title">赛事进球榜</text>
+      <view class="cc-modes">
+        <text
+          wx:for="{{rankModeOptions}}"
+          wx:key="id"
+          class="cc-mode {{item.tabClass}}"
+          data-id="{{item.id}}"
+          bindtap="onRankMode"
+        >{{item.name}}</text>
+      </view>
+      <scroll-view class="cc-division-tabs" scroll-x>
+        <view class="cc-division-tabs-inner">
+          <text
+            wx:for="{{rankDivisionOptions}}"
+            wx:key="id"
+            class="cc-scope-item {{item.tabClass}}"
+            data-id="{{item.id}}"
+            bindtap="onRankDivision"
+          >{{item.name}}</text>
+        </view>
+      </scroll-view>
+
+      <view wx:if="{{showScorers}}">
+        <view class="cc-row cc-head-row">
+          <text class="cc-rank">排名</text>
+          <text class="cc-team">球员</text>
+          <text class="cc-div" wx:if="{{showDivisionColumn}}">组别</text>
+          <text class="cc-num">进球</text>
+        </view>
+        <view class="cc-row" wx:for="{{scorerRows}}" wx:key="playerKey">
+          <text class="cc-rank">{{item.rank}}</text>
+          <text class="cc-team">{{item.playerName}}<text class="cc-sub">{{item.teamName}}</text></text>
+          <text class="cc-div" wx:if="{{showDivisionColumn}}">{{item.divisionName}}</text>
+          <text class="cc-num cc-goals">{{item.goals}}</text>
+        </view>
+        <text class="cc-note" wx:if="{{hasScorerRows}}">只统计正式赛果，排序与 PC 同源</text>
+        <text class="cc-note" wx:if="{{noScorerRows}}">当前标签页暂无进球记录</text>
+      </view>
+
+      <view wx:if="{{showTeams}}">
+        <view class="cc-modes cc-sub-modes">
+          <text
+            wx:for="{{teamMetricOptions}}"
+            wx:key="id"
+            class="cc-mode {{item.tabClass}}"
+            data-id="{{item.id}}"
+            bindtap="onTeamMetric"
+          >{{item.name}}</text>
+        </view>
+        <view class="cc-block" wx:if="{{showTeamScorer}}">
+          <text class="cc-block-title">球队进球最多</text>
+          <view class="cc-row cc-head-row">
+            <text class="cc-rank">排名</text>
+            <text class="cc-team">球队</text>
+            <text class="cc-div" wx:if="{{showDivisionColumn}}">组别</text>
+            <text class="cc-num">赛</text>
+            <text class="cc-num">进球</text>
+          </view>
+          <view class="cc-row" wx:for="{{teamScorerRows}}" wx:key="teamKey">
+            <text class="cc-rank">{{item.rank}}</text>
+            <text class="cc-team">{{item.teamName}}</text>
+            <text class="cc-div" wx:if="{{showDivisionColumn}}">{{item.divisionName}}</text>
+            <text class="cc-num">{{item.played}}</text>
+            <text class="cc-num cc-goals">{{item.goalsFor}}</text>
+          </view>
+          <text class="cc-note" wx:if="{{noTeamScorerRows}}">当前标签页暂无已归档赛果</text>
+        </view>
+        <view class="cc-block" wx:if="{{showTeamKeeper}}">
+          <text class="cc-block-title">球队失球最少</text>
+          <view class="cc-row cc-head-row">
+            <text class="cc-rank">排名</text>
+            <text class="cc-team">球队</text>
+            <text class="cc-div" wx:if="{{showDivisionColumn}}">组别</text>
+            <text class="cc-num">赛</text>
+            <text class="cc-num">失球</text>
+          </view>
+          <view class="cc-row" wx:for="{{teamKeeperRows}}" wx:key="teamKey">
+            <text class="cc-rank">{{item.rank}}</text>
+            <text class="cc-team">{{item.teamName}}</text>
+            <text class="cc-div" wx:if="{{showDivisionColumn}}">{{item.divisionName}}</text>
+            <text class="cc-num">{{item.played}}</text>
+            <text class="cc-num cc-goals">{{item.goalsAgainst}}</text>
+          </view>
+          <text class="cc-note" wx:if="{{hasTeamKeeperRows}}">只统计已归档正式赛果；失球相同按场均失球、积分排序</text>
+          <text class="cc-note" wx:if="{{noTeamKeeperRows}}">当前标签页暂无已归档赛果</text>
+        </view>
+      </view>
+    </view>
+
     <view class="organizer-actions" wx:if="{{isOrganizer}}">
       <button class="action-btn invite-btn" open-type="share">邀请球队</button>
       <button class="action-btn add-team-btn" bindtap="openCreateTeam">添加球队</button>
+    </view>
+    <view class="organizer-actions" wx:if="{{isOrganizer}}">
+      <button class="action-btn scorebook-btn" bindtap="openScorebook">成绩册 · 奖项</button>
+      <button class="action-btn scorebook-btn" bindtap="openData">赛事数据</button>
     </view>
 
     <view class="team-list" wx:if="{{hasTeamsLen}}">

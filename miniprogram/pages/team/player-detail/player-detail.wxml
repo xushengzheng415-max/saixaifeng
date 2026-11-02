@@ -14,6 +14,25 @@
         </view>
       </view>
       <view class="info-section"><text class="player-name">{{player.name}}</text><view wx:if="{{player.hasJerseyName}}" class="jersey-name">{{player.jerseyName}}</view><view wx:if="{{player.hasPosition}}" class="position-tag"><text class="tag-text">{{player.positionLabel}}</text></view><view class="profile-state-tag">{{player.profileStatusText}}</view><view wx:if="{{player.isUnclaimed}}" class="profile-claim-tag">未认领</view><view class="card-score-line"><text>{{cardScore.level}}</text><text>{{cardScore.points}} 分</text><text>{{cardScore.progress}}</text></view><view wx:if="{{cardScore.hasProgress}}" class="card-grade-progress"><view style="width: {{cardScore.progressWidth}};"></view></view></view>
+      <view wx:if="{{valuation.visible || valuation.pending}}" class="valuation-band">
+        <block wx:if="{{valuation.visible}}">
+          <view class="valuation-main">
+            <text class="valuation-money">{{valuation.money}}</text>
+            <text wx:if="{{valuation.hasMoney}}" class="valuation-trend {{valuation.trendClass}}">{{valuation.trendArrow}}</text>
+            <view class="valuation-tier">
+              <text wx:if="{{valuation.hasTier}}" class="valuation-tier-name">{{valuation.tier}}</text>
+              <text class="valuation-tier-value">{{valuation.tierValue}}</text>
+            </view>
+          </view>
+          <view class="valuation-stars">
+            <text class="valuation-star-on">{{valuation.starOn}}</text>
+            <text wx:if="{{valuation.starHalf}}" class="valuation-star-half">★</text>
+            <text class="valuation-star-off">{{valuation.starOff}}</text>
+            <text class="valuation-star-num">{{valuation.starsText}}</text>
+          </view>
+        </block>
+        <text class="valuation-note">{{valuation.note}}</text>
+      </view>
     </view>
 
     <view wx:if="{{pointsEntryAllowed}}" class="points-entry"><button bindtap="openPoints">积分明细</button></view>

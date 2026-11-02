@@ -10,6 +10,7 @@
     <view class="summary"><view><text>赛程场次</text><text>{{matchCount}}</text></view><view><text>已结束</text><text>{{completed}}</text></view><view><text>未完成</text><text>{{remaining}}</text></view></view>
     <view wx:if="{{rankAllowed}}" class="standings">
       <view class="standings-heading"><text class="section-title">赛事榜单</text></view>
+      <view class="group-tabs"><view class="group-tab" data-tab="attack" bindtap="onData">进球最多 ›</view><view class="group-tab" data-tab="defense" bindtap="onData">失球最少 ›</view><view class="group-tab" data-tab="scorebook" bindtap="onData">成绩册 ›</view></view>
       <text wx:if="{{rankError}}" class="empty">{{rankError}}</text>
       <block wx:else>
         <view class="group-tabs"><view wx:for="{{rankModeTabs}}" wx:for-item="tab" wx:key="id" class="group-tab {{tab.itemClass}}" data-id="{{tab.id}}" bindtap="onRankMode">{{tab.name}}</view></view>

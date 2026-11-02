@@ -145,7 +145,7 @@ function previewTrainingContext() {
 
 Page({
   data: {
-    loading: true, isLoggedIn: false, errorText: '', roleTitle: '球队教练', homeRoleLabel: '',
+    loading: true, isLoggedIn: false, errorText: '', roleTitle: '球队教练', homeRoleLabel: '', guestHomeClass: 'guest-home',
     useEntryHome: true, homeEntries: [], hasHomeEntries: false, showHomeEntryEmpty: false, openingEntryKey: '',
     isOrganizer: false, isTeamCoach: true, isTrainingCoach: false, showWorkHome: false, showTeamHome: false,
     teamHomeTeams: [], hasTeamHomeTeams: false, teamHomeEvents: [], hasTeamHomeEvents: false,
@@ -155,16 +155,6 @@ Page({
     overviewStatus: '', hasOverviewStatus: false, overviewLogo: '', hasOverviewLogo: false,
     metrics: [], homeTaskCards: [], hasTaskCards: false, trainingCourses: [], hasTrainingCourses: false,
     matches: [], hasMatches: false, teams: [], hasTeams: false,
-    guestDemoMetrics: [
-      { label: '今日比赛', value: '3', icon: '/images/icons/event.svg' },
-      { label: '待处理', value: '2', icon: '/images/icons/list.svg' },
-      { label: '我的球队', value: '2', icon: '/images/icons/players.svg' }
-    ],
-    guestDemoTasks: [
-      { id: 'demo-roster', title: '参赛名单确认', subtitle: '查看球队报名与名单进度', icon: '/images/icons/shield.svg' },
-      { id: 'demo-schedule', title: '今日赛程', subtitle: '查看比赛时间、场地与对阵', icon: '/images/icons/event.svg' },
-      { id: 'demo-team', title: '球队协作', subtitle: '维护球队与球员基础资料', icon: '/images/icons/players.svg' }
-    ],
     showOtherRoleContent: false, otherSectionTitle: '', otherSectionEmptyText: '', matchSectionTitle: '最近比赛', overviewClass: '', topbarClass: '',
     localVisualQa: false
     ,showOrganizerHome:false,homePageClass:'',homeContentStyle:'',hasOrganizerEvents:false,organizerTasks:[],hasOrganizerTasks:false,createVisible:false,
@@ -201,11 +191,18 @@ Page({
     this.loadData(true)
   },
   onPullDownRefresh: function () { this.loadData(true).finally(function () { wx.stopPullDownRefresh() }) },
+  onPageScroll: function(event) {
+    if(this.data.isLoggedIn)return
+    var color=event.scrollTop>180?'#000000':'#ffffff'
+    if(this._guestNavColor===color || typeof wx.setNavigationBarColor!=='function')return
+    this._guestNavColor=color
+    wx.setNavigationBarColor({frontColor:color,backgroundColor:color==='#000000'?'#f1f5f2':'#003c2b'})
+  },
 
   loadData: function (silent) {
     var epoch = this._loadEpoch = (this._loadEpoch || 0) + 1
     var userInfo = wx.getStorageSync('userInfo') || null
-    if (!userInfo || !userInfo._id) { this.setData({ loading: false, isLoggedIn: false, homeEntries: [], hasHomeEntries: false, showWorkHome:false,showTeamHome:false,showOrganizerHome:false,homeRoleLabel:'',teamHomeTeams:[],teamHomeEvents:[],teamHomeTasks:[],hasTeamHomeTeams:false,hasTeamHomeEvents:false,hasTeamHomeTasks:false,homePageClass:'',homeContentStyle:'',homeBackgroundImage:'/images/runtime/home-roles-emerald-stadium-v1.jpg',homeBackgroundMode:'aspectFill',createVisible:false,errorText: '' }); return Promise.resolve() }
+    if (!userInfo || !userInfo._id) { this.setData({ loading: false, isLoggedIn: false, guestHomeClass: 'guest-home', homeEntries: [], hasHomeEntries: false, showWorkHome:false,showTeamHome:false,showOrganizerHome:false,homeRoleLabel:'',teamHomeTeams:[],teamHomeEvents:[],teamHomeTasks:[],hasTeamHomeTeams:false,hasTeamHomeEvents:false,hasTeamHomeTasks:false,homePageClass:'',homeContentStyle:'',homeBackgroundImage:'/images/runtime/home-roles-emerald-stadium-v1.jpg',homeBackgroundMode:'aspectFill',createVisible:false,errorText: '' }); return Promise.resolve() }
     if (this._homeAccountId && this._homeAccountId !== userInfo._id) {
       this.setData({ homeEntries:[], hasHomeEntries:false, showHomeEntryEmpty:false, teams:[], matches:[], homeTaskCards:[], hasTaskCards:false, hasTeams:false, hasMatches:false, metrics:[], errorText:'',organizerTasks:[],hasOrganizerTasks:false,hasOrganizerEvents:false,showOrganizerHome:false,showWorkHome:false,showTeamHome:false,homeRoleLabel:'',teamHomeTeams:[],teamHomeEvents:[],teamHomeTasks:[],hasTeamHomeTeams:false,hasTeamHomeEvents:false,hasTeamHomeTasks:false,homePageClass:'',homeContentStyle:'',createVisible:false })
     }
@@ -224,6 +221,8 @@ Page({
 
   applyContext: function (context) {
     if (!context || !context.currentWorkspace) return
+    if(this._guestNavColor && this._guestNavColor!=='#ffffff' && typeof wx.setNavigationBarColor==='function')wx.setNavigationBarColor({frontColor:'#ffffff',backgroundColor:'#003c2b'})
+    this._guestNavColor=''
     if (context.user) this._homeAccountId = context.user.id || context.user._id || this._homeAccountId
     var identity = context.currentIdentity || {}
     var role = entryCards.role(context,workspace)
@@ -249,7 +248,7 @@ Page({
     var cards = taskCards(isTrainingCoach ? trainingTasks : eventTasks.filter(function (item) { return isOrganizer || item.audience === 'team' || !item.audience }))
     var firstTeam = teams[0] || {}
     var data = {
-      loading: false, isLoggedIn: true, errorText: '', roleTitle: identity.label || (isOrganizer ? '赛事负责人' : (isTrainingCoach ? '青训教练' : '球队教练')),
+      loading: false, isLoggedIn: true, guestHomeClass: '', errorText: '', roleTitle: identity.label || (isOrganizer ? '赛事负责人' : (isTrainingCoach ? '青训教练' : '球队教练')),
       isOrganizer: isOrganizer, isTeamCoach: isTeamCoach, isTrainingCoach: isTrainingCoach, isShared: isShared,
       showWorkHome: isOrganizer || isTeamManager, showTeamHome: isTeamManager,
       homeRoleLabel: isOrganizer ? '赛事组织者' : (isTrainingCoach ? '青训教练' : '球队管理者'),
@@ -285,8 +284,8 @@ Page({
     var info = typeof wx.getSystemInfoSync === 'function' ? wx.getSystemInfoSync() : {}
     data.showOrganizerHome = isOrganizer
     data.homePageClass = isOrganizer ? 'organizer-home' + (entries.some(function(item){return item.type === 'tournament'}) ? ' organizer-has-events' : '') : (isTeamManager ? 'team-home' : (data.useEntryHome ? 'resource-home' : ''))
-    data.homeBackgroundImage = data.useEntryHome ? '/images/runtime/organizer-home-stadium-v2.jpg' : '/images/runtime/home-roles-emerald-stadium-v1.jpg'
-    data.homeBackgroundMode = data.showWorkHome ? 'widthFix' : 'aspectFill'
+    data.homeBackgroundImage = (isOrganizer || isTeamManager) ? '/images/runtime/home-stadium-v4.jpg' : (data.useEntryHome ? '/images/runtime/organizer-home-stadium-v2.jpg' : '/images/runtime/home-roles-emerald-stadium-v1.jpg')
+    data.homeBackgroundMode = 'aspectFill'
     data.homeContentStyle = data.showWorkHome ? 'padding-top:' + (rect ? rect.top : (info.statusBarHeight || 24) + 6) + 'px;' : ''
     data.hasOrganizerEvents = entries.some(function(item) { return item.type === 'tournament' })
     data.organizerTasks = isOrganizer ? eventTasks.filter(function(item) { return item.audience !== 'team' && ['completed','dismissed','cancelled'].indexOf(item.status) < 0 }).map(function(item,index) {
@@ -323,19 +322,14 @@ Page({
   goToTeams: function () { wx.switchTab({ url: '/pages/teams/index' }) },
   goToOtherSection: function () { if (this.data.isOrganizer) wx.switchTab({ url: '/pages/event/index' }); else wx.navigateTo({ url: '/pages/training/index' }) },
   goToLogin: function () { wx.navigateTo({ url: '/pages/login/login' }) },
-  openGuestDemoAction: function () {
-    var that = this
-    wx.showModal({
-      title: '功能演示',
-      content: '当前展示的是示例数据，不会保存或产生业务记录。登录后可使用对应管理功能。',
-      confirmText: '去登录',
-      cancelText: '继续浏览',
-      confirmColor: '#159346',
-      success: function (res) { if (res.confirm) that.goToLogin() }
+  goToPublicTournaments: function () { wx.navigateTo({ url: '/pages/tournament/list/list' }) },
+  // 游客「赛事中心」统一打开服务号 H5 公开页（web-view），失败时回退赛事列表原生页。
+  goToPublicCenter: function () {
+    wx.navigateTo({
+      url: '/pages/public-tournament-center/index',
+      fail: function () { wx.navigateTo({ url: '/pages/tournament/list/list' }) }
     })
   },
-  goToPublicTournaments: function () { wx.navigateTo({ url: '/pages/tournament/list/list' }) },
-  goToPublicCenter: function () { wx.navigateTo({ url: '/pages/public-tournament-center/index' }) },
   onHomeEntryTap: function (event) {
     if (this.data.openingEntryKey) return
     var key = (event.detail || {}).key || event.currentTarget.dataset.key
@@ -365,17 +359,17 @@ Page({
   // 转发给朋友：tabBar 页面必须显式声明，否则右上角菜单转发项为灰不可点
   onShareAppMessage: function () {
     return {
-      title: '赛小蜂足球 · 青少年足球赛事管理',
+      title: '赛小蜂足球 · 球队与赛事平台',
       path: '/pages/home/home',
-      imageUrl: '/images/brand/logo-saixiaofeng-football.png'
+      imageUrl: '/images/brand/share-home-v1.jpg'
     }
   },
 
   // 分享到朋友圈：需基础库 2.11.3 及以上；未声明时菜单项为灰
   onShareTimeline: function () {
     return {
-      title: '赛小蜂足球 · 青少年足球赛事管理',
-      imageUrl: '/images/brand/logo-saixiaofeng-football.png'
+      title: '赛小蜂足球 · 球队与赛事平台',
+      imageUrl: '/images/brand/share-home-v1.jpg'
     }
   }
 })

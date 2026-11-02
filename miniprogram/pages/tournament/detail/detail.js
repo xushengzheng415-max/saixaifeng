@@ -559,6 +559,18 @@ Page({
     wx.navigateTo({ url: '/pages/match/squad/squad?matchId=' + encodeURIComponent(this.data.nextMatchId) + '&teamId=' + encodeURIComponent(this.data.teamEventTeamId) })
   },
   onTeamEventSchedule: function () { wx.navigateTo({ url: '/pages/tournament/schedule/schedule?id=' + encodeURIComponent(this.data.tournamentId) + '&view=team&teamId=' + encodeURIComponent(this.data.teamEventTeamId) + '&divisionId=' + encodeURIComponent(this.data.requestedDivisionId || '') + '&workspaceId=' + encodeURIComponent(this.data.requestedWorkspaceId || ((workspace.readContext() || {}).currentWorkspace || {}).id || '') }) },
+  // 用户 2026-10-26：转会中心就开在赛事详情里（本地赛事 → 具体赛事 → 转会中心）。
+  // 只传本赛事、本队与组别；页面不得借用上一赛事缓存，切换赛事后重新读取。
+  onTeamEventTransfer: function () {
+    var tournamentId = String(this.data.tournamentId || '')
+    if (!tournamentId) return wx.showToast({ title: '缺少赛事信息，请返回重试', icon: 'none' })
+    wx.navigateTo({
+      url: '/pages/tournament/transfer/market/market?tournamentId=' + encodeURIComponent(tournamentId)
+        + '&teamId=' + encodeURIComponent(this.data.teamEventTeamId || '')
+        + '&name=' + encodeURIComponent(this.data.teamEventName || '')
+        + '&divisionId=' + encodeURIComponent(this.data.requestedDivisionId || '')
+    })
+  },
   onTeamScheduleMatch: function(event) { var id=event.currentTarget.dataset.id;if(id)wx.navigateTo({url:'/pages/match/detail/detail?matchId='+encodeURIComponent(id)}) },
   onTeamEventTabHome: function () { wx.switchTab({ url: '/pages/home/home' }) },
   onTeamEventTabEvent: function () { wx.switchTab({ url: '/pages/event/index' }) },

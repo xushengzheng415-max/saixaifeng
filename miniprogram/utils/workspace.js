@@ -118,6 +118,62 @@ function clearContext() {
   if (app && app.globalData) app.globalData.workspaceContext = null
 }
 
+var AUTH_STORAGE_KEYS = [
+  'userInfo', 'userId', 'phoneNumber', 'phone', 'email',
+  'hasPassword', 'currentCardId', 'currentTeam', 'currentTeamId',
+  'currentTeamIndex', 'teamInfo', 'coachInfo', 'myTeams',
+  'workspaceContext', 'currentWorkspaceId'
+]
+
+function accountPhone(value) {
+  return String(value || '').replace(/\D/g, '')
+}
+
+// 会话写入的唯一入口。手机号是自然人账号唯一凭证，OpenID 只作为渠道标识；
+// 切换账号必须先清空上一账号的本地认证与工作空间数据，再原子写入新会话。
+// 认领页在页面内完成手机号验证后也要走这里，否则后续切换球队空间会被判为会话失效。
+function persistLoginSession(user) {
+  var id = String(user && (user._id || user.id) || '')
+  var phone = accountPhone(user && (user.phone || user.phoneNumber))
+  if (!id || !/^1[3-9]\d{9}$/.test(phone)) return null
+  var previous = wx.getStorageSync('userInfo') || {}
+  var sameAccount = wx.getStorageSync('authSessionVersion') === AUTH_SESSION_VERSION &&
+    !wx.getStorageSync('userLoggedOut') &&
+    String(previous._id || previous.id || '') === id &&
+    accountPhone(previous.phone || previous.phoneNumber) === phone
+  if (!sameAccount) {
+    clearContext()
+    AUTH_STORAGE_KEYS.forEach(function(key) { wx.removeStorageSync(key) })
+    var previousApp = typeof getApp === 'function' ? getApp() : null
+    if (previousApp && previousApp.globalData) {
+      previousApp.globalData.userInfo = null
+      previousApp.globalData.workspaceContext = null
+      previousApp.globalData.currentCard = null
+      previousApp.globalData.cards = []
+    }
+  }
+  var userInfo = {
+    _id: id,
+    openId: String(user.openId || user.openid || ''),
+    phone: phone,
+    phoneNumber: phone,
+    nickName: String(user.nickName || user.nickname || '用户'),
+    avatarUrl: String(user.avatarUrl || ''),
+    orgId: String(user.orgId || user.organizationId || ''),
+    loginTime: new Date().toISOString()
+  }
+  wx.removeStorageSync('userLoggedOut')
+  wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
+  wx.setStorageSync('userInfo', userInfo)
+  wx.setStorageSync('openId', userInfo.openId)
+  wx.setStorageSync('userId', id)
+  wx.setStorageSync('phone', phone)
+  wx.setStorageSync('phoneNumber', phone)
+  var app = typeof getApp === 'function' ? getApp() : null
+  if (app && app.globalData) app.globalData.userInfo = userInfo
+  return { userInfo: userInfo, sameAccount: sameAccount }
+}
+
 function hasPermission(permission, context) {
   context = context || readContext() || {}
   var current = context.currentWorkspace || {}
@@ -334,8 +390,8 @@ function roleWorkspaces(context, role) {
 function portalRoleOptions(context) {
   var current = getPortalRole(context)
   return [{id:'team_coach',title:'球队管理者',icon:'/images/icons/team.svg'},{id:'organizer',title:'赛事组织者',icon:'/images/icons/event.svg'}].map(function(item) {
-    var available = roleWorkspaces(context,item.id).length > 0 || ((context || {}).currentWorkspace || {}).type === 'personal'
-    return Object.assign({},item,{selectable:available && current !== item.id,selectedClass:current === item.id ? 'is-current' : (!available ? 'is-disabled' : ''),selectedText:current === item.id ? '当前使用' : (!available ? '暂无授权' : '')})
+    // 工作视角不授予资源权限；没有球队时也要能进入创建入口。
+    return Object.assign({},item,{selectable:current !== item.id,selectedClass:current === item.id ? 'is-current' : '',selectedText:current === item.id ? '当前使用' : ''})
   })
 }
 function switchPortalRole(role) {
@@ -345,11 +401,13 @@ function switchPortalRole(role) {
     if ((context.currentWorkspace || {}).type === 'personal') return context
     var targets = roleWorkspaces(context,role), current = context.currentWorkspace || {}
     var target = targets.filter(function(item) { return item.id === current.id })[0] || targets[0]
-    if (!target) throw new Error('当前账号暂无该身份授权')
+    if (!target) return context
     return switchWorkspace(target.id)
   }).then(function(context) {
     if (accountKey() !== expected) throw new Error('账号已切换，请重试')
     if (context.currentWorkspace.type === 'tournament_shared' || context.currentWorkspace.type === 'personal') return context
+    // 无匹配空间只切换本地视角，不向当前机构申请或补写业务权限。
+    if (!roleWorkspaces(context,role).some(function(item) { return item.id === context.currentWorkspace.id })) return context
     return wx.cloud.callFunction({name:'getMiniWorkspace',data:{action:'setHomeIdentity',workspaceId:context.currentWorkspace.id,identity:role}}).then(function(response) {
       if (!(response.result || {}).success) throw new Error((response.result || {}).message || '身份切换失败')
       return loadContext({workspaceId:context.currentWorkspace.id,preserveWorkspace:true})
@@ -397,6 +455,7 @@ module.exports = {
   readContext: readContext,
   saveContext: saveContext,
   clearContext: clearContext,
+  persistLoginSession: persistLoginSession,
   clearSessionStorage: clearSessionStorage,
   hasPermission: hasPermission,
   isVisualQaEnabled: isVisualQaEnabled,

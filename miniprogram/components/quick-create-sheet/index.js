@@ -1,11 +1,12 @@
 var setup = require('../../utils/quick-setup')
 var workspace = require('../../utils/workspace')
+var logoCutout = require('../../utils/logo-cutout')
 var ORG_TYPES = [{id:'event_company',name:'赛事公司'},{id:'club',name:'足球俱乐部'},{id:'school',name:'学校'},{id:'association',name:'足协/体育组织'},{id:'other',name:'其他机构'}]
 
 Component({
   properties: { visible:{type:Boolean,value:false}, kind:{type:String,value:'event'}, allowSkip:{type:Boolean,value:true} },
   data:{ title:'创建赛事',isEvent:true,loadingState:false,busy:false,errorText:'',organizationStep:false,businessStep:true,successStep:false,
-    name:'',startDate:'',endDate:'',region:[],regionText:'请选择省市',province:'',provinceCode:'',city:'',logo:'',originalLogo:'',transparentLogo:'',uploading:false,
+    name:'',startDate:'',endDate:'',region:[],regionText:'请选择省市',province:'',provinceCode:'',city:'',logo:'',originalLogo:'',transparentLogo:'',uploading:false,logoHintText:'可稍后补充',
     organizationName:'',organizationType:'',organizationTypeText:'请选择机构类型',organizationTypes:ORG_TYPES,organizationSummary:'',submitText:'创建赛事',closeText:'跳过',successName:'',successText:'',successButton:'',createdId:'',isTeamSuccess:false },
   observers:{'visible, kind':function(visible,kind) { if (visible && (!this._open || this._kind !== kind)) this.open(kind); else if (!visible && this._open) { this._open=false;this.setTabHidden(false) } }},
   lifetimes:{detached:function() { this._open=false;clearTimeout(this._uploadTimer);this.setTabHidden(false) }},
@@ -25,7 +26,7 @@ Component({
       this._open=true;this._kind=kind;this._account=setup.accountKey();this._requestId=setup.requestId();this._organization=null;this._organizationCommitted=false;this._organizationRegion=null
       this.setTabHidden(true)
       this.setData({title:isEvent?'创建赛事':'创建球队',isEvent:isEvent,loadingState:isEvent,busy:false,errorText:'',organizationStep:false,businessStep:!isEvent,successStep:false,
-        name:'',startDate:'',endDate:'',region:[],regionText:'请选择省市',province:'',provinceCode:'',city:'',logo:'',originalLogo:'',transparentLogo:'',uploading:false,
+        name:'',startDate:'',endDate:'',region:[],regionText:'请选择省市',province:'',provinceCode:'',city:'',logo:'',originalLogo:'',transparentLogo:'',uploading:false,logoHintText:'可稍后补充',
         organizationName:'',organizationType:'',organizationTypeText:'请选择机构类型',organizationSummary:'',submitText:isEvent?'创建赛事':'创建球队',closeText:this.properties.allowSkip?'跳过':'关闭',createdId:'',isTeamSuccess:false})
       if (!isEvent) return
       setup.call('state').then(function(state) {
@@ -98,14 +99,32 @@ Component({
       wx.chooseImage({count:1,sizeType:['compressed'],sourceType:['album','camera'],success:function(reply){
         if(!that.active())return
         var file=(reply.tempFilePaths || [])[0];if(!file)return
-        var uploadId=that._uploadId=setup.requestId()
-        clearTimeout(that._uploadTimer)
-        that.setData({uploading:true,errorText:''})
-        that._uploadTimer=setTimeout(function(){if(that.active() && that._uploadId===uploadId){that._uploadId='';that.setData({uploading:false,errorText:'队徽上传超时，请重试或稍后补充'})}},18000)
-        wx.cloud.uploadFile({cloudPath:'team-logos/original/'+setup.requestId()+'.png',filePath:file,
-          success:function(upload){if(!that.active() || that._uploadId!==uploadId)return;clearTimeout(that._uploadTimer);that._uploadId='';that.setData({logo:file,originalLogo:upload.fileID,transparentLogo:'',uploading:false})},
-          fail:function(){if(that.active() && that._uploadId===uploadId){clearTimeout(that._uploadTimer);that._uploadId='';that.setData({uploading:false,errorText:'队徽上传失败，请重新选择'})}}})
+        that.processLogo(file)
       }})
+    },
+    // 队徽与其他入口走同一条流程：正方形裁剪 → 本地去背景 → 原图与透明图各上传一次
+    processLogo:function(file) {
+      var that=this
+      var uploadId=that._uploadId=setup.requestId()
+      clearTimeout(that._uploadTimer)
+      that.setData({uploading:true,errorText:'',logoHintText:'正在裁剪并去背景…'})
+      that._uploadTimer=setTimeout(function(){if(that.active() && that._uploadId===uploadId){that._uploadId='';that.setData({uploading:false,logoHintText:'队徽处理超时，请重试或稍后补充'})}},24000)
+      logoCutout.process({owner:that,canvasId:'teamLogoCutout',filePath:file}).then(function(crest){
+        return logoCutout.uploadCrest({path:crest.path,cutoutPath:crest.cutoutPath,requestId:setup.requestId()}).then(function(uploaded){
+          return {preview:crest.cutoutPath || crest.path,uploaded:uploaded}
+        })
+      }).catch(function(){
+        // 旧基础库没有 Canvas 2D 或取像素失败时退回原图直传，不阻断创建球队
+        return logoCutout.uploadCrest({path:file,cutoutPath:'',requestId:setup.requestId()}).then(function(uploaded){
+          return {preview:file,uploaded:uploaded}
+        })
+      }).then(function(result){
+        if(!that.active() || that._uploadId!==uploadId)return
+        clearTimeout(that._uploadTimer);that._uploadId=''
+        that.setData({logo:result.preview,originalLogo:result.uploaded.originalLogo,transparentLogo:result.uploaded.transparentLogo,uploading:false,logoHintText:result.uploaded.transparentLogo?'已生成透明队徽':'已保留原图（未识别出背景）'})
+      }).catch(function(){
+        if(that.active() && that._uploadId===uploadId){clearTimeout(that._uploadTimer);that._uploadId='';that.setData({uploading:false,logoHintText:'队徽上传失败，请重试或稍后补充'})}
+      })
     }
   }
 })

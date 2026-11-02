@@ -22,6 +22,7 @@ Component({
           var positions=layout.slotsFor(count,that.formations[side]),used=[]
           row.slots=positions.map(function(slot){var found=(saved.players||[]).find(function(player){var id=player.playerId||player.id||player._id;return player.role===slot.role&&ids.indexOf(id)>=0&&used.indexOf(id)<0});var id=found&&(found.playerId||found.id||found._id);if(id)used.push(id);return id||''})
           row.unplaced=ids.filter(function(id){return used.indexOf(id)<0})
+          row.slots=row.slots.map(function(id){return id||row.unplaced.shift()||''})
         }
         row.bench=copy(that.properties[side==='home'?'homeBench':'awayBench'])
       })

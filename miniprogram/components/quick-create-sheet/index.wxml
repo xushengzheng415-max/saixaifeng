@@ -1,6 +1,8 @@
 <view class="quick-mask" wx:if="{{visible}}" catchtap="close" catchtouchmove="noop">
   <view class="quick-sheet" catchtap="noop">
     <view class="sheet-handle"></view>
+    <!-- 隐藏 Canvas 2D：队徽裁剪与去背景（与 PC 端同一套边缘连通算法） -->
+    <canvas type="2d" id="teamLogoCutout" class="logo-cutout-canvas"></canvas>
     <view class="sheet-header"><text>{{title}}</text><button class="sheet-skip" size="mini" style="margin:0;min-width:0;" bindtap="close" disabled="{{busy}}">{{closeText}}</button></view>
     <scroll-view class="sheet-scroll" scroll-y>
       <view class="sheet-body">
@@ -12,7 +14,7 @@
         </block>
         <block wx:if="{{businessStep}}">
           <view class="organization-summary" wx:if="{{organizationSummary}}">主办机构 · {{organizationSummary}}</view>
-          <view class="logo-row" wx:if="{{!isEvent}}" bindtap="chooseLogo"><image wx:if="{{logo}}" src="{{logo}}" mode="aspectFit"/><image wx:if="{{!logo}}" src="/images/icons/shield.svg" mode="aspectFit"/><view><text>上传队徽</text><text wx:if="{{!uploading}}">可稍后补充</text><text wx:if="{{uploading}}">正在上传…</text></view></view>
+          <view class="logo-row" wx:if="{{!isEvent}}" bindtap="chooseLogo"><image wx:if="{{logo}}" src="{{logo}}" mode="aspectFit"/><image wx:if="{{!logo}}" src="/images/icons/shield.svg" mode="aspectFit"/><view><text>上传队徽</text><text>{{logoHintText}}</text></view></view>
           <view class="field"><text wx:if="{{isEvent}}">赛事名称</text><text wx:if="{{!isEvent}}">球队名称</text><input value="{{name}}" maxlength="50" placeholder="填写名称" data-field="name" bindinput="input" disabled="{{busy}}"/></view>
           <block wx:if="{{isEvent}}">
             <view class="field"><text>开始日期</text><picker mode="date" value="{{startDate}}" data-field="startDate" bindchange="onDate" disabled="{{busy}}"><view class="picker-value">{{startDate || '请选择'}}<text>›</text></view></picker></view>

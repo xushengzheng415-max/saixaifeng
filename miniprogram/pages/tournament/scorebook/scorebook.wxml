@@ -1,0 +1,125 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="tip">加载中...</view>
+  <view wx:elif="{{errorText}}" class="tip"><text>{{errorText}}</text><button bindtap="loadData">重新加载</button></view>
+  <block wx:else>
+    <view class="hero">
+      <text class="hero-brand">赛小蜂足球</text>
+      <text class="hero-title">{{tournamentName || '赛事成绩册'}}</text>
+      <view class="hero-meta">
+        <text>{{totalMatches}} 场比赛</text>
+        <text class="dot">·</text>
+        <text>{{divisions.length}} 个组别</text>
+      </view>
+      <view class="hero-tag {{heroTagClass}}">{{readyText}}</view>
+      <text wx:if="{{hasPending}}" class="hero-note">{{pendingText}}</text>
+    </view>
+
+    <view wx:if="{{hasOverall}}" class="card">
+      <view class="card-head"><text class="card-title">全赛事奖项</text></view>
+      <view class="award-row">
+        <text class="award-label">总 MVP</text>
+        <view class="award-body">
+          <text class="award-name">{{overallMvpName}}</text>
+          <text class="award-meta">{{overallMvpMeta}}</text>
+        </view>
+      </view>
+      <view class="award-row">
+        <text class="award-label">总最佳射手</text>
+        <view class="award-body">
+          <text class="award-name">{{overallScorerName}}</text>
+          <text class="award-meta">{{overallScorerMeta}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="card" wx:for="{{divisions}}" wx:key="divisionId">
+      <view class="card-head">
+        <text class="card-title">{{item.divisionName}}</text>
+        <text class="card-sub">{{item.summaryText}}</text>
+      </view>
+
+      <view class="team-line">
+        <view class="team-pill champion"><text class="pill-label">冠军</text><text class="pill-name">{{item.championText}}</text></view>
+        <view class="team-pill runner"><text class="pill-label">亚军</text><text class="pill-name">{{item.runnerUpText}}</text></view>
+      </view>
+
+      <view class="award-row">
+        <text class="award-label">金靴奖</text>
+        <view class="award-body">
+          <text class="award-name">{{item.scorerName}}</text>
+          <text class="award-meta">{{item.scorerTeam}} · {{item.scorerStat}}</text>
+        </view>
+      </view>
+      <view class="award-row">
+        <text class="award-label">MVP</text>
+        <view class="award-body">
+          <text class="award-name">{{item.mvpName}}</text>
+          <text class="award-meta">{{item.mvpTeam}} · {{item.mvpStat}}</text>
+        </view>
+      </view>
+      <view class="award-row">
+        <text class="award-label">金手套</text>
+        <view class="award-body">
+          <text class="award-name">{{item.keeperName}}</text>
+          <text class="award-meta">{{item.keeperTeam}} · {{item.keeperStat}}</text>
+        </view>
+      </view>
+
+      <view class="sub-head" wx:if="{{item.hasBestXI}}">最佳阵容（1-3-3-1）</view>
+      <view class="xi-wrap" wx:if="{{item.hasBestXI}}">
+        <view class="xi-item" wx:for="{{item.bestXI}}" wx:for-item="slot" wx:key="key">
+          <text class="xi-slot">{{slot.slot}}</text>
+          <text class="xi-name">{{slot.name}}</text>
+          <text class="xi-team">{{slot.teamName}}</text>
+          <text class="xi-note" wx:if="{{slot.filledNote}}">{{slot.filledNote}}</text>
+          <text class="xi-note" wx:if="{{slot.manualNote}}">{{slot.manualNote}}</text>
+        </view>
+      </view>
+
+      <view class="sub-head" wx:if="{{item.teamAwards.length}}">球队奖项</view>
+      <view class="team-award-row" wx:for="{{item.teamAwards}}" wx:for-item="award" wx:key="key">
+        <text class="ta-title">{{award.title}}</text>
+        <text class="ta-name">{{award.teamName}}</text>
+        <text class="ta-note">{{award.note}}</text>
+      </view>
+
+      <block wx:for="{{item.groups}}" wx:for-item="group" wx:key="key">
+        <view class="sub-head">{{group.groupName}} 积分榜</view>
+        <view class="table">
+          <view class="trow thead">
+            <text class="c-rank">名次</text>
+            <text class="c-team">球队</text>
+            <text class="c-num">赛</text>
+            <text class="c-num">胜</text>
+            <text class="c-num">平</text>
+            <text class="c-num">负</text>
+            <text class="c-num">进/失</text>
+            <text class="c-num">净</text>
+            <text class="c-num">积分</text>
+          </view>
+          <view class="trow" wx:for="{{group.rows}}" wx:for-item="row" wx:key="key">
+            <text class="c-rank">{{row.rank}}</text>
+            <text class="c-team">{{row.teamName}}</text>
+            <text class="c-num">{{row.played}}</text>
+            <text class="c-num">{{row.wins}}</text>
+            <text class="c-num">{{row.draws}}</text>
+            <text class="c-num">{{row.losses}}</text>
+            <text class="c-num">{{row.goalsFor}}/{{row.goalsAgainst}}</text>
+            <text class="c-num">{{row.goalDifferenceText}}</text>
+            <text class="c-num strong">{{row.points}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view class="card">
+      <view class="card-head"><text class="card-title">颁奖依据</text></view>
+      <view class="rule-row" wx:for="{{rules}}" wx:key="key">
+        <text class="rule-index">{{item.key}}</text>
+        <text class="rule-text">{{item.text}}</text>
+      </view>
+    </view>
+
+    <view class="footer-tip">成绩册依据已归档正式赛果自动生成，主办方可在 PC 赛果中心手动调整个别奖项</view>
+  </block>
+</view>
