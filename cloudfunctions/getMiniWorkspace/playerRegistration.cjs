@@ -248,9 +248,10 @@ async function run(deps,event) {
           await tx.collection('service_entry_sessions').doc(sid).update({data:{registeredPlayerId:playerId,playerRegistrationReceipt:db.command.set(receipt)}})
         })
         if (text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY)) {
-          // 恢复/转入同样是该队的入队事件，服务号通知必须直达本队球员库，不能只落到球队列表。
-          // 统一经 notify-entry 中转页落地：先占住小程序页面栈，用户右滑/返回仍留在小程序内。
-          try { await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyTeamPlayerJoin',bridgeKey:text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY),teamId:text(team._id),teamName:text(team.name||team.teamName),playerId,playerName:text(restored.name),inviteId:text(invite._id),eventId:choice.nonce,pendingTeamConfirm:false,pagePath:'pages/notify-entry/notify-entry?teamId='+text(team._id)}}) } catch(notifyError) { console.warn('[playerRegistration] 恢复入队通知发送失败',text(notifyError&&notifyError.message)) }
+          // 过渡落点：正式版尚未发布带 notify-entry 中转页的新包（类目审核期间无法提审），
+          // 旧包的球员库自定义返回键在单页栈下无反应会把人卡住，先落到「我的球队」tab 页。
+          // 1.2.36 正式发布后改回 'pages/notify-entry/notify-entry?teamId='+text(team._id)。
+          try { await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyTeamPlayerJoin',bridgeKey:text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY),teamId:text(team._id),teamName:text(team.name||team.teamName),playerId,playerName:text(restored.name),inviteId:text(invite._id),eventId:choice.nonce,pendingTeamConfirm:false,pagePath:'pages/teams/index'}}) } catch(notifyError) { console.warn('[playerRegistration] 恢复入队通知发送失败',text(notifyError&&notifyError.message)) }
         }
         return {success:true,...receipt}
       } catch(e) { if((e.code!=='PLAYER_POOL_CHANGED'&&!busy(e))||attempt===2)throw e }
@@ -353,12 +354,11 @@ async function run(deps,event) {
         await tx.collection('service_entry_sessions').doc(sid).update({data:{registeredPlayerId:playerId,playerRegistrationReceipt:db.command.set(receipt)}})
       })
       // 用户确认口径（2026-10-19）：球员提交成功后，球队负责人在服务号收到一条待审核的入队申请通知。
-      // 两种入队路径都带 teamId 直达本队球员库：待球队确认的新登记同时携带 pendingTeamConfirm=1
-      // 直接展开待确认列表；认领/恢复沿用原通知但同样落到该队，避免点通知只回到球队列表、看起来像进了另一支队。
+      // 受旧包单页栈返回无反应影响，通知过渡期统一落到「我的球队」tab 页；1.2.36 发布后改回中转页直达该队。
       // 尽力而为、不阻断登记结果；幂等重放已在上方提前返回，不会重复通知。
       if (text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY)) {
         try {
-          await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyTeamPlayerJoin',bridgeKey:text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY),teamId:text(team._id),teamName:text(team.name||team.teamName),playerId,playerName:values.name,inviteId:text(invite._id),eventId:choice.nonce,pendingTeamConfirm:!target,pagePath:'pages/notify-entry/notify-entry?teamId='+text(team._id)+(target?'':'&pendingTeamConfirm=1')}})
+          await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyTeamPlayerJoin',bridgeKey:text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY),teamId:text(team._id),teamName:text(team.name||team.teamName),playerId,playerName:values.name,inviteId:text(invite._id),eventId:choice.nonce,pendingTeamConfirm:!target,pagePath:'pages/teams/index'}})
         } catch(notifyError) { console.warn('[playerRegistration] 入队申请通知发送失败',text(notifyError&&notifyError.message)) }
       }
       await require('./data-center/numbering.cjs').afterWrite(db,'players',playerId)
