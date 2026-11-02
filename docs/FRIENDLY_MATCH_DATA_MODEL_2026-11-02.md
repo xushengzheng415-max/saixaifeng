@@ -148,11 +148,79 @@
 
 ## 六、通知
 
-- 载体：服务号模板消息（`SXF_INVITE_TEMPLATE_ID` / `SXF_SIGNIN_TEMPLATE_ID`，沿用现有环境变量）。
+### 6.1 模板与路由（每模板独立映射表）
+
+字段适配层在 `cloudfunctions/friendlyMatchCenter/template-fields.cjs`，`TEMPLATE_DEFS` 是唯一权威表；
+业务代码只传语义值（状态句 / 时间 / 场地 / 发起球队 / 接收人），不出现 `thing*`、`time*` 字段名。
+
+| templateKey | 模板 | 编号 | 字段映射 | 接收人兜底 | 模板 ID 来源 |
+| --- | --- | --- | --- | --- | --- |
+| `success`（A） | 约球成功通知 | 58013 | 约球名称 `thing1` / 约球时间 `time2` / 约球地址 `thing3` / 组织者 `thing4` / 参与人 `thing5` | 球队球员 | `SXF_INVITE_TEMPLATE_ID` → `SXF_SIGNIN_TEMPLATE_ID`（旧名兼容，两者可同时指向 A） |
+| `cancel`（B） | 约球已取消通知 | 58014 | 约球名称 `thing1` / 约球时间 `time2` / 约球地址 `thing3` / 组织者 `thing4` / 报名人 `thing6` | 队员 | `SXF_CANCEL_TEMPLATE_ID` |
+
+两个模板都没有 `first` / `keyword*` / `remark` 位，跳转文案由微信固定为「点击查看详情」，跳转地址只走 `message.url`。
+
+路由表（`NOTIFY_SCENE`，同样在云函数内，显式驱动）：
+
+| 场景 | kind | 模板 |
+| --- | --- | --- |
+| 发起约球推送本队球员 | `invite` | A |
+| 对方接战 / 拒战通知发起人 | `response` | A |
+| 人工成局 | `confirmed` | A |
+| 开赛前提醒（管理页手动） | `reminder` | A |
+| 取消邀约 | `cancelled` | B |
+| 流局（人工关闭） | `closed` | B |
+
+回落规则：`cancel` 未配置 `SXF_CANCEL_TEMPLATE_ID` 时按语义回落到 A，且字段映射同步切回 A（`thing6` 不会发给 A 模板）；
+返回结构中 `templateKey` 标明实际用的模板、`requestedTemplateKey` 保留原语义、`templateFallback:true` 标明发生了回落。
+
+### 6.2 字段值规则（两模板通用）
+
+- `thing*` 一律 ≤ 20 字，超长按字符截断并补 `…`（`clipThing`，按 Unicode 字符计数，不切半个字）。
+- `time2` 由 `matchDate` + `matchTime` 生成：`YYYY-MM-DD HH:mm~HH:mm`；只有开始时间输出单个 `YYYY-MM-DD HH:mm`；
+  结束时间早于开始只保留开始；日期或时间无法解析（如「待定」）返回 `ok:false`，调用方整条跳过发送并写 `skippedReason`，绝不发脏数据。
+- `thing1` 承载状态语义：发起约球 / 已接战 / 已拒战 / 已成局 / 已取消 / 已流局 / 开赛提醒。
+- `thing3` 场地为空时填「待确认」；`thing4` 为发起球队名，为空填「我方」。
+- `thing5`（A 参与人）/ `thing6`（B 报名人）为接收人姓名：报名通知优先用报名行姓名，其次 `users` 档案，最后用模板各自兜底文案。
+
+### 6.3 取消原因（B 模板没有独立原因位）
+
+- 取消 / 流局 / 提醒的备注优先并入 `thing1`，形如「`「A 队」约球已取消·场地被占`」。
+- 合并后超过 20 字时只保留状态句（如「`「A 队」约球已取消`」），完整原因通过返回结构 `notify.reason` 回传，`notify.reasonClipped:true` 标记被截断，便于排查。
+
+### 6.4 通道与统计口径
+
+- 载体：服务号模板消息。优先走固定出口桥接 `ops/wechat-football-bridge`（`template/send`，要求 `{message:{touser,template_id,url,data}}` 包装）；
+  未配桥接时退回直连，需要 `SERVICE_ACCOUNT_APP_ID` / `SERVICE_ACCOUNT_APP_SECRET`。
+- openid 只认服务号渠道：`users.serviceAccountOpenId` / `users.officialOpenId` → `service_identities.serviceAccountOpenId`（`phone` + `phoneVerified:true`）；
+  不读小程序 / 网站渠道的 `wechatOpenId`、`openId`。
 - 触发：取消邀约、流局、人工成局、开赛前提醒（管理页手动触发）。
-- 对象：仅该邀约的在册活跃报名行（`signup`/`present`），按 `phoneKey` 反查 `users`（兼容 `phone`/`phoneNumber`）拿 openid。
-- 返回 `notify{kind,total,sent,skipped,failed,templateConfigured}`；未配置模板或查不到 openid 只计入 `skipped`，不阻断主流程。
-- 小程序订阅消息本次不接，`healthCheck` 暴露 `miniProgramSubscribe:'not-enabled'` 作为接口位。
+- 对象：仅该邀约的在册活跃报名行（`signup`/`present`），按 `phoneKey` 反查 `users`（兼容 `phone`/`phoneNumber`）。
+- 返回 `notify{kind,total,sent,skipped,failed,templateKey,templateTitle,templateId,templateConfigured,templateFallback,requestedTemplateKey,statusName,reason,reasonClipped,skippedReason}`；
+  只有 `sendTemplate` 明确成功才计 `sent`，模板缺失 / 通道未配置 / openid 缺失一律计 `skipped`，不阻断主流程。
+- 小程序订阅消息本次不接，`healthCheck` 暴露 `miniProgramSubscribe:'not-enabled'` 作为接口位；
+  `healthCheck.templateRoutes` 同时暴露每套模板的 `fieldMap`、生效模板 ID 与回落情况，发布后可直接读回核对。
+
+### 6.5 环境变量（由有权限者配置，代码不写云端）
+
+| 变量 | 用途 | 说明 |
+| --- | --- | --- |
+| `SXF_INVITE_TEMPLATE_ID` | A 模板 | 模板 A 上线后填 58013 的模板 ID |
+| `SXF_SIGNIN_TEMPLATE_ID` | A 模板（旧名兼容） | 与 `SXF_INVITE_TEMPLATE_ID` 同值即可，代码按顺序回落 |
+| `SXF_CANCEL_TEMPLATE_ID` | B 模板 | 填 58014 的模板 ID；不配时取消通知回落 A |
+
+本地示例（仅文档，不入库真实值）：
+
+```powershell
+SXF_INVITE_TEMPLATE_ID=<模板 A 58013 的 ID>
+SXF_SIGNIN_TEMPLATE_ID=<与 A 同值>
+SXF_CANCEL_TEMPLATE_ID=<模板 B 58014 的 ID>
+```
+
+### 6.6 已知语义偏差（待办）
+
+- 开赛提醒复用 A「约球成功通知」的标题，微信侧标题与提醒语义不完全对应，接收人看到的标题仍是「约球成功通知」。
+- 若需要独立提醒标题，在服务号后台再申请一个提醒类模板即可接入：`TEMPLATE_DEFS` 加一条 `reminder` 定义、`NOTIFY_SCENE.reminder.templateKey` 指向它、补一个 `SXF_REMINDER_TEMPLATE_ID`，业务代码无需改动。
 
 ---
 
@@ -172,6 +240,7 @@
 ## 八、未做与后续
 
 - 小程序订阅消息接口位（`miniProgramSubscribe:'not-enabled'`）未接。
+- 开赛提醒当前复用 A 模板「约球成功通知」标题；如需独立提醒模板，后台再加一个即可接入（见 6.6）。
 - 开赛前自动提醒的定时触发器未创建（线上函数无触发器配置），目前只能管理页手动触发。
 - 成局/流局后的记分、归档、转正式战绩不在本次范围。
 - 未做面向球员的小程序详情页与小程序码（用户口径）。

@@ -1,6 +1,8 @@
 const cloud = require('wx-server-sdk')
 const https = require('https')
 const crypto = require('crypto')
+// 服务号模板消息字段适配：每模板一张独立映射表（A 58013 成功通知 / B 58014 取消通知）
+const templateFields = require('./template-fields.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -13,6 +15,8 @@ const CONFIG = {
   h5BaseUrl: process.env.SERVICE_ACCOUNT_H5_URL || 'https://www.sxffootball.cn/service-account-h5/',
   inviteTemplateId: process.env.SXF_INVITE_TEMPLATE_ID || '',
   signinTemplateId: process.env.SXF_SIGNIN_TEMPLATE_ID || '',
+  // 取消 / 流局用的第二个模板（58014「约球已取消通知」）
+  cancelTemplateId: process.env.SXF_CANCEL_TEMPLATE_ID || '',
   // AI 生文走云开发 AI+（cloudbase 网关，开发者计划免费额度），无需额外密钥
   // 模型名按顺序尝试，取控制台「生文模型」页已启用的第一个；可用环境变量 SXF_AI_MODELS 覆盖
   aiModels: (process.env.SXF_AI_MODELS || 'deepseek-v4-flash,hy3,hunyuan-lite').split(',').map(s => s.trim()).filter(Boolean),
@@ -292,21 +296,57 @@ async function assertInviteManager(invite, caller) {
   return { ok: true, team: check.team, via: check.via }
 }
 
-async function resolveOpenidByPhone(phone, userId) {
+// 服务号模板消息只能发给“服务号”的 openid（公众号/小程序/网站应用的 openid 互不通用），
+// 因此只认 users.serviceAccountOpenId / users.officialOpenId 与 service_identities.serviceAccountOpenId，
+// 不再读 wechatOpenId / openId，避免把消息发到别的渠道或静默失败。
+const SERVICE_IDENTITIES_COLLECTION = 'service_identities'
+
+function serviceOpenidOfUser(user) {
+  if (!user) return ''
+  return text(user.serviceAccountOpenId || user.officialOpenId)
+}
+
+function phoneOfUser(user) {
+  if (!user) return ''
+  return phoneDigits(user.phone || user.phoneNumber)
+}
+
+async function serviceOpenidOfPhone(phone) {
+  const digits = phoneDigits(phone)
+  if (!digits) return ''
+  const res = await db.collection(SERVICE_IDENTITIES_COLLECTION)
+    .where({ phone: digits, phoneVerified: true }).limit(5).get().catch(() => null)
+  const rows = (res && res.data) || []
+  const hit = rows.find(row => text(row.serviceAccountOpenId))
+  return text(hit && hit.serviceAccountOpenId)
+}
+
+async function resolveServiceOpenidByPhone(phone, userId) {
   const digits = phoneDigits(phone)
   if (digits) {
     for (const field of ['phone', 'phoneNumber']) {
       const res = await db.collection(USERS_COLLECTION).where({ [field]: digits }).limit(1).get().catch(() => null)
       const user = res && res.data && res.data[0]
-      if (user) return text(user.wechatOpenId || user.openId || user.openid)
+      if (user) {
+        const direct = serviceOpenidOfUser(user)
+        if (direct) return direct
+        break
+      }
     }
+    const fromIdentity = await serviceOpenidOfPhone(digits)
+    if (fromIdentity) return fromIdentity
   }
   if (text(userId)) {
     const res = await db.collection(USERS_COLLECTION).doc(text(userId)).get().catch(() => null)
-    const user = res && res.data
-    if (user) return text(user.wechatOpenId || user.openId || user.openid)
+    return serviceOpenidOfUser(res && res.data)
   }
   return ''
+}
+
+// 参与人姓名：优先 users 里的真实姓名，取不到按“球队球员”兜底（不传空串）
+function participantNameOf(user, fallback) {
+  const name = text(user && (user.userName || user.name || user.realName || user.nickName))
+  return name || text(fallback) || '球队球员'
 }
 
 async function loadSignupResponses(inviteId, limit) {
@@ -379,23 +419,56 @@ async function bridgePost(action, payload) {
   })
 }
 
+// 服务号模板消息发送
+// 返回 { ok, skipped, reason, detail, msgid }：调用方只按 ok 计成功，
+// 模板未配置 / 拿不到服务号 openid / 发送通道未配置 / 拿不到 access_token 一律算 skipped，
+// 绝不把“没发出去”记成 sent。
 async function sendTemplate(openid, templateId, data, pageUrl) {
-  if (!openid || !templateId) return null
-  if (CONFIG.bridgeUrl && CONFIG.bridgeSecret) {
-    return bridgePost('template/send', {
-      touser: openid, template_id: templateId, data: data,
-      page: pageUrl || '', miniprogram_state: 'formal'
-    })
+  if (!templateId) return { ok: false, skipped: true, reason: 'template_missing' }
+  if (!openid) return { ok: false, skipped: true, reason: 'openid_missing' }
+
+  // 模板消息只认 url（网页跳转），page / miniprogram_state 是订阅消息字段，不能混用
+  const message = {
+    touser: openid, template_id: templateId, data: data, url: text(pageUrl)
   }
+
+  if (CONFIG.bridgeUrl && CONFIG.bridgeSecret) {
+    // 固定出口中转要求 { message: {...} } 包装（见 ops/wechat-football-bridge/server.js template/send）
+    try {
+      const result = await bridgePost('template/send', { message })
+      if (result && result.success === true) return { ok: true, msgid: text(result.msgid), via: 'bridge' }
+      return {
+        ok: false, skipped: false, reason: 'bridge_rejected', via: 'bridge',
+        detail: text(result && (result.message || result.errmsg || result.error))
+      }
+    } catch (error) {
+      return { ok: false, skipped: false, reason: 'bridge_failed', via: 'bridge', detail: text(error && error.message) }
+    }
+  }
+
   const appId = process.env.SERVICE_ACCOUNT_APP_ID
   const appSecret = process.env.SERVICE_ACCOUNT_APP_SECRET
-  if (!appId || !appSecret) return null
-  const tokenRes = await httpsGet(`https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${appSecret}`)
-  const token = tokenRes && tokenRes.access_token
-  if (!token) return null
-  return httpsPost(`https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${token}`, {
-    touser: openid, template_id: templateId, data: data, url: pageUrl || ''
-  })
+  if (!appId || !appSecret) return { ok: false, skipped: true, reason: 'channel_not_configured' }
+
+  let token = ''
+  try {
+    const tokenRes = await httpsGet(`https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${appSecret}`)
+    token = text(tokenRes && tokenRes.access_token)
+  } catch (error) {
+    token = ''
+  }
+  if (!token) return { ok: false, skipped: true, reason: 'access_token_missing' }
+
+  try {
+    const result = await httpsPost(`https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${token}`, message)
+    if (result && !result.errcode) return { ok: true, msgid: text(result.msgid), via: 'direct' }
+    return {
+      ok: false, skipped: false, reason: 'wechat_error_' + text(result && result.errcode), via: 'direct',
+      detail: text(result && result.errmsg)
+    }
+  } catch (error) {
+    return { ok: false, skipped: false, reason: 'direct_failed', via: 'direct', detail: text(error && error.message) }
+  }
 }
 
 function httpsGet(url) {
@@ -1114,68 +1187,180 @@ async function listSignins(event) {
 
 // ======== 内部通知 ========
 
-// 遍历球队球员推模板消息
-async function notifyTeamPlayers(inviteId, record) {
-  try {
-    const teamPlayers = await db.collection(PLAYERS_COLLECTION)
-      .where({ teamId: record.teamId, status: 'active' }).limit(50).get()
+// 模板 ID 来源（与 template-fields 的 envKeys 对应，不在这里出现字段键名）
+// A(success) ← SXF_INVITE_TEMPLATE_ID / SXF_SIGNIN_TEMPLATE_ID（旧名保留兼容，两个都允许指向同一模板）
+// B(cancel)  ← SXF_CANCEL_TEMPLATE_ID；未配置时按语义回落到 A，字段映射同步切回 A（thing6 不会发给 A 模板）
+const TEMPLATE_ID_BY_KEY = {
+  success: [CONFIG.inviteTemplateId, CONFIG.signinTemplateId],
+  cancel: [CONFIG.cancelTemplateId]
+}
 
-    const players = teamPlayers.data || []
-    let sent = 0, failed = 0
+// 通知场景 → 模板路由：显式表驱动
+//   confirmed / reminder / invite（发起约球）/ response（接战拒战）→ A 58013「约球成功通知」
+//   cancelled / closed（流局）→ B 58014「约球已取消通知」
+const NOTIFY_SCENE = {
+  invite: { templateKey: 'success' },
+  response: { templateKey: 'success' },
+  confirmed: { templateKey: 'success' },
+  reminder: { templateKey: 'success' },
+  cancelled: { templateKey: 'cancel' },
+  closed: { templateKey: 'cancel' }
+}
 
-    for (const p of players) {
-      const userRes = await db.collection(USERS_COLLECTION).doc(p.playerId || p.userId).get().catch(() => null)
-      const openid = (userRes && userRes.data && (userRes.data.wechatOpenId || userRes.data.openId)) || ''
-      if (!openid) { failed++; continue }
-
-      const battleCry = record.battleCry || {}
-      const battleCryLine = (battleCry.lines && battleCry.lines[0]) || ''
-
-      await sendTemplate(openid, CONFIG.inviteTemplateId, {
-        first: { value: `「${record.teamName}」发起约球啦！`, color: '#2E7D32' },
-        keyword1: { value: record.teamName },
-        keyword2: { value: `${record.matchDate || ''} ${record.matchTime || ''}` },
-        keyword3: { value: record.venue || '待教练确认' },
-        keyword4: { value: battleCryLine || '点击进入查看战书' },
-        remark: { value: '点击"详情"进入服务号应战 ›', color: '#888888' }
-      }, record.signinUrl)
-
-      sent++
-      if (sent % 5 === 0) await new Promise(r => setTimeout(r, 500))
+function resolveNotifyTemplate(sceneKey) {
+  const scene = NOTIFY_SCENE[text(sceneKey)] || NOTIFY_SCENE.invite
+  const def = templateFields.templateDef(scene.templateKey)
+  if (!def) return { templateKey: '', templateId: '', def: null, configured: false, fallback: false }
+  const ids = TEMPLATE_ID_BY_KEY[def.key] || []
+  const direct = text(ids.find(item => text(item)))
+  if (direct) return { templateKey: def.key, templateId: direct, def, configured: true, fallback: false }
+  const fallbackKey = text(def.fallbackKey)
+  const fallbackDef = fallbackKey ? templateFields.templateDef(fallbackKey) : null
+  const fallbackId = fallbackDef
+    ? text((TEMPLATE_ID_BY_KEY[fallbackDef.key] || []).find(item => text(item)))
+    : ''
+  if (fallbackDef && fallbackId) {
+    return {
+      templateKey: fallbackDef.key, templateId: fallbackId, def: fallbackDef,
+      configured: true, fallback: true, requestedTemplateKey: def.key
     }
+  }
+  return { templateKey: def.key, templateId: '', def, configured: false, fallback: false }
+}
 
-    console.log(`[friendly] invite ${inviteId} notified team players: ${sent} sent, ${failed} skipped`)
-  } catch (e) {
-    console.warn('[friendly] notifyTeamPlayers error', e && e.message)
+function notifyStats(kind, route, total) {
+  return {
+    kind,
+    total: Number(total) || 0,
+    sent: 0,
+    skipped: 0,
+    failed: 0,
+    templateKey: route.templateKey,
+    templateTitle: route.def ? route.def.title : '',
+    templateId: route.templateId,
+    templateConfigured: Boolean(route.configured),
+    templateFallback: Boolean(route.fallback),
+    requestedTemplateKey: text(route.requestedTemplateKey) || route.templateKey,
+    skippedReason: ''
   }
 }
 
-// 对手接收/拒绝 → 通知发起方
-async function notifyCreatorOfResponse(invite, status, opponentName) {
+// thing1 = 状态语义句；取消 / 流局 / 提醒的原因优先并入 thing1，
+// 超 20 字只保留状态句（B 模板没有独立原因位），被截掉的原因回传给调用方便于排查
+function notifyStatusName(kind, invite, reason) {
+  const team = text(invite && invite.teamName) || '我方'
+  const base = {
+    cancelled: `「${team}」约球已取消`,
+    closed: `「${team}」约球已流局`,
+    confirmed: `「${team}」约球已成局`,
+    reminder: `「${team}」约球开赛提醒`
+  }[kind] || '约球通知'
+  const note = text(reason)
+  const mergeable = ['cancelled', 'closed', 'reminder'].indexOf(text(kind)) >= 0
+  if (!note || !mergeable) return { name: templateFields.clipThing(base), reason: note, reasonClipped: false }
+  const joined = base + '·' + note
+  if (Array.from(joined.replace(/\s+/g, ' ')).length <= templateFields.THING_MAX) {
+    return { name: joined, reason: note, reasonClipped: false }
+  }
+  return { name: templateFields.clipThing(base), reason: note, reasonClipped: true }
+}
+
+// 报名行接收人：按 userId → phoneKey 顺序解析服务号 openid 与姓名
+async function resolveSignupRecipient(row) {
+  let user = null
+  if (text(row.userId)) {
+    const res = await db.collection(USERS_COLLECTION).doc(text(row.userId)).get().catch(() => null)
+    user = (res && res.data) || null
+  }
+  const phone = text(row.phoneKey) || text(row.userPhone)
+  const openid = serviceOpenidOfUser(user) || await resolveServiceOpenidByPhone(phone, text(row.userId))
+  return { user, openid }
+}
+
+// 遍历球队球员推模板消息（发起约球，走 A 模板）
+async function notifyTeamPlayers(inviteId, record) {
+  const route = resolveNotifyTemplate('invite')
+  const stats = notifyStats('invite', route, 0)
   try {
-    if (!invite.createdByUserId) return
-    const userRes = await db.collection(USERS_COLLECTION).doc(invite.createdByUserId).get().catch(() => null)
-    const openid = (userRes && userRes.data && (userRes.data.wechatOpenId || userRes.data.openId)) || ''
-    if (!openid) return
+    if (!route.templateId) { stats.skippedReason = 'template_missing'; return stats }
+    const timeInfo = templateFields.formatInviteTime(record.matchDate, record.matchTime)
+    if (!timeInfo.ok) {
+      stats.skippedReason = timeInfo.reason || 'invalid_time'
+      console.warn(`[friendly] invite ${inviteId} notify skipped: ${stats.skippedReason}`)
+      return stats
+    }
 
-    const templateId = CONFIG.inviteTemplateId  // 复用同一个，或单独申请
-    const firstText = status === 'accepted'
-      ? `「${opponentName}」接收了战书！`
-      : `「${opponentName}」无法应战`
+    const teamPlayers = await db.collection(PLAYERS_COLLECTION)
+      .where({ teamId: record.teamId, status: 'active' }).limit(50).get()
 
-    await sendTemplate(openid, templateId, {
-      first: { value: firstText, color: status === 'accepted' ? '#2E7D32' : '#E53935' },
-      keyword1: { value: invite.teamName || '我方' },
-      keyword2: { value: `${invite.matchDate || ''} ${invite.matchTime || ''}` },
-      keyword3: { value: opponentName },
-      keyword4: { value: status === 'accepted' ? '建议开始准备场地 / 裁判' : '建议尽快找替补或取消' },
-      remark: { value: '点击"详情"查看全部响应 ›', color: '#888888' }
-    }, invite.signinUrl)
+    const players = (teamPlayers && teamPlayers.data) || []
+    stats.total = players.length
 
-    console.log(`[friendly] creator notified: invite=${invite._id} status=${status} opponent=${opponentName}`)
+    for (const p of players) {
+      const userRes = await db.collection(USERS_COLLECTION).doc(text(p.playerId || p.userId)).get().catch(() => null)
+      const user = (userRes && userRes.data) || null
+      const openid = serviceOpenidOfUser(user) || await serviceOpenidOfPhone(phoneOfUser(user))
+
+      const data = templateFields.buildDataForTemplate(route.templateKey, {
+        name: '发起约球·' + (text(record.opponentName) || '对手'),
+        time: timeInfo.value,
+        venue: text(record.venue) || '待确认',
+        organizer: text(record.teamName) || '我方',
+        participant: participantNameOf(user)
+      })
+      const result = await sendTemplate(openid, route.templateId, data, record.signinUrl)
+      if (result.ok) {
+        stats.sent += 1
+        if (stats.sent % 5 === 0) await sleep(500)
+      } else if (result.skipped) {
+        stats.skipped += 1
+        stats.skippedReason = stats.skippedReason || result.reason
+      } else {
+        stats.failed += 1
+        stats.skippedReason = stats.skippedReason || result.reason
+      }
+    }
   } catch (e) {
+    stats.skippedReason = 'error'
+    console.warn('[friendly] notifyTeamPlayers error', e && e.message)
+  }
+  console.log(`[friendly] invite ${inviteId} notify players: ${stats.sent} sent, ${stats.skipped} skipped, ${stats.failed} failed`)
+  return stats
+}
+
+// 对手接战 / 拒战 → 通知发起人（走 A 模板）
+async function notifyCreatorOfResponse(invite, status, opponentName) {
+  const route = resolveNotifyTemplate('response')
+  const stats = notifyStats('response', route, 0)
+  try {
+    if (!route.templateId) { stats.skippedReason = 'template_missing'; return stats }
+    if (!invite || !invite.createdByUserId) { stats.skippedReason = 'creator_missing'; return stats }
+    const timeInfo = templateFields.formatInviteTime(invite.matchDate, invite.matchTime)
+    if (!timeInfo.ok) { stats.skippedReason = timeInfo.reason || 'invalid_time'; return stats }
+
+    const userRes = await db.collection(USERS_COLLECTION).doc(text(invite.createdByUserId)).get().catch(() => null)
+    const user = (userRes && userRes.data) || null
+    const openid = serviceOpenidOfUser(user) || await serviceOpenidOfPhone(phoneOfUser(user))
+    stats.total = 1
+
+    const accepted = text(status) === 'accepted'
+    const data = templateFields.buildDataForTemplate(route.templateKey, {
+      name: (accepted ? '已接战：' : '已拒战：') + (text(opponentName) || '对手'),
+      time: timeInfo.value,
+      venue: text(invite.venue) || '待确认',
+      organizer: text(invite.teamName) || '我方',
+      participant: participantNameOf(user)
+    })
+    const result = await sendTemplate(openid, route.templateId, data, text(invite.signinUrl))
+    if (result.ok) stats.sent = 1
+    else if (result.skipped) { stats.skipped = 1; stats.skippedReason = result.reason }
+    else { stats.failed = 1; stats.skippedReason = result.reason }
+  } catch (e) {
+    stats.skippedReason = 'error'
     console.warn('[friendly] notifyCreator error', e && e.message)
   }
+  console.log(`[friendly] creator notify: invite=${text(invite && invite._id)} status=${text(status)} sent=${stats.sent} skipped=${stats.skipped} failed=${stats.failed}`)
+  return stats
 }
 
 // ======== 快捷发起比赛（群报名主流程）========
@@ -1782,47 +1967,56 @@ async function listTeamVenues(event) {
 
 // ======== 报名 / 签到 / 名单（2026-11-02 用户确认口径）========
 
-// 报名相关通知：取消 / 成局 / 流局 / 开赛前提醒，统一走服务号模板消息（沿用既有模板 ID）
+// 报名相关通知：成局 / 开赛前提醒走 A 模板，取消 / 流局走 B 模板
+// thing1 承载状态语义（必要时并入原因），thing4 发起球队，参与人 / 报名人按模板各自映射
 async function notifyInviteSignups(invite, kind, reason) {
-  const templateId = CONFIG.signinTemplateId || CONFIG.inviteTemplateId
+  const route = resolveNotifyTemplate(kind)
+  const status = notifyStatusName(kind, invite, reason)
   const rows = await loadSignupResponses(invite._id, 100)
   const targets = rows.filter(isActiveSignup)
-  const firstText = {
-    cancelled: `「${text(invite.teamName)}」的约球已取消`,
-    closed: `「${text(invite.teamName)}」的约球已关闭`,
-    confirmed: `「${text(invite.teamName)}」的约球已成局`,
-    reminder: '约球开赛提醒'
-  }[kind] || '约球通知'
-  const remarkText = {
-    cancelled: reason ? `取消原因：${reason}` : '本场约球已取消，无需到场',
-    closed: reason ? `关闭原因：${reason}` : '本场约球已流局，无需到场',
-    confirmed: '比赛已确认，请按时到场',
-    reminder: '记得带上球衣和护具'
-  }[kind] || ''
+  const stats = notifyStats(kind, route, targets.length)
+  stats.statusName = status.name
+  stats.reason = status.reason
+  stats.reasonClipped = status.reasonClipped
 
-  let sent = 0
-  let skipped = 0
-  let failed = 0
-  for (const row of targets) {
-    const openid = await resolveOpenidByPhone(row.phoneKey || row.userPhone, row.userId)
-    if (!openid || !templateId) { skipped += 1; continue }
-    try {
-      await sendTemplate(openid, templateId, {
-        first: { value: firstText, color: kind === 'cancelled' || kind === 'closed' ? '#E53935' : '#2E7D32' },
-        keyword1: { value: text(invite.teamName) },
-        keyword2: { value: `${text(invite.matchDate)} ${text(invite.matchTime)}`.trim() },
-        keyword3: { value: text(invite.venue) || '待确认' },
-        keyword4: { value: remarkText },
-        remark: { value: '点击查看约球详情 ›', color: '#888888' }
-      }, text(invite.signinUrl) || '')
-      sent += 1
-    } catch (error) {
-      failed += 1
-    }
-    if (sent && sent % 5 === 0) await sleep(300)
+  // 模板未配置 / 时间格式不合法一律跳过并记录原因，绝不发脏数据，也不把未发送算成 sent
+  if (!route.templateId) {
+    stats.skipped = targets.length
+    stats.skippedReason = 'template_missing'
+    console.log(`[friendly] notify signups invite=${text(invite._id)} kind=${kind} template missing, skipped ${stats.skipped}`)
+    return stats
   }
-  console.log(`[friendly] notify signups invite=${text(invite._id)} kind=${kind} sent=${sent} skipped=${skipped} failed=${failed}`)
-  return { kind, total: targets.length, sent, skipped, failed, templateConfigured: Boolean(templateId) }
+  const timeInfo = templateFields.formatInviteTime(invite.matchDate, invite.matchTime)
+  if (!timeInfo.ok) {
+    stats.skipped = targets.length
+    stats.skippedReason = timeInfo.reason || 'invalid_time'
+    console.log(`[friendly] notify signups invite=${text(invite._id)} kind=${kind} skipped: ${stats.skippedReason}`)
+    return stats
+  }
+
+  for (const row of targets) {
+    const recipient = await resolveSignupRecipient(row)
+    // B 模板的 thing6 是「报名人」：报名行自带姓名优先，其次 users 档案，最后用模板兜底文案
+    const participant = text(row.userName) || participantNameOf(recipient.user, '')
+    const data = templateFields.buildDataForTemplate(route.templateKey, {
+      name: status.name,
+      time: timeInfo.value,
+      venue: text(invite.venue) || '待确认',
+      organizer: text(invite.teamName) || '我方',
+      participant
+    })
+    const result = await sendTemplate(recipient.openid, route.templateId, data, text(invite.signinUrl))
+    if (result.ok) {
+      stats.sent += 1
+      if (stats.sent % 5 === 0) await sleep(300)
+      continue
+    }
+    if (result.skipped) stats.skipped += 1
+    else stats.failed += 1
+    stats.skippedReason = stats.skippedReason || result.reason
+  }
+  console.log(`[friendly] notify signups invite=${text(invite._id)} kind=${kind} template=${stats.templateKey} sent=${stats.sent} skipped=${stats.skipped} failed=${stats.failed}`)
+  return stats
 }
 
 // 球员在 H5 报名：姓名 + 手机号必填，按手机号幂等；最后一席用条件更新防超卖
@@ -2400,7 +2594,24 @@ exports.main = async (event, context) => {
       aiModels: CONFIG.aiModels,
       aiImageModel: CONFIG.aiImageModel,
       configured: Boolean(CONFIG.bridgeUrl),
-      templateConfigured: Boolean(CONFIG.inviteTemplateId || CONFIG.signinTemplateId),
+      templateConfigured: Boolean(CONFIG.inviteTemplateId || CONFIG.signinTemplateId || CONFIG.cancelTemplateId),
+      // 模板路由概览：每个模板用哪套字段、从哪个环境变量取 ID、是否回落到另一个模板
+      templateRoutes: templateFields.templateKeys().map(key => {
+        const def = templateFields.templateDef(key)
+        const route = resolveNotifyTemplate(key === 'cancel' ? 'cancelled' : 'confirmed')
+        return {
+          templateKey: def.key,
+          title: def.title,
+          number: def.number,
+          envKeys: def.envKeys,
+          fieldMap: def.fieldMap,
+          effectiveTemplateKey: route.templateKey,
+          effectiveTemplateId: route.templateId,
+          configured: Boolean(route.templateId),
+          fallbackTo: route.fallback ? route.templateKey : ''
+        }
+      }),
+      notifyScenes: NOTIFY_SCENE,
       miniProgramSubscribe: 'not-enabled' // 小程序订阅消息接口位（本次未接，预留给后续）
     })
     default: return fail('UNKNOWN_ACTION', `未知 action: ${action}`)

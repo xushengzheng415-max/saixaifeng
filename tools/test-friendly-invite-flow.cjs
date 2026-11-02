@@ -192,9 +192,29 @@ Module._load = function (request, parent, isMain) {
   return originalLoad.call(this, request, parent, isMain)
 }
 
+// 通知通道相关环境变量一律清空：自检绝不发真实请求，模板 ID 全部由用例按需注入
+;[
+  'SXF_INVITE_TEMPLATE_ID', 'SXF_SIGNIN_TEMPLATE_ID', 'SXF_CANCEL_TEMPLATE_ID',
+  'SXF_FOOTBALL_WECHAT_BRIDGE_URL', 'SXF_FOOTBALL_WECHAT_BRIDGE_SECRET',
+  'SERVICE_ACCOUNT_APP_ID', 'SERVICE_ACCOUNT_APP_SECRET'
+].forEach(key => { delete process.env[key] })
+
 const center = require(path.join(__dirname, '..', 'cloudfunctions', 'friendlyMatchCenter', 'index.js'))
 function call(event) { return center.main(event, {}) }
 function setCaller(openid) { wxContext = { OPENID: openid || '', APPID: 'test-appid', UNIONID: '' } }
+
+// 按指定环境变量重新加载云函数（CONFIG 在模块加载时快照环境变量）
+function reloadCenter(env) {
+  Object.keys(env || {}).forEach(key => {
+    const value = env[key]
+    if (value) process.env[key] = value
+    else delete process.env[key]
+  })
+  const file = path.join(__dirname, '..', 'cloudfunctions', 'friendlyMatchCenter', 'index.js')
+  delete require.cache[require.resolve(file)]
+  const reloaded = require(file)
+  return event => reloaded.main(event, {})
+}
 
 // ===== WXML 静态检查 =====
 const fs = require('fs')
@@ -577,6 +597,137 @@ async function main() {
   // 19. WXML 事件处理函数必须存在
   console.log('\n[19] 事件处理函数与 js 对齐')
   checkHandlerBindings()
+
+  // 20. 服务号模板字段适配：A/B 各自独立映射表、20 字截断、time2 格式
+  console.log('\n[20] 模板字段适配（A/B 独立映射表）')
+  const tf = require(path.join(__dirname, '..', 'cloudfunctions', 'friendlyMatchCenter', 'template-fields.cjs'))
+  const fieldA = tf.buildDataForTemplate('success', {
+    name: '发起约球·B 队', time: '2026-11-10 20:00~21:30', venue: '', organizer: 'A 队', participant: ''
+  })
+  check('A 模板用 thing1/time2/thing3/thing4/thing5',
+    ['thing1', 'time2', 'thing3', 'thing4', 'thing5'].every(key => fieldA[key]) && !('thing6' in fieldA),
+    Object.keys(fieldA))
+  check('A 模板参与人空则「球队球员」', fieldA.thing5.value === '球队球员', fieldA.thing5)
+  check('A 模板场地空则「待确认」', fieldA.thing3.value === '待确认', fieldA.thing3)
+  check('A 模板组织者为发起球队', fieldA.thing4.value === 'A 队', fieldA.thing4)
+  check('A 模板时间走 time2 原样', fieldA.time2.value === '2026-11-10 20:00~21:30', fieldA.time2)
+
+  const fieldB = tf.buildDataForTemplate('cancel', {
+    name: '「A 队」约球已取消', time: '2026-11-10 20:00', venue: '市体育中心', organizer: 'A 队', participant: '张三'
+  })
+  check('B 模板报名人用 thing6 且不带 thing5',
+    fieldB.thing6 && fieldB.thing6.value === '张三' && !('thing5' in fieldB), Object.keys(fieldB))
+  check('B 模板报名人空则「队员」',
+    tf.buildDataForTemplate('cancel', { name: 'x', time: '', venue: '', organizer: '', participant: '' }).thing6.value === '队员')
+  check('B 模板与 A 共用 thing1/time2/thing3/thing4',
+    ['thing1', 'time2', 'thing3', 'thing4'].every(key => fieldB[key] && fieldB[key].value), Object.keys(fieldB))
+
+  const twenty = '一二三四五六七八九十一二三四五六七八九十'
+  check('thing 正好 20 字不截断', tf.clipThing(twenty) === twenty, tf.clipThing(twenty))
+  const twentyOne = twenty + '二一'
+  check('thing 超 20 字截断补省略号',
+    Array.from(tf.clipThing(twentyOne)).length === 20 && tf.clipThing(twentyOne).endsWith('…'),
+    tf.clipThing(twentyOne))
+  check('超长 state 语义在 data 中已截断',
+    Array.from(fieldB.thing1.value).length <= 20, fieldB.thing1.value)
+
+  check('time2 只有开始时间输出单个时间', tf.formatInviteTime('2026-11-10', '20:00').value === '2026-11-10 20:00')
+  check('time2 区间输出 ~ 连接', tf.formatInviteTime('2026-11-10', '20:00-21:30').value === '2026-11-10 20:00~21:30')
+  check('time2 兼容斜杠日期与全角冒号', tf.formatInviteTime('2026/11/8', '18：00～19：30').value === '2026-11-08 18:00~19:30')
+  check('time2 结束早于开始只留开始', tf.formatInviteTime('2026-11-10', '20:00-19:00').value === '2026-11-10 20:00')
+  check('time2 非法日期返回 ok:false', tf.formatInviteTime('待定', '20:00').ok === false, tf.formatInviteTime('待定', '20:00'))
+  check('time2 非法时间返回 ok:false', tf.formatInviteTime('2026-11-10', '待定').ok === false, tf.formatInviteTime('2026-11-10', '待定'))
+
+  // 21. 模板路由与回落：只配 A 时取消回落 A；A+B 时取消/流局走 B
+  console.log('\n[21] 模板路由与回落')
+  // 给报名人补服务号身份：一个走 users.serviceAccountOpenId，一个走 service_identities
+  store.users.push({ _id: 'u_svc_a', phoneNumber: '13800000031', serviceAccountOpenId: 'svc-openid-a', name: '孙七' })
+  store.service_identities = [
+    { _id: 'si_1', phone: '13800000032', phoneVerified: true, serviceAccountOpenId: 'svc-openid-b' }
+  ]
+
+  async function freshInviteWithSignups(callFn, phones) {
+    setCaller('openid-manager')
+    const created = await callFn({
+      action: 'createInvite', teamId: 'team_a', teamName: 'A 队',
+      matchDate: '2026-11-12', matchTime: '20:00-21:30', venue: '市体育中心 1 号场',
+      maxPlayers: 11, deadline: '2026-11-11'
+    })
+    setCaller('')
+    for (const item of phones) {
+      await callFn({ action: 'signUpInvite', token: created.data.signinToken, userName: item.name, userPhone: item.phone })
+    }
+    setCaller('openid-manager')
+    return created.data
+  }
+
+  // 21.1 只配置 A：取消按语义回落到 A，并标明回落的模板
+  const callOnlyA = reloadCenter({ SXF_INVITE_TEMPLATE_ID: 'TPL_A_ONLY' })
+  const onlyA = await freshInviteWithSignups(callOnlyA, [
+    { name: '孙七', phone: '13800000031' },
+    { name: '周八', phone: '13800000032' }
+  ])
+  const cancelOnlyA = await callOnlyA({ action: 'cancelInvite', inviteId: onlyA.inviteId, reason: '场地被占' })
+  check('只配 A 时取消通知回落 A 模板',
+    cancelOnlyA.data.notify.templateKey === 'success' && cancelOnlyA.data.notify.templateFallback === true &&
+    cancelOnlyA.data.notify.templateId === 'TPL_A_ONLY' && cancelOnlyA.data.notify.requestedTemplateKey === 'cancel',
+    cancelOnlyA.data.notify)
+  check('回落时字段按 A 映射（无 thing6 语义参与人字段）',
+    cancelOnlyA.data.notify.templateTitle === '约球成功通知', cancelOnlyA.data.notify.templateTitle)
+  check('取消原因并入状态句', cancelOnlyA.data.notify.statusName === '「A 队」约球已取消·场地被占',
+    cancelOnlyA.data.notify.statusName)
+  check('原因未超 20 字不标记截断', cancelOnlyA.data.notify.reasonClipped === false)
+  check('已配模板但通道未配置记 skip 而非 sent',
+    cancelOnlyA.data.notify.sent === 0 && cancelOnlyA.data.notify.skipped === 2 &&
+    cancelOnlyA.data.notify.skippedReason === 'channel_not_configured', cancelOnlyA.data.notify)
+
+  const healthOnlyA = await callOnlyA({ action: 'healthCheck' })
+  check('healthCheck 暴露模板回落概览',
+    healthOnlyA.data.templateRoutes.some(row => row.templateKey === 'cancel' && row.configured === true && row.fallbackTo === 'success'),
+    healthOnlyA.data.templateRoutes)
+
+  // 21.2 同时配置 A + B：取消 / 流局走 B，成局 / 提醒走 A
+  const callAB = reloadCenter({ SXF_INVITE_TEMPLATE_ID: 'TPL_A', SXF_CANCEL_TEMPLATE_ID: 'TPL_B' })
+  const abInvite = await freshInviteWithSignups(callAB, [
+    { name: '孙七', phone: '13800000031' },
+    { name: '周八', phone: '13800000032' }
+  ])
+  const cancelAB = await callAB({ action: 'cancelInvite', inviteId: abInvite.inviteId, reason: '对方球队临时改期到下周一' })
+  check('取消走 B 模板',
+    cancelAB.data.notify.templateKey === 'cancel' && cancelAB.data.notify.templateId === 'TPL_B' &&
+    cancelAB.data.notify.templateFallback === false, cancelAB.data.notify)
+  check('模板 B 标题为约球已取消通知', cancelAB.data.notify.templateTitle === '约球已取消通知')
+  check('B 无原因位：超 20 字只留状态句且回传完整原因',
+    cancelAB.data.notify.statusName === '「A 队」约球已取消' && cancelAB.data.notify.reasonClipped === true &&
+    cancelAB.data.notify.reason === '对方球队临时改期到下周一', {
+      statusName: cancelAB.data.notify.statusName, reason: cancelAB.data.notify.reason,
+      reasonClipped: cancelAB.data.notify.reasonClipped
+    })
+
+  const closedInvite = await freshInviteWithSignups(callAB, [{ name: '孙七', phone: '13800000031' }])
+  const closedAB = await callAB({ action: 'abandonInvite', inviteId: closedInvite.inviteId, reason: '人数不足' })
+  check('流局走 B 模板', closedAB.data.notify.templateKey === 'cancel' && closedAB.data.notify.templateId === 'TPL_B', closedAB.data.notify)
+  check('流局状态句为已流局且并入原因', closedAB.data.notify.statusName === '「A 队」约球已流局·人数不足', closedAB.data.notify.statusName)
+  const closedLong = await (async () => {
+    const created = await freshInviteWithSignups(callAB, [{ name: '周八', phone: '13800000032' }])
+    return callAB({ action: 'abandonInvite', inviteId: created.inviteId, reason: '报名人数一直不足且两队时间对不上，本周先不打' })
+  })()
+  check('流局长原因只留状态句', closedLong.data.notify.statusName === '「A 队」约球已流局' && closedLong.data.notify.reasonClipped === true,
+    { statusName: closedLong.data.notify.statusName, reasonClipped: closedLong.data.notify.reasonClipped })
+
+  const confirmInvite2 = await freshInviteWithSignups(callAB, [{ name: '孙七', phone: '13800000031' }])
+  const confirmedAB = await callAB({ action: 'confirmInvite', inviteId: confirmInvite2.inviteId })
+  check('成局走 A 模板', confirmedAB.data.notify.templateKey === 'success' && confirmedAB.data.notify.templateId === 'TPL_A', confirmedAB.data.notify)
+  const reminderAB = await callAB({ action: 'remindInviteSignups', inviteId: confirmInvite2.inviteId, note: '集合带水' })
+  check('开赛提醒走 A 模板', reminderAB.data.notify.templateKey === 'success' && reminderAB.data.notify.statusName.indexOf('开赛提醒') > 0,
+    reminderAB.data.notify)
+  check('提醒备注并入状态句', reminderAB.data.notify.statusName === '「A 队」约球开赛提醒·集合带水', reminderAB.data.notify.statusName)
+
+  const healthAB = await callAB({ action: 'healthCheck' })
+  check('healthCheck 两套模板均已配置',
+    healthAB.data.templateRoutes.length === 2 &&
+    healthAB.data.templateRoutes.every(row => row.configured === true && row.fallbackTo === ''),
+    healthAB.data.templateRoutes)
 
   // 结果
   await new Promise(resolve => setTimeout(resolve, 300))

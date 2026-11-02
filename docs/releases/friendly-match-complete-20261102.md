@@ -8,7 +8,9 @@
 
 | 文件 | 变更 |
 | --- | --- |
-| `cloudfunctions/friendlyMatchCenter/index.js` | +1147/−114 行：新增 11 个 action、加固 `createInvite`/`getInvite`/`respondInvite`/`signIn`/`listSignins`/`listTeamInvites`/`listPublicInvites`/`respondPublicInvite`；`healthCheck` 暴露 action 清单与 `miniProgramSubscribe:'not-enabled'` |
+| `cloudfunctions/friendlyMatchCenter/index.js` | +1147/−114 行：新增 11 个 action、加固 `createInvite`/`getInvite`/`respondInvite`/`signIn`/`listSignins`/`listTeamInvites`/`listPublicInvites`/`respondPublicInvite`；`healthCheck` 暴露 action 清单、模板路由概览与 `miniProgramSubscribe:'not-enabled'` |
+| `cloudfunctions/friendlyMatchCenter/template-fields.cjs`（新增） | 服务号模板字段适配层：`TEMPLATE_DEFS` 每模板一张独立映射表（A 58013 / B 58014）、`clipThing` 20 字截断、`formatInviteTime` 生成 `time2`、`buildDataForTemplate` 统一构造 `data` |
+| 通知层（同在 `index.js`） | `TEMPLATE_ID_BY_KEY` + `NOTIFY_SCENE` 显式路由（A：发起/接战/成局/提醒；B：取消/流局），B 未配置时回落 A；`sendTemplate` 改为桥接 `{message:{touser, template_id, url, data}}` 包装、跳转只用 `url`、openid 只认服务号渠道（`serviceAccountOpenId`/`officialOpenId` → `service_identities`），未发送一律计 `skipped` |
 | `service-account-h5/friendly-signin.html` | 重写为 H5 报名页（报名 / 查看本人报名 / 取消报名 / 接战） |
 | `miniprogram/pages/discover/discover.js`、`.wxml`、`.wxss`、`discover-model.js` | 本队卡进入管理页；三个数字拆分展示，「待确认」口径；公开卡显示服务端状态 |
 | `miniprogram/pages/discover/invite-create/invite-create.{js,wxml,wxss}` | canvas 海报（含 H5 报名二维码）、保存相册、复制报名链接、进入管理名单 |
@@ -16,7 +18,7 @@
 | `miniprogram/pages/discover/invite-qr.js`（新增） | 纯 JS 二维码编码器（字节模式 ECC M，版本 1~10），不新增依赖 |
 | `miniprogram/app.json` | pages 数组在 `invite-create` 后追加 `pages/discover/invite-manage/invite-manage`，其余保持 main 原内容 |
 | `tools/check-invite-qr.py`、`tools/test-invite-qr.cjs` | 二维码编码交叉验证（Python `qrcode` 逐模块比对） |
-| `tools/test-friendly-invite-flow.cjs` | 云端链路内存桩自检，83 项 |
+| `tools/test-friendly-invite-flow.cjs` | 云端链路内存桩自检，116 项（含模板字段、路由与回落用例） |
 | `docs/FRIENDLY_MATCH_DATA_MODEL_2026-11-02.md`、本篇 | 数据模型与发布登记 |
 
 未改动：`cloudfunctions/webLoginApi`（H5 走既有 `friendlySignInWorkflow` relay，新增 action 无需重发）、`cloudfunctions/friendlyMatchCenter/package.json`、`package-lock.json`、`data-center/`、其他云函数、PC 后台、平台后台。
@@ -65,13 +67,14 @@
 
 1. 复制线上基线包到新目录（保留 `node_modules`、`package.json`、`package-lock.json` 原样）：
    `E:\Documents\_sxf-online-baseline\friendlyMatchCenter-publish-20261102`。
-2. 用本次 `index.js` 覆盖该目录 `index.js`；新建 `data-center/` 并放入上表 4 个文件，其余不动。
-3. 对拟上传目录执行 `node --check index.js`，并对 `data-center/*.cjs/*.mjs` 逐个 `node --check`。
+2. 用本次 `index.js` 覆盖该目录 `index.js`，并放入 `template-fields.cjs`；新建 `data-center/` 并放入上表 4 个文件，其余不动。
+3. 对拟上传目录执行 `node --check index.js`、`node --check template-fields.cjs`，并对 `data-center/*.cjs/*.mjs` 逐个 `node --check`。
 4. `sxf-cloud football run fn code update friendlyMatchCenter --dir <拟发布目录>`（不改运行环境/内存/超时/环境变量/触发器）。
 5. 更新前后各读一次 `fn detail`，确认 **自动安装依赖仍为 FALSE**；若被 CLI 改写，立即按 AGENTS 受控配置改回 FALSE 并复核。
-6. 回下载线上包，比对 `index.js` 与 4 个 `data-center` 文件 SHA-256，确认 `package.json`/`node_modules` 未变。
+6. 回下载线上包，比对 `index.js`、`template-fields.cjs` 与 4 个 `data-center` 文件 SHA-256，确认 `package.json`/`node_modules` 未变。
 7. 调用 `healthCheck` 读回 `version`、`actions`（应为 33 项，含 11 个新 action）、`inviteStates`（五态）、
-   `templateConfigured`（当前环境变量为空 → 预期 `false`）、`miniProgramSubscribe:'not-enabled'`。
+   `templateRoutes`（两套模板的 `fieldMap` / 生效 ID / 回落情况）、
+   `templateConfigured`（环境变量为空 → 预期 `false`，此时所有通知只计 `skipped`）、`miniProgramSubscribe:'not-enabled'`。
 8. 用测试球队/测试球员走一遍：创建 → H5 报名 → 管理页名单 → 勾签到 → 取消 → 通知统计；不写真实邀约。
 
 ### 2.4 其他端口（本次均未发布）
@@ -80,9 +83,19 @@
 - 小程序：`pages/discover/*` 与 `app.json` 变更需重新上传开发版；体验版/正式版按 AGENTS「正式发布后同步测试端」另行处理。
 - PC 后台、平台后台：本次无改动。
 
+### 2.5 通知模板环境变量（发布后由有权限者配置，代码不写云端）
+
+| 变量 | 模板 | 填值 |
+| --- | --- | --- |
+| `SXF_INVITE_TEMPLATE_ID` | A 58013「约球成功通知」 | 模板 ID（本次为 `Mkd_hCt-ZeMC61TwjxPVl8p9FIlZnsxu0J-Vc145P3Y`） |
+| `SXF_SIGNIN_TEMPLATE_ID` | A（旧名兼容） | 与 A 同值 |
+| `SXF_CANCEL_TEMPLATE_ID` | B 58014「约球已取消通知」 | 模板 ID（本次为 `1xxlMlNIksN8v_F3pdmcgrNfZH3BBq8VrLz-gH6-Jr0`） |
+
+未配置 `SXF_CANCEL_TEMPLATE_ID` 时取消 / 流局会按语义回落到 A 模板，`healthCheck` 与 `notify` 返回结构会标出实际用的模板和回落状态。
+
 ## 三、自检结果（本地）
 
-- `node --check`：`friendlyMatchCenter/index.js`、`discover.js`、`discover-model.js`、`invite-create.js`、`invite-manage.js`、`invite-qr.js` 全部通过。
-- `node tools/test-friendly-invite-flow.cjs`：**通过 83 项，失败 0 项**（含 19 段用例：鉴权、脱敏、报名幂等、分页与明文开关、勾签到/代签、接战、人工成局与通知、终态封锁、防超卖、截止校验、历史「待确认」、旧接口 `listSignins` 鉴权、公开列表跨队应战、WXML 表达式合规、事件处理函数对齐）。
+- `node --check`：`friendlyMatchCenter/index.js`、`template-fields.cjs`、`discover.js`、`discover-model.js`、`invite-create.js`、`invite-manage.js`、`invite-qr.js` 全部通过。
+- `node tools/test-friendly-invite-flow.cjs`：**通过 116 项，失败 0 项**（21 段用例：鉴权、脱敏、报名幂等、分页与明文开关、勾签到/代签、接战、人工成局与通知、终态封锁、防超卖、截止校验、历史「待确认」、旧接口 `listSignins` 鉴权、公开列表跨队应战、WXML 表达式合规、事件处理函数对齐；新增模板字段适配（A/B 映射表、20 字截断、`time2` 单/区间/非法）与模板路由回落（只配 A → 取消回落 A、A+B → 取消/流局走 B、成局/提醒走 A、原因并入 `thing1` 与超长截断、`healthCheck.templateRoutes`））。
 - `node tools/test-invite-qr.cjs` + `python tools/check-invite-qr.py`：3 组样本 × 8 掩码，与 Python `qrcode` 逐模块一致 **27/27**。
-- 未能验证：真机小程序交互与 canvas 导出（未上传开发版）、真实服务号模板消息（环境变量未配置）、真实 H5 线上页面、线上云函数行为（未部署）。
+- 未能验证：真机小程序交互与 canvas 导出（未上传开发版）、真实服务号模板消息（环境变量未配置、通道未配置，自检只到 `skipped`）、真实 H5 线上页面、线上云函数行为（未部署）。
