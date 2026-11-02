@@ -206,6 +206,8 @@ function mainCardView() {
     nameEn: p.nameEn,
     numberText: '#' + p.number,
     positionLabel: p.positionLabel,
+    headHint: p.name + ' · ' + p.positionLabel + ' · #' + p.number,
+    foilTip: '轻彩箔光已默认循环 · 按住卡面滑动略加强',
     cityText: state.cityName + ' · ' + state.cityCode,
     cardUrl: p.cardUrl,
     stats: [
@@ -215,10 +217,10 @@ function mainCardView() {
       { label: '助攻', num: String(p.assists) }
     ],
     stamps: [
-      { key: 'frame', icon: '🥇', name: '熔金边框', lockedClass: '' },
-      { key: 'debut', icon: '✨', name: '首秀贴纸', lockedClass: '' },
-      { key: 'ten', icon: '🔒', name: '十场出勤', lockedClass: 'is-locked' },
-      { key: 'night', icon: '🔒', name: '破门之夜', lockedClass: 'is-locked' }
+      { key: 'frame', icon: '🥇', name: '熔金边框', stateText: '已点亮', lockedClass: '' },
+      { key: 'debut', icon: '✨', name: '首秀贴纸', stateText: '已点亮', lockedClass: '' },
+      { key: 'ten', icon: '🔒', name: '十场出勤', stateText: '未解锁', lockedClass: 'is-locked' },
+      { key: 'night', icon: '🔒', name: '破门之夜', stateText: '未解锁', lockedClass: 'is-locked' }
     ],
     portraitNote: p.portraitAuthorized ? '' : '形象照未授权，分享使用号码与阵容卡'
   }

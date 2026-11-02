@@ -6,6 +6,8 @@ var EMPTY_CARD = {
   nameEn: '',
   numberText: '',
   positionLabel: '',
+  headHint: '',
+  foilTip: '',
   cityText: '',
   cardUrl: '',
   portraitNote: ''
@@ -56,6 +58,16 @@ Page({
 
   goLog: function () {
     wx.navigateTo({ url: '/pages/card/battle-log/battle-log' })
+  },
+
+  goGrowth: function () {
+    wx.pageScrollTo({
+      selector: '.marks-panel',
+      duration: 320,
+      fail: function () {
+        wx.showToast({ title: '成长印记随赛事数据点亮', icon: 'none' })
+      }
+    })
   },
 
   onShareAppMessage: function () {
