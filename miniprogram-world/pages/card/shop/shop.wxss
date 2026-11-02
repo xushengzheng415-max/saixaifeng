@@ -1,0 +1,105 @@
+.brand-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 26rpx;
+}
+
+.brand-name {
+  font-size: 40rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+  color: #ffffff;
+}
+
+.brand-sub {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  letter-spacing: 1rpx;
+  color: #8b93a3;
+}
+
+.head-panel {
+  padding: 26rpx 26rpx 24rpx;
+}
+
+.head-copy {
+  display: flex;
+  flex-direction: column;
+}
+
+.item-panel {
+  margin-top: 22rpx;
+  padding: 26rpx;
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.item-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  margin-right: 16rpx;
+}
+
+.item-label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #f2f4f8;
+}
+
+.item-hint {
+  margin-top: 4rpx;
+  font-size: 21rpx;
+  color: #8b93a3;
+}
+
+.item-foot {
+  margin-top: 20rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.07);
+}
+
+.item-price {
+  font-size: 23rpx;
+  color: #e4b04a;
+}
+
+.item-btn {
+  flex: none;
+  width: 236rpx;
+  height: 68rpx;
+  font-size: 24rpx;
+}
+
+.rules-panel {
+  margin-top: 24rpx;
+}
+
+.rule-line {
+  margin-top: 16rpx;
+  font-size: 23rpx;
+  color: #b7becb;
+  line-height: 1.6;
+}
+
+.panel-note {
+  display: block;
+  margin-top: 18rpx;
+  font-size: 21rpx;
+  color: #6f7683;
+  line-height: 1.6;
+}
+
+.foot-note {
+  margin-top: 26rpx;
+  text-align: center;
+  font-size: 21rpx;
+  color: #6f7683;
+}

@@ -43,6 +43,15 @@
   </view>
 
   <view class="quick">
+    <view class="quick-card" bindtap="goMe" role="button" aria-label="我的">
+      <image class="quick-icon" src="/assets/icons/icon-trophy.svg" mode="aspectFit"></image>
+      <view class="quick-text">
+        <text class="quick-title">我的</text>
+        <text class="quick-sub">兑换券 · 槽位 · 卡商城</text>
+      </view>
+      <image class="quick-arrow" src="/assets/icons/icon-arrow.svg" mode="aspectFit"></image>
+    </view>
+
     <view class="quick-card" bindtap="goAlbum" role="button" aria-label="同城签约">
       <image class="quick-icon" src="/assets/icons/icon-sign.svg" mode="aspectFit"></image>
       <view class="quick-text">

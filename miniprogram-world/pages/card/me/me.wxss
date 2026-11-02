@@ -1,0 +1,142 @@
+.brand-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 26rpx;
+}
+
+.brand-name {
+  font-size: 40rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+  color: #ffffff;
+}
+
+.brand-sub {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  letter-spacing: 1rpx;
+  color: #8b93a3;
+}
+
+.coupon-panel {
+  padding: 28rpx 26rpx 26rpx;
+}
+
+.coupon-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.coupon-num {
+  font-size: 56rpx;
+  font-weight: 700;
+  color: #e4b04a;
+  line-height: 1;
+}
+
+.shop-btn {
+  margin-top: 24rpx;
+}
+
+.slot-panel {
+  margin-top: 24rpx;
+}
+
+.slot-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.07);
+}
+
+.slot-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.slot-label {
+  font-size: 26rpx;
+  color: #f2f4f8;
+}
+
+.slot-hint {
+  margin-top: 4rpx;
+  font-size: 21rpx;
+  color: #8b93a3;
+}
+
+.slot-value-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+}
+
+.slot-value {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #e4b04a;
+}
+
+.slot-max {
+  margin-top: 2rpx;
+  font-size: 20rpx;
+  color: #6f7683;
+}
+
+.panel-note {
+  display: block;
+  margin-top: 20rpx;
+  font-size: 21rpx;
+  color: #6f7683;
+  line-height: 1.6;
+}
+
+.card-panel {
+  margin-top: 24rpx;
+}
+
+.rule-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-top: 18rpx;
+}
+
+.rule-key {
+  flex: none;
+  width: 150rpx;
+  font-size: 24rpx;
+  color: #8b93a3;
+}
+
+.rule-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: #dfe4ee;
+  line-height: 1.6;
+}
+
+.bg-btn {
+  margin-top: 24rpx;
+}
+
+.album-btn {
+  margin-top: 28rpx;
+}
+
+.foot-note {
+  margin-top: 26rpx;
+  text-align: center;
+  font-size: 21rpx;
+  color: #6f7683;
+}

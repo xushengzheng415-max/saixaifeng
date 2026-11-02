@@ -23,7 +23,85 @@ var CODES = {
   ROSTER_LOCKED: 'ROSTER_LOCKED',
   LINEUP_INVALID: 'LINEUP_INVALID',
   MINOR_NO_AUTORENEW: 'MINOR_NO_AUTORENEW',
-  MODE_INVALID: 'MODE_INVALID'
+  MODE_INVALID: 'MODE_INVALID',
+  COUPON_NOT_ENOUGH: 'COUPON_NOT_ENOUGH',
+  SLOT_MAXED: 'SLOT_MAXED',
+  SLOT_INVALID: 'SLOT_INVALID'
+}
+
+/**
+ * 三类卡边界（2026-11-02 已确认）：
+ * real 真实球员卡 —— 赛事发放、永久收藏，唯一参与评估与真实 PK 池；
+ * virtual 国漫虚拟卡 —— 只进娱乐图鉴，不计分、不进阵容；
+ * fanMade 球迷自制卡 —— 第一版只做展示与分享，不进 PK、不可交易。
+ */
+var CARD_KINDS = [
+  { key: 'real', label: '真实球员卡', short: '真实', hint: '赛事发放 · 永久收藏 · 参与评估', evaluable: true, tagClass: 'is-real' },
+  { key: 'virtual', label: '国漫虚拟卡', short: '虚拟', hint: '娱乐图鉴 · 不计分 · 不进阵容', evaluable: false, tagClass: 'is-virtual' },
+  { key: 'fanMade', label: '球迷自制卡', short: '球迷', hint: '仅展示与分享 · 不计分 · 不进 PK', evaluable: false, tagClass: 'is-fan' }
+]
+
+var SLOT_KEYS = ['collect', 'display', 'gallery']
+
+function cardKindMeta(key) {
+  for (var i = 0; i < CARD_KINDS.length; i++) {
+    if (CARD_KINDS[i].key === key) return CARD_KINDS[i]
+  }
+  return CARD_KINDS[0]
+}
+
+/** 评估、真实 PK 池与金银铜升级只允许真实球员卡。 */
+function isEvaluableKind(key) {
+  return key === 'real'
+}
+
+/**
+ * 每日券发放：同一 Asia/Shanghai 自然日、同一用户只发一次（幂等）。
+ * @returns {{coupons:object, granted:number}}
+ */
+function grantDailyCoupons(coupons, dateKey, amount) {
+  var next = {
+    balance: (coupons && coupons.balance) || 0,
+    lastGrantDateKey: (coupons && coupons.lastGrantDateKey) || ''
+  }
+  if (next.lastGrantDateKey === dateKey) return { coupons: next, granted: 0 }
+  var add = typeof amount === 'number' && amount > 0 ? amount : 0
+  next.balance += add
+  next.lastGrantDateKey = dateKey
+  return { coupons: next, granted: add }
+}
+
+/** 槽位容量归一：历史缓存缺字段或非法值时回落到默认值。 */
+function normalizeSlotCapacity(capacity, defaults) {
+  var base = defaults || {}
+  var src = capacity || {}
+  var out = {}
+  for (var i = 0; i < SLOT_KEYS.length; i++) {
+    var key = SLOT_KEYS[i]
+    var fallback = typeof base[key] === 'number' ? base[key] : 0
+    var value = typeof src[key] === 'number' ? src[key] : fallback
+    out[key] = value < 0 ? 0 : Math.round(value)
+  }
+  return out
+}
+
+/** 商城只售槽位：校验分类、上限与券余额，返回新容量与余额（不落库）。 */
+function buySlot(opts) {
+  var capacity = opts.capacity || {}
+  var kind = opts.kind || ''
+  var price = typeof opts.price === 'number' ? opts.price : 0
+  var max = typeof opts.max === 'number' ? opts.max : 0
+  var balance = typeof opts.balance === 'number' ? opts.balance : 0
+  if (SLOT_KEYS.indexOf(kind) < 0) return { ok: false, code: 'SLOT_INVALID', message: '槽位类型无效' }
+  var current = typeof capacity[kind] === 'number' ? capacity[kind] : 0
+  if (max > 0 && current >= max) return { ok: false, code: 'SLOT_MAXED', message: '该槽位已达上限' }
+  if (balance < price) return { ok: false, code: 'COUPON_NOT_ENOUGH', message: '兑换券不足，先完成任务领券' }
+  var nextCapacity = {}
+  for (var i = 0; i < SLOT_KEYS.length; i++) {
+    nextCapacity[SLOT_KEYS[i]] = typeof capacity[SLOT_KEYS[i]] === 'number' ? capacity[SLOT_KEYS[i]] : 0
+  }
+  nextCapacity[kind] = current + 1
+  return { ok: true, code: '', capacity: nextCapacity, balance: balance - price, kind: kind }
 }
 
 var DEFAULT_QUOTA = {
@@ -88,6 +166,9 @@ function codeMessage(code) {
   map[CODES.LINEUP_INVALID] = '阵容不完整或不合规'
   map[CODES.MINOR_NO_AUTORENEW] = '未成年账号不能开启自动续费'
   map[CODES.MODE_INVALID] = '签约方式无效'
+  map[CODES.COUPON_NOT_ENOUGH] = '兑换券不足，先完成任务领券'
+  map[CODES.SLOT_MAXED] = '该槽位已达上限'
+  map[CODES.SLOT_INVALID] = '槽位类型无效'
   return map[code] || code || ''
 }
 
@@ -570,6 +651,13 @@ module.exports = {
   RULE_VERSION: RULE_VERSION,
   ROSTER_SIZES: ROSTER_SIZES,
   CODES: CODES,
+  CARD_KINDS: CARD_KINDS,
+  SLOT_KEYS: SLOT_KEYS,
+  cardKindMeta: cardKindMeta,
+  isEvaluableKind: isEvaluableKind,
+  grantDailyCoupons: grantDailyCoupons,
+  normalizeSlotCapacity: normalizeSlotCapacity,
+  buySlot: buySlot,
   DEFAULT_QUOTA: DEFAULT_QUOTA,
   dateKeyShanghai: dateKeyShanghai,
   stableHash: stableHash,

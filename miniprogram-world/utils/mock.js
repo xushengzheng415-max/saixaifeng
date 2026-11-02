@@ -8,6 +8,8 @@
  */
 
 var CARD_IMAGE = '/assets/card/main-card.png'
+var VIRTUAL_CARD_IMAGE = '/assets/card/main-card.png'
+var FAN_CARD_IMAGE = '/assets/card/card-back.jpg'
 
 var POSITION_LABELS = {
   GK: '门将',
@@ -52,27 +54,67 @@ var MEMBERSHIP = {
   rosterUnlocks: { size8: false, size11: false }
 }
 
-function withCard(player) {
+/**
+ * 国漫虚拟卡样例：只进娱乐图鉴，不计分、不进阵容、不参与评估与榜单。
+ * 正式版由活动/图鉴接口发放，卡面不得由前端合成。
+ */
+var VIRTUAL_CARDS = [
+  { cardId: 'v_2001', name: '青锋少年', nameEn: 'QING FENG', series: '国漫 · 青锋篇', tagText: '虚拟 #01' },
+  { cardId: 'v_2002', name: '赤焰门将', nameEn: 'BLAZE GK', series: '国漫 · 赤焰篇', tagText: '虚拟 #02' }
+]
+
+/**
+ * 球迷自制卡样例：第一版只做展示与分享，不进 PK、不可交易、不可被他人用于阵容。
+ * 正式版须经服务端内容安全校验与审核后才可见。
+ */
+var FAN_CARDS = [
+  { cardId: 'f_3001', name: '看台大王', nameEn: 'STAND KING', series: '球迷自制 · 看台文化', tagText: '自制 #01' }
+]
+
+function copyCard(card, kind, image) {
   var p = {}
-  for (var k in player) {
-    if (Object.prototype.hasOwnProperty.call(player, k)) p[k] = player[k]
+  for (var k in card) {
+    if (Object.prototype.hasOwnProperty.call(card, k)) p[k] = card[k]
   }
-  p.cardUrl = CARD_IMAGE
+  p.cardKind = kind
+  p.cardUrl = image
   p.positionLabel = POSITION_LABELS[p.group] || ''
   p.skillLabel = SKILL_LABELS[p.skillTag] || ''
+  p.numberText = typeof p.number === 'number' ? '#' + p.number : ''
+  p.metaText = p.positionLabel ? (p.positionLabel + ' · ' + p.numberText) : (p.series || '')
+  p.scoreLine = typeof p.ovr === 'number' ? ('综合 ' + p.ovr) : '不计分'
   return p
 }
 
 function allPlayers() {
-  return PLAYERS.map(withCard)
+  return PLAYERS.map(function (player) {
+    return copyCard(player, 'real', CARD_IMAGE)
+  })
+}
+
+/** 三类卡全集：真实（赛事发放）+ 虚拟（娱乐图鉴）+ 球迷自制（展示分享）。 */
+function allCards() {
+  var list = allPlayers()
+  for (var i = 0; i < VIRTUAL_CARDS.length; i++) {
+    list.push(copyCard(VIRTUAL_CARDS[i], 'virtual', VIRTUAL_CARD_IMAGE))
+  }
+  for (var j = 0; j < FAN_CARDS.length; j++) {
+    list.push(copyCard(FAN_CARDS[j], 'fanMade', FAN_CARD_IMAGE))
+  }
+  return list
 }
 
 module.exports = {
   CARD_IMAGE: CARD_IMAGE,
+  VIRTUAL_CARD_IMAGE: VIRTUAL_CARD_IMAGE,
+  FAN_CARD_IMAGE: FAN_CARD_IMAGE,
   CITY: CITY,
   POSITION_LABELS: POSITION_LABELS,
   SKILL_LABELS: SKILL_LABELS,
   PLAYERS: PLAYERS,
+  VIRTUAL_CARDS: VIRTUAL_CARDS,
+  FAN_CARDS: FAN_CARDS,
   MEMBERSHIP: MEMBERSHIP,
-  allPlayers: allPlayers
+  allPlayers: allPlayers,
+  allCards: allCards
 }

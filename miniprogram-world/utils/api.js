@@ -33,7 +33,10 @@ var ACTIONS = {
   setSlot: 'cardWorldSetSlot',
   saveLineup: 'cardWorldSaveLineup',
   battle: 'cardWorldBattle',
-  setAutoRenew: 'cardWorldSetAutoRenew'
+  setAutoRenew: 'cardWorldSetAutoRenew',
+  me: 'cardWorldMe',
+  shop: 'cardWorldShop',
+  buySlot: 'cardWorldBuySlot'
 }
 
 function useCloud() {
@@ -100,10 +103,11 @@ function getMainCard() {
   })
 }
 
-function getAlbum() {
-  if (useCloud()) return callCloud(ACTIONS.album)
+function getAlbum(kind) {
+  var active = kind || 'real'
+  if (useCloud()) return callCloud(ACTIONS.album, { kind: active })
   return wrap(function () {
-    return store.albumView()
+    return store.albumView(active)
   })
 }
 
@@ -148,6 +152,20 @@ function getMembership() {
       isMinor: view.isMinor,
       minorNotice: view.isMinor ? '未成年账号不能开启自动续费' : ''
     }
+  })
+}
+
+function getMe() {
+  if (useCloud()) return callCloud(ACTIONS.me)
+  return wrap(function () {
+    return store.meView()
+  })
+}
+
+function getShop() {
+  if (useCloud()) return callCloud(ACTIONS.shop)
+  return wrap(function () {
+    return store.shopView()
   })
 }
 
@@ -359,6 +377,23 @@ function setAutoRenew(enabled) {
   })
 }
 
+/** 兑换槽位容量：商城只售槽位，校验与扣券在服务端/引擎，前端只传槽位类型。 */
+function buySlot(kind) {
+  if (useCloud()) return callCloud(ACTIONS.buySlot, { kind: kind || '' })
+  return wrap(function () {
+    var result = store.buySlot(kind)
+    if (!result.ok) throw fail(result.code, result.message)
+    return {
+      ok: true,
+      kind: result.kind,
+      label: result.label,
+      capacity: result.capacity,
+      balance: result.balance,
+      shop: store.shopView()
+    }
+  })
+}
+
 module.exports = {
   MODE: MODE,
   ACTIONS: ACTIONS,
@@ -370,10 +405,13 @@ module.exports = {
   getOwnedCards: getOwnedCards,
   getBattleLog: getBattleLog,
   getMembership: getMembership,
+  getMe: getMe,
+  getShop: getShop,
   signSameCity: signSameCity,
   setRosterSize: setRosterSize,
   setSlot: setSlot,
   saveLineup: saveLineup,
   battle: battle,
-  setAutoRenew: setAutoRenew
+  setAutoRenew: setAutoRenew,
+  buySlot: buySlot
 }

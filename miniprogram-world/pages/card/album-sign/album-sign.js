@@ -1,9 +1,16 @@
 var api = require('../../../utils/api')
 
 var EMPTY_ALBUM = {
+  tabs: [],
+  activeKind: 'real',
+  kindLabel: '',
+  kindHint: '',
+  showReal: true,
   tiles: [],
   isEmpty: true,
   countText: '共 0 张',
+  emptyText: '',
+  noteText: '',
   remainText: '',
   signBtn: '免费签约',
   signDisabled: true,
@@ -31,6 +38,7 @@ Page({
   data: {
     album: EMPTY_ALBUM,
     tiles: [],
+    activeKind: 'real',
     revealVisible: false,
     revealCard: {},
     revealQuotaText: '',
@@ -38,16 +46,25 @@ Page({
   },
 
   onShow: function () {
-    this.loadAlbum()
+    this.loadAlbum(this.data.activeKind)
   },
 
   onUnload: function () {
     this.clearToast()
   },
 
-  loadAlbum: function () {
+  /** 切换三类卡分区：真实卡保留签约，虚拟卡与自制卡只读。 */
+  onSwitchKind: function (e) {
+    var key = e.currentTarget.dataset.key
+    if (!key || key === this.data.activeKind) return
+    this.setData({ activeKind: key })
+    this.loadAlbum(key)
+  },
+
+  loadAlbum: function (kind) {
     var self = this
-    api.getAlbum().then(function (view) {
+    var active = kind || this.data.activeKind || 'real'
+    api.getAlbum(active).then(function (view) {
       view.signDisabledClass = view.signDisabled ? 'is-disabled' : ''
       view.directedClass = view.directedLeft > 0 ? '' : 'is-disabled'
       self.setData({ album: view, tiles: view.tiles || [] })
@@ -58,6 +75,7 @@ Page({
 
   onSign: function () {
     var self = this
+    if (!this.data.album.showReal) return
     if (this._signing) return
     if (this.data.album.signDisabled) {
       this.showToast(this.data.album.remainText || '今日签约次数已用完')
@@ -72,11 +90,11 @@ Page({
         revealQuotaText: '今日剩余 ' + res.signQuota.dailyFreeLeft + ' 次免费签约',
         lastSignedText: '签约成功 · ' + res.card.name
       })
-      self.loadAlbum()
+      self.loadAlbum(self.data.activeKind)
     }).catch(function (err) {
       self._signing = false
       self.showToast(err.message || '签约失败')
-      self.loadAlbum()
+      self.loadAlbum(self.data.activeKind)
     })
   },
 
@@ -111,17 +129,17 @@ Page({
         revealQuotaText: '定向剩余 ' + res.signQuota.directedLeft + ' 次',
         lastSignedText: '定向签约成功 · ' + res.card.name
       })
-      self.loadAlbum()
+      self.loadAlbum(self.data.activeKind)
     }).catch(function (err) {
       self._signing = false
       self.showToast(err.message || '签约失败')
-      self.loadAlbum()
+      self.loadAlbum(self.data.activeKind)
     })
   },
 
   onRevealClose: function () {
     this.setData({ revealVisible: false })
-    this.loadAlbum()
+    this.loadAlbum(this.data.activeKind)
   },
 
   onRevealLineup: function () {

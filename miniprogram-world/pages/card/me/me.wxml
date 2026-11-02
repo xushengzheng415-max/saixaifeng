@@ -1,0 +1,59 @@
+<view class="wx-page">
+  <view class="brand-row">
+    <view class="brand">
+      <text class="brand-name">我的</text>
+      <text class="brand-sub">兑换券 · 槽位 · 三类卡边界</text>
+    </view>
+    <view class="tag">券 {{me.couponBalanceText}}</view>
+  </view>
+
+  <view class="panel coupon-panel">
+    <view class="row-between">
+      <view class="coupon-copy">
+        <text class="section-title">我的兑换券</text>
+        <text class="section-sub">{{me.couponNote}}</text>
+      </view>
+      <text class="coupon-num">{{me.couponBalanceText}}</text>
+    </view>
+    <view class="btn-gold shop-btn" bindtap="goShop" role="button" aria-label="卡商城">进入卡商城 · 扩容槽位</view>
+  </view>
+
+  <view class="panel slot-panel">
+    <view class="row-between">
+      <text class="section-title">我的槽位</text>
+      <text class="tag is-dim">{{me.membershipTierText}}</text>
+    </view>
+    <view class="slot-line" wx:for="{{me.slots}}" wx:key="key">
+      <view class="slot-copy">
+        <text class="slot-label">{{item.label}}</text>
+        <text class="slot-hint">{{item.hint}}</text>
+      </view>
+      <view class="slot-value-col">
+        <text class="slot-value">{{item.capacityText}}</text>
+        <text class="slot-max">{{item.maxText}}</text>
+      </view>
+    </view>
+    <text class="panel-note">{{me.slotNote}}</text>
+  </view>
+
+  <view class="panel card-panel">
+    <view class="row-between">
+      <text class="section-title">我的卡</text>
+      <text class="tiny muted">{{me.cardCountText}}</text>
+    </view>
+    <view class="rule-line">
+      <text class="rule-key">评估与 PK</text>
+      <text class="rule-value">{{me.cardPoolText}}</text>
+    </view>
+    <view class="rule-line">
+      <text class="rule-key">背景卡</text>
+      <text class="rule-value">{{me.bgFreeText}}</text>
+    </view>
+    <view class="btn-ghost bg-btn {{me.bgBtnClass}}" bindtap="goBg" role="button" aria-label="背景卡">{{me.bgBtnText}}</view>
+    <text class="panel-note">{{me.bgStoreText}}</text>
+  </view>
+
+  <view class="btn-ghost album-btn" bindtap="goAlbum" role="button" aria-label="去卡册">去卡册看看三类卡</view>
+
+  <view class="foot-note">不售卡 · 不售背景卡图 · 商城只售槽位容量</view>
+</view>

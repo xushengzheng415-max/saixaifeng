@@ -4,7 +4,9 @@
     "pages/card/album-sign/album-sign",
     "pages/card/lineup/lineup",
     "pages/card/battle/battle",
-    "pages/card/battle-log/battle-log"
+    "pages/card/battle-log/battle-log",
+    "pages/card/me/me",
+    "pages/card/shop/shop"
   ],
   "window": {
     "backgroundTextStyle": "dark",

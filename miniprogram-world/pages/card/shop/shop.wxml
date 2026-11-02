@@ -1,0 +1,42 @@
+<view class="wx-page">
+  <view class="brand-row">
+    <view class="brand">
+      <text class="brand-name">卡商城</text>
+      <text class="brand-sub">只售槽位 · 不卖卡 · 本期无支付</text>
+    </view>
+    <view class="tag">券 {{shop.couponBalanceText}}</view>
+  </view>
+
+  <view class="panel head-panel">
+    <view class="head-copy">
+      <text class="section-title">容量扩容</text>
+      <text class="section-sub">用兑换券扩容收藏、展示与展馆槽位 · {{shop.couponNote}}</text>
+    </view>
+  </view>
+
+  <view class="panel item-panel" wx:for="{{shop.items}}" wx:key="key">
+    <view class="item-row">
+      <view class="item-copy">
+        <text class="item-label">{{item.label}}</text>
+        <text class="item-hint">{{item.hint}}</text>
+      </view>
+      <text class="tag is-dim">{{item.progressText}}</text>
+    </view>
+    <view class="item-row item-foot">
+      <text class="item-price">{{item.priceText}}</text>
+      <view class="btn-ghost item-btn {{item.btnClass}}" data-key="{{item.key}}" bindtap="onBuy" role="button" aria-label="{{item.btnText}}">{{item.btnText}}</view>
+    </view>
+  </view>
+
+  <view class="empty" wx:if="{{shop.emptyCouponText}}">{{shop.emptyCouponText}}</view>
+
+  <view class="panel rules-panel">
+    <text class="section-title">商城规则</text>
+    <view class="rule-line" wx:for="{{shop.rules}}" wx:key="*this">{{item}}</view>
+    <text class="panel-note" wx:if="{{shop.storeNote}}">{{shop.storeNote}}</text>
+  </view>
+
+  <view class="foot-note">券由每日登录与后续任务发放 · 不可交易 · 不可提现</view>
+</view>
+
+<view class="toast" wx:if="{{toastText}}">{{toastText}}</view>

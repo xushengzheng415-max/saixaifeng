@@ -8,6 +8,7 @@
 
 var engine = require('./engine')
 var mock = require('./mock')
+var mvp = require('../config/mvp')
 
 var STORAGE_KEY = 'sxf-world-card-state-v1'
 var STATE_VERSION = 1
@@ -37,6 +38,9 @@ function defaultState() {
     cityName: mock.CITY.name,
     mainPlayerId: 'p_1001',
     ownedIds: ['p_1001', 'p_1004', 'p_1007', 'p_1003'],
+    /* 虚拟卡与自制卡单独成册：不进阵容、不参与评估 */
+    ownedVirtualIds: ['v_2001', 'v_2002'],
+    ownedFanIds: ['f_3001'],
     cursor: 0,
     quota: {
       dateKey: todayKey(),
@@ -44,6 +48,8 @@ function defaultState() {
       freeUsed: 0,
       directedLeft: 0
     },
+    coupons: { balance: 0, lastGrantDateKey: '' },
+    slotCapacity: engine.normalizeSlotCapacity(null, mvp.SLOT_DEFAULTS),
     rosterSize: 5,
     slots: slots,
     battleLog: [],
@@ -93,8 +99,19 @@ function mergeState(raw) {
     if (raw[k] !== undefined) state[k] = raw[k]
   }
   if (Array.isArray(raw.ownedIds)) state.ownedIds = raw.ownedIds.slice()
+  if (Array.isArray(raw.ownedVirtualIds)) state.ownedVirtualIds = raw.ownedVirtualIds.slice()
+  if (Array.isArray(raw.ownedFanIds)) state.ownedFanIds = raw.ownedFanIds.slice()
   if (Array.isArray(raw.slots)) state.slots = raw.slots.slice()
   if (Array.isArray(raw.battleLog)) state.battleLog = raw.battleLog.slice()
+  if (raw.coupons && typeof raw.coupons === 'object') {
+    state.coupons = {
+      balance: raw.coupons.balance || 0,
+      lastGrantDateKey: raw.coupons.lastGrantDateKey || ''
+    }
+  }
+  if (raw.slotCapacity && typeof raw.slotCapacity === 'object') {
+    state.slotCapacity = engine.normalizeSlotCapacity(raw.slotCapacity, mvp.SLOT_DEFAULTS)
+  }
   if (raw.quota && typeof raw.quota === 'object') {
     state.quota = {
       dateKey: raw.quota.dateKey || '',
@@ -120,6 +137,8 @@ function mergeState(raw) {
 function normalize(state) {
   var today = todayKey()
   state.quota = engine.normalizeQuota(state.quota, state.membership.tier, today)
+  state.slotCapacity = engine.normalizeSlotCapacity(state.slotCapacity, mvp.SLOT_DEFAULTS)
+  state.coupons = engine.grantDailyCoupons(state.coupons, today, mvp.DAILY_COUPONS).coupons
   return state
 }
 
@@ -133,16 +152,17 @@ function getState() {
 
 function save() {
   if (!cached) return
-  cached.quota = engine.normalizeQuota(cached.quota, cached.membership.tier, todayKey())
+  normalize(cached)
   persist(cached)
 }
 
-/** 页面 onShow 时调用：跨自然日后补发配额。 */
+/** 页面 onShow 时调用：跨自然日后补发签约配额与每日兑换券。 */
 function refreshDaily() {
   var state = getState()
-  var before = state.quota.dateKey
-  state.quota = engine.normalizeQuota(state.quota, state.membership.tier, todayKey())
-  if (before !== state.quota.dateKey) persist(state)
+  var beforeQuota = state.quota.dateKey
+  var beforeGrant = state.coupons.lastGrantDateKey
+  normalize(state)
+  if (beforeQuota !== state.quota.dateKey || beforeGrant !== state.coupons.lastGrantDateKey) persist(state)
   return state
 }
 
@@ -165,6 +185,14 @@ function playersById() {
 
 function player(playerId) {
   return playersById()[playerId] || null
+}
+
+/** 三类卡全集索引：真实卡按 playerId，虚拟卡/自制卡按 cardId。 */
+function cardsById() {
+  var list = mock.allCards()
+  var map = {}
+  for (var i = 0; i < list.length; i++) map[list[i].cardId || list[i].playerId] = list[i]
+  return map
 }
 
 /* ---------------- 页面视图组装 ---------------- */
@@ -196,33 +224,78 @@ function mainCardView() {
   }
 }
 
-function albumView() {
+function ownedIdsOfKind(state, kind) {
+  if (kind === 'virtual') return state.ownedVirtualIds || []
+  if (kind === 'fanMade') return state.ownedFanIds || []
+  return state.ownedIds || []
+}
+
+function albumCounts(state) {
+  return {
+    real: (state.ownedIds || []).length,
+    virtual: (state.ownedVirtualIds || []).length,
+    fanMade: (state.ownedFanIds || []).length
+  }
+}
+
+/**
+ * 卡册三分区视图。只有真实球员卡分区保留签约与阵容入口；
+ * 虚拟卡只进娱乐图鉴，自制卡只做展示与分享。
+ */
+function albumView(kind) {
   var state = refreshDaily()
-  var list = allPlayers()
-  var map = playersById()
+  var active = kind === 'virtual' ? 'virtual' : (kind === 'fanMade' ? 'fanMade' : 'real')
+  var meta = engine.cardKindMeta(active)
+  var map = cardsById()
+  var ids = ownedIdsOfKind(state, active)
+  var counts = albumCounts(state)
   var tiles = []
-  for (var i = 0; i < state.ownedIds.length; i++) {
-    var p = map[state.ownedIds[i]]
-    if (!p) continue
-    var isMain = p.playerId === state.mainPlayerId
+  for (var i = 0; i < ids.length; i++) {
+    var c = map[ids[i]]
+    if (!c) continue
+    var isMain = active === 'real' && c.playerId === state.mainPlayerId
     tiles.push({
-      id: p.playerId,
-      name: p.name,
-      cardUrl: p.cardUrl,
+      id: ids[i],
+      name: c.name,
+      cardUrl: c.cardUrl,
       isMain: isMain,
       mainLabel: isMain ? '主卡' : '',
-      metaText: p.positionLabel + ' · #' + p.number,
-      skillText: p.skillLabel,
-      ovrText: String(p.ovr)
+      metaText: c.metaText,
+      skillText: c.skillLabel || '',
+      scoreLine: c.scoreLine,
+      tagText: active === 'real' ? '' : (c.tagText || meta.short),
+      tagClass: active === 'real' ? '' : meta.tagClass
     })
   }
+  var tabs = engine.CARD_KINDS.map(function (item) {
+    return {
+      key: item.key,
+      label: item.short,
+      countText: counts[item.key] + ' 张',
+      activeClass: item.key === active ? 'is-active' : ''
+    }
+  })
   var quota = state.quota
   var freeLeft = engine.dailyFreeLeft(quota, state.membership.tier)
   var member = engine.membershipView(state.membership)
+  var emptyText = '还没有球员卡，先完成一次同城签约'
+  if (active === 'virtual') emptyText = '还没有虚拟卡 · 娱乐图鉴入口后续开放'
+  if (active === 'fanMade') emptyText = '还没有自制卡 · 制作入口后续开放'
   return {
+    tabs: tabs,
+    activeKind: active,
+    kindLabel: meta.label,
+    kindHint: meta.hint,
+    showReal: active === 'real',
     tiles: tiles,
     isEmpty: tiles.length === 0,
     countText: '共 ' + tiles.length + ' 张',
+    emptyText: emptyText,
+    noteText: active === 'real'
+      ? ''
+      : (active === 'virtual'
+        ? '虚拟卡只进娱乐图鉴，不计分、不进阵容'
+        : '自制卡只做展示与分享，不进 PK、不可交易'),
     freeLeft: freeLeft,
     freeTotal: quota.freeTotal || engine.memberDailyFreeTotal(state.membership.tier),
     remainText: freeLeft > 0 ? ('今日剩余 ' + freeLeft + ' 次') : '明日再来 · 免费 ' + (quota.freeTotal || 1) + ' 次/日',
@@ -294,6 +367,105 @@ function ownedChips() {
   }).filter(function (x) { return !!x })
 }
 
+/* ---------------- 我的 / 卡商城（只售槽位） ---------------- */
+
+/** 「我的」视图：券余额、槽位容量、卡片边界说明。 */
+function meView() {
+  var state = refreshDaily()
+  var member = engine.membershipView(state.membership)
+  var counts = albumCounts(state)
+  var slots = engine.SLOT_KEYS.map(function (key) {
+    var meta = mvp.SLOT_META[key] || {}
+    var capacity = state.slotCapacity[key] || 0
+    return {
+      key: key,
+      label: meta.label || key,
+      hint: meta.hint || '',
+      capacityText: capacity + ' 个',
+      maxText: '上限 ' + mvp.SLOT_MAX[key] + ' 个'
+    }
+  })
+  return {
+    couponBalanceText: String(state.coupons.balance || 0),
+    couponNote: '每日登录自动到账 ' + mvp.DAILY_COUPONS + ' 张券，只用于扩容槽位',
+    slots: slots,
+    slotNote: '槽位只决定能收藏/展示多少张卡，不改变卡片等级与胜负权重',
+    membershipTierText: member.tierText,
+    cardCountText: '真实 ' + counts.real + ' 张 · 虚拟 ' + counts.virtual + ' 张 · 自制 ' + counts.fanMade + ' 张',
+    cardPoolText: '真实球员卡参与评估与真实 PK；虚拟卡只进娱乐图鉴；自制卡只做展示与分享',
+    bgFreeText: '满 ' + mvp.FREE_BG_SCORE + ' 分或有效会员可免费更换背景（保留不缩减）',
+    bgStoreText: mvp.BACKGROUND_STORE_OPEN
+      ? '卡皮肤商城已开放：只售槽位容量，不售背景卡图'
+      : '背景卡本期未上架；后期卡皮肤商城只售槽位，不售背景卡图',
+    bgBtnText: mvp.BACKGROUND_STORE_OPEN ? '去换背景' : '暂未开放',
+    bgBtnClass: mvp.BACKGROUND_STORE_OPEN ? '' : 'is-disabled'
+  }
+}
+
+/** 卡商城视图：只售槽位容量，券不足或已达上限时按钮置灰（无支付）。 */
+function shopView() {
+  var state = refreshDaily()
+  var balance = state.coupons.balance || 0
+  var items = engine.SLOT_KEYS.map(function (key) {
+    var meta = mvp.SLOT_META[key] || {}
+    var capacity = state.slotCapacity[key] || 0
+    var price = mvp.SLOT_PRICES[key] || 0
+    var max = mvp.SLOT_MAX[key] || 0
+    var maxed = capacity >= max
+    var enough = balance >= price
+    var canBuy = !maxed && enough
+    var btnText = '券不足'
+    if (maxed) btnText = '已达上限'
+    else if (enough) btnText = '兑换 · ' + price + ' 券'
+    return {
+      key: key,
+      label: meta.label || key,
+      hint: meta.hint || '',
+      progressText: capacity + ' / ' + max,
+      priceText: price + ' 张兑换券 · +1 容量',
+      btnText: btnText,
+      btnClass: canBuy ? '' : 'is-disabled',
+      canBuy: canBuy,
+      disabledText: maxed ? '该槽位已达上限' : '兑换券不足，明天登录再领'
+    }
+  })
+  var rules = mvp.SHOP_RULES.slice()
+  rules.splice(3, 0, '背景卡：满 ' + mvp.FREE_BG_SCORE + ' 分或有效会员免费更换，超额才换槽位')
+  return {
+    couponBalanceText: String(balance),
+    couponNote: '每日登录 +' + mvp.DAILY_COUPONS + ' 张券',
+    items: items,
+    rules: rules,
+    emptyCouponText: balance < 1 ? mvp.COUPON_EMPTY_NOTICE : '',
+    storeNote: mvp.BACKGROUND_STORE_OPEN ? '' : '背景卡与卡皮肤暂不上架，本期只开放槽位扩容'
+  }
+}
+
+/** 兑换槽位（本地状态写入）。规则校验在 engine.buySlot。 */
+function buySlot(kind) {
+  var state = refreshDaily()
+  var meta = mvp.SLOT_META[kind]
+  if (!meta) return { ok: false, code: engine.CODES.SLOT_INVALID, message: engine.codeMessage(engine.CODES.SLOT_INVALID) }
+  var result = engine.buySlot({
+    capacity: state.slotCapacity,
+    kind: kind,
+    price: mvp.SLOT_PRICES[kind],
+    max: mvp.SLOT_MAX[kind],
+    balance: state.coupons.balance || 0
+  })
+  if (!result.ok) return { ok: false, code: result.code, message: result.message || engine.codeMessage(result.code) }
+  state.slotCapacity = result.capacity
+  state.coupons.balance = result.balance
+  save()
+  return {
+    ok: true,
+    kind: kind,
+    label: meta.label,
+    capacity: result.capacity,
+    balance: result.balance
+  }
+}
+
 function battleLogView() {
   var state = getState()
   var rows = state.battleLog.map(function (entry) {
@@ -325,10 +497,14 @@ module.exports = {
   allPlayers: allPlayers,
   playersById: playersById,
   player: player,
+  cardsById: cardsById,
   mainCardView: mainCardView,
   albumView: albumView,
   lineupView: lineupView,
   ownedChips: ownedChips,
+  meView: meView,
+  shopView: shopView,
+  buySlot: buySlot,
   battleLogView: battleLogView,
   clone: clone
 }

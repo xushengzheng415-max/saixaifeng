@@ -50,6 +50,10 @@ Page({
     wx.redirectTo({ url: '/pages/card/lineup/lineup' })
   },
 
+  goMe: function () {
+    wx.navigateTo({ url: '/pages/card/me/me' })
+  },
+
   goLog: function () {
     wx.navigateTo({ url: '/pages/card/battle-log/battle-log' })
   },
