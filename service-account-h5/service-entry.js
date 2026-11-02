@@ -178,7 +178,12 @@
     stopSmsTimer()
     say('先查找本队已有球员')
     content.hidden = false
-    content.innerHTML = '<h2>'+esc(data.teamName)+'</h2><form id="searchForm"><div class="row"><label for="playerQuery">身份证号或姓名</label><input id="playerQuery" maxlength="30" autocomplete="off" required></div><button class="wide" id="searchPlayers" type="submit">查找球员</button></form><div id="playerCandidates"></div>'
+    // 上次提交被球队驳回：驳回流程已清空回执，页面重新回到这里；先说明驳回理由，
+    // 避免球员以为上一次提交仍然有效、或重复提交同样资料。
+    var reject = data.registrationReject && !data.registeredPlayerId ? data.registrationReject : null
+    content.innerHTML = '<h2>'+esc(data.teamName)+'</h2>'+
+      (reject?'<section class="reject-notice" role="alert"><strong>上次登记被球队驳回</strong><p>'+esc((reject.playerName?'“'+reject.playerName+'”的入队申请':'入队申请')+(reject.atText?'（'+reject.atText+' 驳回）':''))+'：'+esc(reject.reason||'球队未通过')+'</p><p class="muted">请核对姓名、身份证号等资料后重新填写并提交。</p></section>':'')+
+      '<form id="searchForm"><div class="row"><label for="playerQuery">身份证号或姓名</label><input id="playerQuery" maxlength="30" autocomplete="off" required></div><button class="wide" id="searchPlayers" type="submit">查找球员</button></form><div id="playerCandidates"></div>'
     var queryInput=document.getElementById('playerQuery'), list=document.getElementById('playerCandidates')
     function select(mode,playerId,button) {
       var identity=document.getElementById('claimIdentity')
@@ -270,12 +275,27 @@
     }
     checkNumber()
   }
-  function showRegistrationCard(completed,receipt,cardImage) {
+  // 提交成功后进入独立完成页：只保留结论和出口，不显示表单、裁剪滑块或球员卡画布。
+  // 邀请新建的档案在球队确认前置回读球员卡会被服务端拒绝，所以这里不回读。
+  function showRegistrationDone(receipt) {
     var pendingConfirm=Boolean(receipt&&receipt.pendingTeamConfirm)
-    // 完成态的结论放在卡片下方，页头状态条不再重复同一句（否则页面上会出现两处结论）。
-    say(completed?'':'球员资料已保存')
+    var targeted=Boolean(playerContext&&playerContext.targetedPlayer)
+    say('')
     content.hidden=false
-    content.innerHTML='<h2>球员卡预览</h2><div class="card-stage"><img id="registrationCard" alt="球员卡预览" hidden><span id="cardState">正在生成球员卡…</span></div><p id="cardHint" class="field-hint muted" hidden></p><div class="crop-controls"><label for="cropZoom">人像大小</label><input id="cropZoom" type="range" min="1" max="4" step="0.02" value="1"><label for="cropX">左右位置</label><input id="cropX" type="range" min="-1" max="1" step="0.01" value="0"><label for="cropY">上下位置</label><input id="cropY" type="range" min="-1" max="1" step="0.01" value="0"></div><div class="actions"><button id="retryCard" class="secondary" type="button">重新预览</button><button id="saveCard" type="button" disabled>保存位置</button></div><a id="viewMyCards" class="entry-return-link" href="./me.html" hidden>前往赛事中心「我的」查看球员卡与积分玩法</a><button id="addAnother" class="text-action wide" type="button">登记其他球员</button>'
+    content.innerHTML='<section class="done-page"><div class="done-mark" aria-hidden="true">✓</div><h2 class="done-title" id="doneTitle"></h2><p class="done-text" id="doneText"></p><p class="done-note">本流程已结束，可以关闭本页面。</p><a id="doneMyCards" class="entry-return-link" href="./me.html" hidden>前往赛事中心「我的」查看球员卡与积分玩法</a><button id="doneAddAnother" class="text-action wide" type="button">继续登记其他球员</button></section>'
+    var title=document.getElementById('doneTitle'),text=document.getElementById('doneText')
+    if(pendingConfirm){title.textContent='注册完成，等待审核';text.textContent='球员资料已提交。球队负责人确认后正式入队，无需再次提交。'}
+    else{title.textContent='注册完成';text.textContent='球员资料已登记完成。'}
+    // 待球队确认的档案还没有球员卡与球队归属，「我的」页里暂时看不到东西，先不给入口。
+    if(!pendingConfirm)document.getElementById('doneMyCards').hidden=false
+    var another=document.getElementById('doneAddAnother')
+    another.hidden=targeted
+    another.onclick=function(){showPlayerSearch(playerContext||{})}
+  }
+  function showRegistrationCard() {
+    say('球员资料已保存')
+    content.hidden=false
+    content.innerHTML='<h2>球员卡预览</h2><div class="card-stage"><img id="registrationCard" alt="球员卡预览" hidden><span id="cardState">正在生成球员卡…</span></div><p id="cardHint" class="field-hint muted" hidden></p><div class="crop-controls"><label for="cropZoom">人像大小</label><input id="cropZoom" type="range" min="1" max="4" step="0.02" value="1"><label for="cropX">左右位置</label><input id="cropX" type="range" min="-1" max="1" step="0.01" value="0"><label for="cropY">上下位置</label><input id="cropY" type="range" min="-1" max="1" step="0.01" value="0"></div><div class="actions"><button id="retryCard" class="secondary" type="button">重新预览</button><button id="saveCard" type="button" disabled>保存位置</button></div><button id="addAnother" class="text-action wide" type="button">登记其他球员</button>'
     var img=document.getElementById('registrationCard'),state=document.getElementById('cardState'),save=document.getElementById('saveCard'),retry=document.getElementById('retryCard'),snapshot=null,serial=0,localSerial=0,resources=null
     var liveCanvas=document.createElement('canvas');liveCanvas.hidden=true;img.after(liveCanvas)
     function drawCard(){
@@ -291,7 +311,7 @@
         snapshot=result;img.src=result.imageData;img.hidden=false;state.hidden=true;save.disabled=false
         document.getElementById('cropZoom').value=result.crop.zoom;document.getElementById('cropX').value=result.crop.x;document.getElementById('cropY').value=result.crop.y
         if(result.cardScene)drawCard()
-        say(completed ? '' : '可调整人像大小和位置')
+        say('可调整人像大小和位置')
       }).catch(function(error){
         if(request!==serial)return
         // webLoginApi 抛错时只回 error 文案、不带 code，这里同时按 code 与文案识别「档案尚未入队」。
@@ -311,27 +331,11 @@
     // 已提交但球队尚未确认：档案还不属于本队，回读球员卡会被服务端拒绝，改为提示等待确认。
     function showPendingNotice(){
       say('')
-      content.querySelector('h2').textContent='登记已提交'
+      content.querySelector('h2').textContent='已提交，等待审核'
       var stage=content.querySelector('.card-stage')
       if(stage)stage.innerHTML='<span class="muted">球员卡将在球队负责人确认后生成</span>'
       content.querySelector('.crop-controls').hidden=true
       save.hidden=true;retry.hidden=true
-    }
-    if(completed){
-      var title=content.querySelector('h2'),stage=content.querySelector('.card-stage')
-      title.textContent=pendingConfirm?'已提交球队确认':'登记成功'
-      // 完成后按「先看卡、再看结论」的顺序：标题移到卡片下方，而不是压在页头位置。
-      if(stage&&stage.parentNode)stage.parentNode.insertBefore(title,stage.nextSibling)
-      content.querySelector('.crop-controls').hidden=true
-      save.hidden=true;retry.hidden=true
-      // 待球队确认的档案还没有球员卡与球队归属，「我的」页里暂时看不到东西，先不给入口。
-      if(!pendingConfirm)document.getElementById('viewMyCards').hidden=false
-      var hint=document.getElementById('cardHint')
-      if(pendingConfirm){hint.textContent='球队负责人可在小程序球员库「待确认入队」中确认，确认后正式入队。';hint.hidden=false}
-      // 提交已成功，不再回读球员卡：直接展示弹窗里已确认的那张图，避免新登记档案在球队确认前被拒。
-      if(cardImage){img.src=cardImage;img.hidden=false;state.hidden=true}
-      else{state.textContent=pendingConfirm?'球员卡将在球队确认后生成':'球员卡已保存';state.hidden=false}
-      return
     }
     preview(true)
   }
@@ -606,7 +610,7 @@
       jerseyNameInput.value = jerseyNameInput.value.toUpperCase()
     }
 
-    var photoFileID = '', portraitId = '', photoPending = false, pendingSubmit = false, numberSerial = 0, numberTimer = null, confirmedCardImage = ''
+    var photoFileID = '', portraitId = '', photoPending = false, pendingSubmit = false, numberSerial = 0, numberTimer = null
     var photoInput = document.getElementById('photo')
     var photoCamera = document.getElementById('photoCamera')
     var photoPick = document.getElementById('photoPick')
@@ -629,7 +633,6 @@
     var editor=window.SxfRegistrationCardModal({api:api,getPayload:getPayload,isActive:activeForm,onDirty:markDirty,onCrop:function(){saveSoon()},onPhoto:function(kind){if(!photoPending)(kind==='camera'?photoCamera:photoInput).click()},onError:function(error){showNumberError(error);if(activeForm()&&editor&&!editor.isOpen()&&error.code!=='PLAYER_JERSEY_CONFLICT')photoState.textContent=error.message},confirmText:function(){return pendingSubmit?'确认登记':'确认使用'},onClosed:function(reason){if(reason!=='confirmed')pendingSubmit=false;saveSoon()},onConfirmed:function(result){
       if(!activeForm())return
       photoState.textContent='球员卡已确认';photoState.className='success';editCardButton.hidden=false;editCardButton.textContent='调整球员卡'
-      confirmedCardImage=result.imageData||''
       document.getElementById('confirmedRegistrationCardImage').src=result.imageData;document.getElementById('confirmedRegistrationCard').hidden=false
       saveSoon()
       if(pendingSubmit){pendingSubmit=false;submitRegistration()}
@@ -1210,7 +1213,7 @@
     function submitRegistration(){
       if(!activeForm()||!editor.isConfirmed())return
       var button=content.querySelector('button[type=submit]');if(button.disabled)return;button.disabled=true;button.textContent='提交中…'
-      api('serviceEntryJoinPlayer',Object.assign({},getPayload(),{cardPreviewRequired:true,cardPreviewToken:editor.token()})).then(function(result){editor.dispose();showRegistrationCard(true,result,confirmedCardImage)}).catch(function(error){
+      api('serviceEntryJoinPlayer',Object.assign({},getPayload(),{cardPreviewRequired:true,cardPreviewToken:editor.token()})).then(function(result){editor.dispose();showRegistrationDone(result)}).catch(function(error){
         if(!activeForm())return
         button.disabled=false;button.textContent=data.selection.mode==='claim'?'确认认领':'确认新建'
         showNumberError(error)

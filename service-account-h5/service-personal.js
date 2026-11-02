@@ -1,7 +1,7 @@
 (function(){
  'use strict'
  var API='https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi',KEY='sxf_referee_h5_session',app=document.getElementById('app')
- var PAGE_VERSION='v2.14'
+ var PAGE_VERSION='v2.18'
  // 本地预览（?mock=1）：只在 file://、本机或局域网私网地址生效，避免线上被加参数后展示假会员与假余额
  var MOCK=/[?&]mock=1(?:&|$)/.test(location.search)&&(/^file:/.test(location.protocol)||/^http:\/\/(localhost|127\.0\.0\.1)(?::\d+)?$/i.test(location.origin)||/^http:\/\/(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(?::\d+)?$/i.test(location.origin))
  var state={overview:null,view:'player',playerId:'',detail:null,participation:null,participationKind:'profile',passFilter:'all',presentPassId:'',epoch:0},oauthPending=false
@@ -27,7 +27,7 @@
  }
  function mockMembershipStatus(){
   var active=mockMemberActive(),plans=mockMemberPlans()
-  var rights=[{code:'grant',label:'每月赠滴',open:true,detail:active?'每期赠 500 滴':'每期赠 200 滴'},{code:'badge',label:'会员徽章',open:true},{code:'portrait',label:'AI 定妆照折扣',open:true,detail:active?'定妆照享 9 折':'会员生效后享定妆照折扣'},{code:'backgrounds',label:'卡面背景库',open:false},{code:'export',label:'数据长图导出',open:false},{code:'cards',label:'多套卡面保存',open:false},{code:'report',label:'赛季报告',open:false}]
+  var rights=[{code:'grant',label:'每月赠滴',open:true,detail:active?'每期赠 500 滴':'每期赠 200 滴'},{code:'badge',label:'会员徽章',open:true},{code:'portrait',label:'AI 定妆照折扣',open:true,detail:active?'定妆照享 9 折':'会员生效后享定妆照折扣'},{code:'backgrounds',label:'会员专属背景',open:true,detail:'开通后可不达 100 分更换卡面背景'},{code:'export',label:'数据长图导出',open:false},{code:'cards',label:'多套卡面保存',open:false},{code:'report',label:'赛季报告',open:false}]
   return {plans:plans.concat([{code:'family',name:'家庭会员',firstPriceCents:5990,renewPriceCents:6990,yearlyPriceCents:69900,grantDrops:2000,portraitDiscount:0.8,portraitDiscountLabel:'8 折',visible:false,order:4}]),sellablePlans:plans,subscription:active?mockMemberSub():null,isFirstMonthAvailable:!active,purchaseEnabled:true,reason:'',rights:rights,balance:1200}
  }
  function mockMembershipOrders(){
@@ -102,14 +102,15 @@
   var p=players.filter(function(x){return x.id===state.playerId})[0]||players[0]||null
   if(p)state.playerId=p.id
   var current=state.view==='referee'?ref:p,name=current&&current.name||'微信用户'
+  var jerseyName=state.view==='player'&&p&&p.jerseyName?String(p.jerseyName).trim():''
   var relation=state.view==='referee'?[ref&&ref.level?'注册裁判 · '+ref.level:'注册裁判']:[p&&p.teamName,p&&p.jerseyNumber?p.jerseyNumber+'号':'',p&&p.relation==='guardian'?'监护球员':'']
   app.innerHTML='<div class="me-home-root"><header class="me-home-header"><h2>我的</h2><img src="./assets/logo-saixiaofeng-football.png" alt="赛小蜂足球"></header><main class="me-body me-home-body">'+
-   '<section class="me-usercard me-home-profile" aria-label="当前资料">'+portrait(current&&current.avatar,name)+'<div><h1>'+esc(name)+'<span class="me-name-mark" id="homeNameMark" aria-label="会员标识"></span></h1><p>'+esc(d.phoneMasked||'')+'</p></div><button data-action="homeProfile">个人资料 ›</button></section>'+
+   '<section class="me-usercard me-home-profile" aria-label="当前资料">'+portrait(current&&current.avatar,name)+'<div><h1><span class="me-display-name" data-i18n-skip="1">'+esc(name)+'</span><span class="me-name-mark" id="homeNameMark" aria-label="会员标识"></span></h1>'+(jerseyName?'<p class="me-jersey-name" data-i18n-skip="1">'+esc(jerseyName)+'</p>':'')+'<p class="me-phone-line">'+esc(d.phoneMasked||'')+'</p></div><button data-action="homeProfile">个人资料 ›</button></section>'+
    '<nav class="me-home-roles" aria-label="切换身份"><button data-home-role="player" aria-pressed="'+(state.view==='player')+'" '+(!players.length?'disabled':'')+'>球员身份</button><button data-home-role="referee" aria-pressed="'+(state.view==='referee')+'" '+(!d.hasReferee?'disabled':'')+'>裁判身份</button></nav>'+
    '<div class="me-home-context"><span>'+esc(relation.filter(Boolean).join(' · ')||'尚未绑定业务身份')+'</span>'+(state.view==='player'&&players.length>1?'<button data-action="homePlayers">切换球员 ›</button>':'')+'</div>'+
    homeMemberCard()+'<section class="me-home-wallet" aria-label="我的蜂蜜"><div class="wallet-head"><strong>我的蜂蜜</strong><button data-action="honeyLedger">收支明细 ›</button></div><div class="wallet-body"><div class="amount"><strong id="homeHoneyBalance">—</strong><span>滴</span></div>'+homeRechargeEntry()+'</div><div id="homeHoneyStatus" class="wallet-foot">正在读取蜂蜜余额…</div></section>'+
-   '<section class="me-home-game" aria-label="球员卡玩法"><button class="me-home-game-entry" data-action="homeCardGame"><span class="game-entry-text"><strong>球员卡玩法</strong><small>送出卡片 · 收集图鉴 · 组建阵容 · 阵容对战</small></span><i aria-hidden="true">›</i></button></section>'+
-   '<section class="me-home-data"><button class="me-home-data-head" data-action="goData"><strong>'+(state.view==='player'?'我的比赛数据':'我的执裁数据')+'</strong><span>全部记录 ›</span></button><div id="homeMetrics" class="me-home-metrics">'+homeMetrics(null)+'</div>'+homeMenu(state.view==='player'?'shield':'event',state.view==='player'?'卡世界':'裁判任务',state.view==='player'?'homePlayerCards':'homeRefereeTasks')+'</section>'+
+   (state.view==='player'?'<section class="me-home-game" aria-label="赛小蜂足球世界"><button class="me-home-game-banner" data-action="homePlayerCards" type="button"><img src="./assets/football-world-banner.jpg" alt="赛小蜂足球世界 · 我的球员卡"><span class="visually-hidden">进入赛小蜂足球世界</span></button></section>':'')+
+   '<section class="me-home-data"><button class="me-home-data-head" data-action="goData"><strong>'+(state.view==='player'?'我的比赛数据':'我的执裁数据')+'</strong><span>全部记录 ›</span></button><div id="homeMetrics" class="me-home-metrics">'+homeMetrics(null)+'</div>'+(state.view==='referee'?homeMenu('event','裁判任务','homeRefereeTasks'):'')+'</section>'+
    (state.view==='player'?participationHome():'')+
    '<h2 class="me-home-label">账号与服务</h2><section class="me-home-menu">'+homeMenu('list','继续球员登记','homeRegistrationResume')+homeMenu('lock','账号与安全','homeSecurity')+homeMenu('list','绑定管理','showBindings')+homeMenu('bell','消息通知','homeMessages')+homeMenu('event','会员订单','membershipOrders')+homeMenu('event','充值订单','honeyOrders')+homeMenu('shield','客服中心','support')+homeMenu('event','我的反馈','myFeedback')+'</section>'+
    '<div class="me-home-footer"><button data-action="openTournament">赛事中心</button><span>·</span><button data-action="about">关于赛小蜂</button><span>·</span><button data-action="logout">退出登录</button></div></main></div>'
@@ -515,10 +516,12 @@
   }
   var price=m.lowestFirstPriceCents>0?yuanText(m.lowestFirstPriceCents)+' 元':'会员权益'
   var grant=plan?'每月赠 '+plan.grantDrops+' 滴':'每月赠滴'
-  return '<section class="me-home-member" id="homeMemberCard" aria-label="赛小蜂会员"><button class="me-member-entry" data-action="membershipCenter"><span class="me-member-text"><strong>开通会员 · 首月 '+esc(price)+'起</strong><small>'+esc(grant)+' · 定妆照折扣 · 会员徽章</small></span><span class="me-member-cta">立即开通</span></button></section>'
+  return '<section class="me-home-member" id="homeMemberCard" aria-label="赛小蜂会员"><button class="me-member-entry" data-action="membershipCenter"><span class="me-member-text"><strong>开通会员 · 首月 '+esc(price)+'起</strong><small>'+esc(grant)+' · 定妆照折扣 · 会员专属背景 · 会员徽章</small></span><span class="me-member-cta">立即开通</span></button></section>'
  }
  function updateHomeMember(){var n=document.getElementById('homeMemberCard');if(!n)return;var holder=document.createElement('div');holder.innerHTML=homeMemberCard();var fresh=holder.firstChild;if(fresh)n.parentNode.replaceChild(fresh,n)}
- // 会员标识（2026-10-31 用户确认）：徽章跟昵称一起显示，只在会员有效期内出现，纯展示不替代档位文字。
+ // 会员标识（2026-10-31 用户确认「只要会员都发这个徽章」，并确认「其实有这个就行了」）：
+ // 会员标识只用徽章——昵称旁 + 会员卡档位胶囊 + 会员中心头部，只在会员有效期内显示，
+ // 到期自动消失；纯展示，不替代档位文字、不按档位区分，不做会员背景。
  function memberMarkImg(size){return '<img class="me-member-mark" src="./assets/membership/member-badge-'+size+'.png" alt="赛小蜂会员" width="'+size+'" height="'+size+'">'}
  function updateNameMark(){var n=document.getElementById('homeNameMark');if(!n)return;var m=memberSummary(),sub=m&&m.subscription;n.innerHTML=(sub&&sub.status==='active')?memberMarkImg(96):''}
  // 会员中心：整屏订阅页（会员卡头图 + 权益宫格 + 档位精选 + 吸底开通条），不再是普通弹层。
@@ -564,7 +567,8 @@
    '<strong class="mp-hero-title">'+(open?memberMarkImg(96):'')+esc(open?(sub.levelName||'会员')+' · 剩余 '+sub.daysLeft+' 天':(sub?'会员已到期':'尚未开通会员'))+'</strong>'+
    '<small class="mp-hero-note">'+esc(sub?'有效期至 '+memberDate(sub.expiresAt)+' · 到期不自动续费':'首次开通享首月价，之后按同档续费价')+'</small></div>'
   var rights=(m.rights||[]).map(function(item){
-   return '<li'+(item.open?'':' class="pending"')+'><img src="'+memberIcon(item.code)+'" alt=""><span><strong>'+esc(item.label)+'</strong><small>'+esc(item.open?(item.detail||'已开放'):'即将开放')+'</small></span></li>'
+   var note=item.open?(item.detail||'已开放'):(item.detail?item.detail+' · 即将上线':'即将开放')
+   return '<li'+(item.open?'':' class="pending"')+'><img src="'+memberIcon(item.code)+'" alt=""><span><strong>'+esc(item.label)+'</strong><small>'+esc(note)+'</small></span></li>'
   }).join('')
   var rightsPanel=rights?'<section class="mp-panel"><h3 class="mp-title">会员权益<small>'+esc(open?'本档已生效':'开通后立即生效')+'</small></h3><ul class="mp-rights">'+rights+'</ul></section>':''
   var planHtml=''
@@ -654,8 +658,7 @@
   if(action==='honeyOrders'){renderHoneyOrders();return true}
   if(action==='honeyPay'){honeyPay();return true}
   if(action==='honeyLedger'||action==='homeMessages'){showHomeAccount(action==='honeyLedger'?'ledger':'messages');return true}
-  if(action==='homePlayerCards'){location.href='./my-main-card.html';return true}
-  if(action==='homeCardGame'){location.href='./player-card-game.html';return true}
+  if(action==='homePlayerCards'||action==='homeCardGame'){location.href='./card-world/index.html';return true}
   if(action==='homeRefereeTasks'){location.href='./?entry=workbench';return true}
   if(action==='retryHomeStats'){loadHomeStats();return true}
   if(action==='homePlayers'){var rows=(state.overview.players||[]).map(function(p){return '<button class="me-home-player-option" data-home-player="'+esc(p.id)+'">'+esc(p.name)+'<small>'+esc(p.teamName)+'</small></button>'}).join('');modal('切换球员',rows);return true}

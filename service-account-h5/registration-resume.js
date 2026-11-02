@@ -20,7 +20,7 @@
    var key='sxf_entry_session_'+r.entry
    try{localStorage.setItem(key,JSON.stringify({token:r.serviceEntrySession,proof:'',expiresAt:new Date(r.expiresAt).getTime()}))}catch(e){}
    try{sessionStorage.setItem(key,r.serviceEntrySession)}catch(e){}
-   location.assign('./join-player.html?entry='+encodeURIComponent(r.entry))
+   location.assign('./join-player.html?entry='+encodeURIComponent(r.entry)+'&v=20261028-ai-sheet3')
   }).catch(function(e){if(e.code==='SERVICE_PRIVATE_AUTH_REQUIRED')return oauth();error(e,load)})
  }
  function load(){

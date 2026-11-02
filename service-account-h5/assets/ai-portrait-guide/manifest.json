@@ -1,0 +1,26 @@
+[
+  {
+    "file": "face.webp",
+    "width": 357,
+    "height": 480,
+    "bytes": 14392,
+    "transparentPixels": 0,
+    "sourceSha256": "c63d6a547873ff2eabbbcf7a1598f249b82689f71df521ff33696dc87f412b0c"
+  },
+  {
+    "file": "jersey.webp",
+    "width": 357,
+    "height": 480,
+    "bytes": 29768,
+    "transparentPixels": 0,
+    "sourceSha256": "30cb777dc1370cbc4d01b31a7b984ff8712227089c15138632495edb5f1b8fc8"
+  },
+  {
+    "file": "result.webp",
+    "width": 384,
+    "height": 480,
+    "bytes": 27874,
+    "transparentPixels": 109951,
+    "sourceSha256": "7cb91b541e751d3c6d8c89d1323d34f668c6d5c73553b0981faa75f8b66e0cfe"
+  }
+]

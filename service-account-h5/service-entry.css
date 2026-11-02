@@ -12,6 +12,7 @@ input[aria-invalid="true"]:focus{outline:2px solid #b33429;outline-offset:0;box-
 .registration-card-stage canvas{display:block;max-width:100%;max-height:100%;width:auto;height:100%;aspect-ratio:300/430;object-fit:contain}.registration-card-stage canvas[hidden]{display:none}.registration-photo-tools{display:flex;justify-content:center;gap:24px}.registration-photo-tools button{min-height:40px}.registration-card-dialog h2{margin-bottom:12px}@media(max-height:650px){.registration-card-stage{height:36vh}.registration-card-status{margin:6px 0}.registration-photo-tools button{min-height:34px}.registration-card-actions{margin-top:6px}}
 .card-stage canvas{display:block;width:100%;height:auto;aspect-ratio:300/430;object-fit:contain}.card-stage canvas[hidden]{display:none}
 .field-hint{display:block;margin-top:6px;font-size:12px;line-height:1.5}.field-hint[hidden]{display:none}
+.reject-notice{margin:0 0 18px;padding:12px 14px;border:1px solid #e7c9a2;border-left:4px solid #c9781e;border-radius:8px;background:#fdf6ec}.reject-notice strong{display:block;font-size:15px;color:#8a4d12;margin-bottom:6px}.reject-notice p{margin:0;font-size:13px;line-height:1.6;color:#6b4a22;overflow-wrap:anywhere}.reject-notice p.muted{margin-top:6px;color:#7b6a55;font-size:12px}
 .registration-final-card{display:flex;justify-content:center;margin:20px 0}.registration-final-card img{display:block;width:min(300px,100%);height:auto;aspect-ratio:300/430;object-fit:contain}.registration-final-card[hidden]{display:none}.entry-return-link{display:block;margin:18px 0 4px;color:#087d4b;font-size:14px;text-align:center;text-decoration:none}.resume-entry{padding:16px 0;border-bottom:1px solid #e0e7e3}.resume-entry h2{margin:0 0 6px;font-size:18px}.resume-entry p{margin:0 0 12px;color:#627369;font-size:14px}
 .ai-portrait{margin-top:14px;padding:12px;border:1px dashed #bfd8c9;border-radius:10px;background:#f7fbf8}
 .ai-portrait-head{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}.ai-portrait-head strong{font-size:15px}.ai-portrait-head small{font-size:12px;line-height:1.5}
@@ -97,3 +98,12 @@ input[aria-invalid="true"]:focus{outline:2px solid #b33429;outline-offset:0;box-
 .psheet.ai-v2 .ai-pose.on span{color:#076a42;font-weight:600}
 .psheet.ai-v2 .ai-pose:disabled{opacity:.55;cursor:not-allowed}
 @media(prefers-reduced-motion:reduce){.ai-spinner{animation:none;border-top-color:#087d4b;border-right-color:#087d4b}}
+
+/* 提交成功后的独立完成页：只有结论与出口，不含表单、裁剪滑块和球员卡画布。 */
+.done-page{display:flex;flex-direction:column;align-items:center;text-align:center;padding:48px 6px 20px}
+.done-mark{display:flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:50%;background:#087d4b;color:#fff;font-size:36px;line-height:1;margin-bottom:20px}
+.done-title{margin:0 0 10px;font-size:22px;color:#20352b}
+.done-text{margin:0;font-size:15px;line-height:1.7;color:#40534a;max-width:22em}
+.done-note{margin:12px 0 0;font-size:13px;color:#8a998f}
+.done-page .entry-return-link{margin-top:26px}
+.done-page .text-action{margin-top:16px}

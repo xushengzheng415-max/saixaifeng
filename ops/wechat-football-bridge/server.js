@@ -12,6 +12,7 @@ const PREFIX = '/wechat/football/v1'
 const MAX_BODY_BYTES = 64 * 1024
 const usedNonces = new Map()
 let tokenCache = null
+let ticketCache = null
 
 function send(res, status, payload) {
   const body = JSON.stringify(payload)
@@ -89,6 +90,22 @@ function validatedMenu(value) {
 }
 
 async function handle(action, payload) {
+  if (action === 'js-signature') {
+    const value = String(payload.url || '')
+    let target
+    try { target = new URL(value) } catch { throw new Error('网页地址无效') }
+    const signable = ['/service-account-h5/valuation-self-test.html', '/service-account-h5/self-register.html']
+    if (value.length > 2048 || target.protocol !== 'https:' || target.hostname !== 'www.sxffootball.cn' || !signable.includes(target.pathname) || target.hash) throw new Error('不允许为该网页签名')
+    if (!ticketCache || ticketCache.expiresAt <= Date.now() + 120000) {
+      const token = await accessToken()
+      const ticket = await wechatJson(`https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token=${encodeURIComponent(token)}&type=jsapi`)
+      ticketCache = { value: ticket.ticket, expiresAt: Date.now() + Math.max(300, Number(ticket.expires_in || 7200) - 300) * 1000 }
+    }
+    const nonceStr = crypto.randomBytes(16).toString('hex')
+    const timestamp = Math.floor(Date.now() / 1000)
+    const signature = crypto.createHash('sha1').update(`jsapi_ticket=${ticketCache.value}&noncestr=${nonceStr}&timestamp=${timestamp}&url=${value}`).digest('hex')
+    return { success:true, jsConfig:{appId:APP_ID,timestamp,nonceStr,signature} }
+  }
   if (action === 'probe') {
     await accessToken()
     return { success: true }
@@ -111,6 +128,38 @@ async function handle(action, payload) {
       method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify(message)
     })
     return { success: true, msgid: data.msgid || '' }
+  }
+  if (action === 'custom/send') {
+    const message = payload && payload.message
+    if (!message || !message.touser || !message.msgtype) throw new Error('客服消息参数不完整')
+    if (message.msgtype === 'miniprogrampage' && !(message.miniprogrampage && message.miniprogrampage.thumb_media_id && message.miniprogrampage.pagepath)) throw new Error('小程序卡片参数不完整')
+    const token = await accessToken()
+    await wechatJson(`https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token=${encodeURIComponent(token)}`, {
+      method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify(message)
+    })
+    return { success: true }
+  }
+  if (action === 'material/upload') {
+    const fileUrl = String(payload.url || '').trim()
+    let parsed
+    try { parsed = new URL(fileUrl) } catch { throw new Error('素材地址无效') }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'www.sxffootball.cn') throw new Error('素材地址不在允许域名内')
+    const token = await accessToken()
+    const response = await fetch(fileUrl)
+    if (!response.ok) throw new Error(`素材下载失败(${response.status})`)
+    const buffer = Buffer.from(await response.arrayBuffer())
+    if (!buffer.length || buffer.length > 2 * 1024 * 1024) throw new Error('素材为空或超过2MB限制')
+    const ext = /\.png(?:\?|$)/i.test(fileUrl) ? 'png' : 'jpg'
+    const boundary = '----sxfbridge' + crypto.randomBytes(12).toString('hex')
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="media"; filename="material.${ext}"\r\nContent-Type: ${ext === 'png' ? 'image/png' : 'image/jpeg'}\r\n\r\n`),
+      buffer,
+      Buffer.from(`\r\n--${boundary}--\r\n`)
+    ])
+    const data = await wechatJson(`https://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${encodeURIComponent(token)}&type=image`, {
+      method: 'POST', headers: { 'content-type': 'multipart/form-data; boundary=' + boundary }, body
+    })
+    return { success: true, mediaId: data.media_id || '', wechatUrl: data.url || '' }
   }
   if (action === 'menu/create') {
     const menu = validatedMenu(payload && payload.menu)

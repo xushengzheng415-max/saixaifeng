@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0f1e">
+<title>球员卡玩法 · 演示测试</title>
+<link rel="stylesheet" href="./player-card-game.css?v=20261021-demo11">
+<style>
+/* ===== 演示专用：卡通引导角色 + 任务进度 ===== */
+:root{--neon:#4de3c1;--gold:#ffc94d;--danger:#ff6b7d}
+.demo-badge{display:inline-block;background:var(--gold);color:#3a2a00;font-size:11px;font-weight:800;padding:2px 10px;border-radius:99px;margin-left:8px;vertical-align:middle}
+.game-header{position:relative}
+/* 引导角色容器 */
+.guide-wrap{position:fixed;left:10px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:40;display:flex;align-items:flex-end;gap:8px;max-width:78%;pointer-events:none}
+.guide-mascot{flex:0 0 auto;width:64px;height:64px;position:relative;filter:drop-shadow(0 4px 10px rgba(77,227,193,.35));animation:bob 2.4s ease-in-out infinite;pointer-events:auto;cursor:pointer}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.guide-mascot svg{width:100%;height:100%;display:block}
+.guide-bubble{position:relative;background:#141f3d;border:1px solid #2a3d6b;border-radius:14px;padding:10px 14px;font-size:13px;line-height:1.55;color:#eaf0ff;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:bubbleIn .3s ease both;max-width:100%;pointer-events:auto}
+.guide-bubble::before{content:"";position:absolute;left:-7px;bottom:18px;width:12px;height:12px;background:#141f3d;border-left:1px solid #2a3d6b;border-bottom:1px solid #2a3d6b;transform:rotate(45deg)}
+.guide-bubble.hide{display:none}
+.guide-bubble .bubble-step{display:block;font-size:11px;color:var(--neon);margin-bottom:3px;font-weight:700;letter-spacing:.5px}
+.guide-bubble b{color:var(--neon)}
+@keyframes bubbleIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+/* 角色表情切换 */
+.mascot-face .eye-pupil{transition:cy .25s ease}
+.mascot-happy .eye-pupil{cy:18}
+.mascot-talk .mouth{animation:talk .35s ease infinite}
+@keyframes talk{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.4)}}
+.mascot-mouth{transform-origin:center}
+/* 任务进度条 */
+.task-bar{display:flex;gap:6px;padding:6px 16px 0;flex-wrap:wrap}
+.task-chip{display:flex;align-items:center;gap:6px;background:#141f3d;border:1px solid #233258;border-radius:99px;padding:6px 12px;font-size:12px;color:#8b98bd;transition:all .3s ease}
+.task-chip .t-dot{width:8px;height:8px;border-radius:50%;background:#2a3d6b;flex-shrink:0}
+.task-chip.active{border-color:var(--neon);color:var(--neon);background:rgba(77,227,193,.08)}
+.task-chip.active .t-dot{background:var(--neon);box-shadow:0 0 8px var(--neon);animation:pulse 1s ease infinite}
+.task-chip.done{border-color:var(--gold);color:var(--gold)}
+.task-chip.done .t-dot{background:var(--gold)}
+@keyframes pulse{50%{opacity:.4}}
+/* 庆祝弹层 */
+.celebrate{position:fixed;inset:0;pointer-events:none;z-index:70;overflow:hidden}
+.celebrate .confetti{position:absolute;width:8px;height:12px;top:-20px;opacity:0;animation:confetti 1.6s ease-out forwards}
+@keyframes confetti{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(110vh) rotate(720deg)}}
+/* 高亮脉冲指引 */
+.hl-hint{position:relative}
+.hl-hint::after{content:"";position:absolute;inset:-4px;border-radius:inherit;border:2px solid var(--gold);animation:hlPulse 1.2s ease infinite;pointer-events:none;z-index:5}
+@keyframes hlPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(1.05)}}
+/* 任务完成 toast */
+.task-toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),#ff9d4d);color:#3a1e00;padding:12px 22px;border-radius:99px;font-weight:800;font-size:14px;z-index:60;box-shadow:0 6px 20px rgba(255,201,77,.4);animation:toastIn .4s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,-20px)}to{opacity:1;transform:translate(-50%,0)}}
+/* 禁用态遮罩 */
+.scene-locked{position:relative;opacity:.45;pointer-events:none}
+.scene-locked::after{content:"🔒 完成上一个任务后解锁";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;color:#8b98bd;background:rgba(10,15,30,.5);border-radius:14px}
+
+/* ===== 卡通冒险地图 ===== */
+.map-wrap{position:relative;margin:8px 12px 0;height:min(72vh,560px);min-height:400px;border-radius:18px;overflow:hidden;border:3px solid #2d6a4f;background:linear-gradient(160deg,#a8e063 0%,#7cb342 40%,#558b2f 100%);box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.map-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.map-bg svg{width:100%;height:100%;display:block}
+.map-cloud{position:absolute;background:rgba(255,255,255,.85);border-radius:50%;box-shadow:20px 0 0 -4px rgba(255,255,255,.85),40px 4px 0 -8px rgba(255,255,255,.85),-18px 4px 0 -6px rgba(255,255,255,.85);animation:cloudFloat 18s linear infinite}
+.map-cloud.c1{width:36px;height:18px;top:8%;left:-10%}
+.map-cloud.c2{width:28px;height:14px;top:22%;left:60%;animation-delay:-6s}
+@keyframes cloudFloat{from{transform:translateX(0)}to{transform:translateX(130vw)}}
+.map-tree{position:absolute;font-size:22px;filter:drop-shadow(1px 2px 2px rgba(0,0,0,.25))}
+.map-flower{position:absolute;font-size:14px}
+.map-path-svg{position:absolute;inset:0;pointer-events:none}
+.map-node{position:absolute;transform:translate(-50%,-50%);z-index:3;cursor:pointer;text-align:center;transition:transform .2s ease}
+.map-node:active{transform:translate(-50%,-50%) scale(.92)}
+.map-node .node-icon{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;border:4px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.3);margin:0 auto;background:linear-gradient(135deg,#fff,#eef3ff)}
+.map-node .node-label{margin-top:4px;font-size:12px;font-weight:800;color:#1b3a1a;text-shadow:0 1px 2px rgba(255,255,255,.7);white-space:nowrap;letter-spacing:.5px}
+.map-node.done .node-icon{background:linear-gradient(135deg,#ffe082,#ffc94d);border-color:#ff9800}
+.map-node.active .node-icon{background:linear-gradient(135deg,#4de3c1,#2bc4a4);border-color:#fff;animation:nodePulse 1.4s ease infinite}
+@keyframes nodePulse{0%,100%{box-shadow:0 0 0 0 rgba(77,227,193,.7)}50%{box-shadow:0 0 0 12px rgba(77,227,193,0)}}
+.map-node.locked{opacity:.55;filter:grayscale(.6)}
+.map-node.locked .node-icon{background:linear-gradient(135deg,#b0bec5,#78909c)}
+.map-node .node-check{position:absolute;top:-6px;right:-4px;width:22px;height:22px;border-radius:50%;background:var(--gold);color:#3a2a00;font-size:14px;font-weight:900;line-height:22px;text-align:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.map-node .node-lock{position:absolute;top:6px;right:4px;font-size:16px}
+.map-node .node-num{position:absolute;top:-8px;left:-6px;width:22px;height:22px;border-radius:50%;background:#e53935;color:#fff;font-size:12px;font-weight:900;line-height:22px;text-align:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.map-bee-pos{position:absolute;transform:translate(-50%,-120%);z-index:4;pointer-events:none;transition:left .8s cubic-bezier(.2,.8,.3,1),top .8s cubic-bezier(.2,.8,.3,1)}
+.map-bee-pos svg{width:46px;height:46px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))}
+.map-bee-pos::after{content:"";position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);width:24px;height:6px;background:rgba(0,0,0,.25);border-radius:50%;filter:blur(2px)}
+.map-title{position:relative;z-index:2;text-align:center;padding:12px 0 0;font-size:17px;font-weight:800;color:#1b3a1a;text-shadow:0 1px 2px rgba(255,255,255,.6);letter-spacing:1px}
+.map-title small{display:block;font-size:11px;color:#2e5d32;font-weight:600;margin-top:2px}
+/* 返回地图按钮 */
+.back-map{position:absolute;right:16px;top:50%;transform:translateY(-50%);background:var(--panel);border:1px solid var(--line);color:var(--neon);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer}
+
+/* ===== 实图素材版地图（横向滑动） ===== */
+.map-scroll{position:relative;margin-top:8px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;border-radius:0 0 18px 18px}
+.map-scroll::-webkit-scrollbar{display:none}
+.map-scene{position:relative;height:min(64vh,440px);aspect-ratio:1024/576;border-radius:14px;background:url("./assets/game/空地图.png") center/cover no-repeat;border:3px solid #8a5a00;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.map-tip-slide{text-align:center;font-size:11px;color:#ffe9b0;margin-top:6px;letter-spacing:1px}
+.b-node{position:absolute;transform:translate(-50%,-92%);z-index:3;cursor:pointer;text-align:center;transition:transform .2s ease;background:none;border:none;padding:0}
+.b-node:active{transform:translate(-50%,-92%) scale(.93)}
+.b-node img{display:block;width:15.5vh;max-width:128px;min-width:88px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.35))}
+.b-node .b-glow{position:absolute;left:50%;bottom:-6%;transform:translateX(-50%);width:110%;height:22%;background:radial-gradient(ellipse,rgba(255,255,255,.75),rgba(255,255,255,0) 70%);z-index:-1}
+.b-node .b-label{display:inline-block;margin-top:2px;padding:3px 12px;border-radius:99px;background:rgba(255,248,225,.95);border:2px solid #8a5a00;font-size:13px;font-weight:800;color:#5a3800;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.b-node.done .b-label{background:linear-gradient(135deg,#ffe082,#ffc94d)}
+.b-node.active img{animation:bBounce 1.6s ease infinite}
+@keyframes bBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.b-node.locked{opacity:.55;filter:grayscale(.7)}
+.b-node .b-badge{position:absolute;top:-4px;right:8%;z-index:2;font-size:20px}
+.b-node .b-num{position:absolute;top:-8px;left:6%;z-index:2;width:26px;height:26px;border-radius:50%;background:#e53935;color:#fff;font-size:14px;font-weight:900;line-height:26px;text-align:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.b-bee{position:absolute;z-index:4;pointer-events:none;transition:left .9s cubic-bezier(.2,.8,.3,1),top .9s cubic-bezier(.2,.8,.3,1);transform:translate(-50%,-100%)}
+.b-bee img{width:11vh;max-width:92px;min-width:64px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.35))}
+.b-deco{position:absolute;transform:translate(-50%,-90%);pointer-events:none}
+.b-deco img{width:10vh;max-width:84px;min-width:56px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
+
+/* ===== 小屋内部场景 ===== */
+.home-scene{position:relative;margin:10px 12px 0;aspect-ratio:1024/576;max-height:66vh;border-radius:16px;background:url("./assets/game/室内场景.png") center/cover no-repeat;border:3px solid #8a5a00;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden}
+.home-door{position:absolute;top:26%;width:17%;height:46%;background:none;border:none;cursor:pointer;padding:0;z-index:3;transition:transform .15s ease}
+.home-door:hover{transform:scale(1.04)}
+.home-door:active{transform:scale(.96)}
+.home-door .door-tag{position:absolute;left:50%;bottom:-14%;transform:translateX(-50%);padding:4px 12px;border-radius:99px;background:rgba(255,248,225,.95);border:2px solid #8a5a00;font-size:13px;font-weight:800;color:#5a3800;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.home-door.hl-hint .door-tag{animation:hlPulse 1.2s ease infinite;border-color:var(--neon)}
+.home-bee{position:absolute;left:50%;top:96%;transform:translate(-50%,-100%);z-index:2;pointer-events:none}
+.home-bee img{width:13vh;max-width:110px;min-width:76px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
+.home-welcome{position:absolute;top:3%;left:50%;transform:translateX(-50%);padding:6px 18px;border-radius:99px;background:rgba(60,36,0,.75);color:#ffe9b0;font-size:14px;font-weight:700;letter-spacing:1px;z-index:2}
+
+/* ===== 蜂哥图片版引导 ===== */
+.guide-mascot img{width:100%;height:auto;display:block}
+.guide-mascot{background:none;border:none;box-shadow:none;animation:mascotBob 2.2s ease-in-out infinite}
+.guide-bubble{background:url("./assets/game/对话气泡.png") center/100% 100% no-repeat;border:none;box-shadow:none;color:#3a2400;padding:18px 22px 30px;font-weight:600}
+.guide-bubble::after{display:none}
+.guide-bubble .bubble-step{color:#8a5a00}
+
+/* ===== 内页卡通化 ===== */
+.inner-mode{background:url("./assets/game/游戏内页背景.png") center/cover no-repeat fixed,linear-gradient(180deg,#fff6d8,#e8f5c8);border-radius:14px;margin:8px 10px 0;padding:12px 12px 20px;min-height:70vh}
+.inner-mode .view-tip{color:#6b4a12;background:rgba(255,248,225,.9);border:1px solid #e8c878;border-radius:10px;padding:8px 12px;font-size:12.5px}
+.inner-mode .section-title{color:#5a3800}
+.inner-mode .hud-card,.inner-mode .game-card,.inner-mode .lineup-row,.inner-mode .match-row,.inner-mode .empty-box,.inner-mode .upg-row{background:rgba(255,252,240,.94);border:2px solid #e8c878;color:#3a2a12}
+.inner-mode .hud-nick,.inner-mode .gc-meta h3,.inner-mode .lr-main h3,.inner-mode .mr-main h4,.inner-mode .upg-main h4{color:#3a2a12}
+.inner-mode .gc-meta p,.inner-mode .lr-main p,.inner-mode .mr-main p,.inner-mode .hud-record,.inner-mode .hud-stats span,.inner-mode .upg-tip{color:#7a5c22}
+.inner-mode .hud-stats strong{color:#b06a00}
+.inner-mode .gc-points{color:#b06a00}
+.inner-mode .gc-btn{background:linear-gradient(135deg,#ffc94d,#ff9d4d);color:#4a2c00;border:none}
+.inner-mode .gc-btn.ghost{background:rgba(255,255,255,.7);color:#8a5a00;border:2px solid #e0b660}
+.inner-mode .challenge-btn,.inner-mode .new-lineup,.inner-mode .editor-actions .save{background:linear-gradient(135deg,#ffc94d,#ff9d4d);color:#4a2c00;border:none}
+.inner-mode .editor-actions .cancel{background:rgba(255,255,255,.7);color:#8a5a00;border:2px solid #e0b660}
+.inner-mode .editor-pool{background:rgba(255,248,225,.9);border:2px solid #e8c878}
+.inner-mode .pool-card{background:#fffdf4;border:2px solid #e8c878;color:#3a2a12}
+.inner-mode .lineup-name-row input{background:#fffdf4;border:2px solid #e8c878;color:#3a2a12}
+.inner-mode .pk-toggle{color:#6b4a12}
+.inner-mode .home-room{background:rgba(255,252,240,.95);border:2px solid #e8c878;color:#3a2a12}
+.inner-mode .room-title{color:#5a3800}.inner-mode .room-desc{color:#7a5c22}
+.inner-mode .home-back{background:rgba(255,248,225,.9);border:2px solid #e0b660;color:#8a5a00;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer}
+.inner-mode .upg-bar{background:#efe0b8}.inner-mode .upg-bar i{background:linear-gradient(90deg,#ffc94d,#ff9d4d)}
+.inner-mode .studio-pick-btn{background:rgba(255,248,225,.9);border:2px solid #e0b660;color:#8a5a00}
+.inner-mode .studio-pick-btn.on{background:linear-gradient(135deg,#ffc94d,#ff9d4d);color:#4a2c00}
+.inner-mode .bg-swatch.on{outline:3px solid #ff9d4d}
+.inner-mode .match-score{color:#b06a00}
+.inner-mode .gc-tier{border-color:currentColor}
+.inner-mode .pk-record>div{background:rgba(255,252,240,.94);border:2px solid #e8c878}
+
+/* PK 弹层竞技场 */
+.pk-panel{background:url("./assets/game/PK对战.png") center/cover no-repeat,#0b142c;border-color:#ffc94d}
+.pk-panel .pk-side h4,.pk-panel .ps-col h5{text-shadow:0 2px 6px rgba(0,0,0,.8)}
+.pk-panel .ps-row{background:rgba(10,15,35,.55)}
+/* 比赛事件时间线：实心深底，避免亮背景穿透 */
+.tl-head{text-align:center;font-size:12px;font-weight:800;color:#fff;letter-spacing:2px;margin:10px 0 8px;text-shadow:0 2px 4px rgba(0,0,0,.9)}
+.tl-list{display:flex;flex-direction:column;gap:7px;margin-top:4px;width:100%;max-width:360px;background:rgba(6,10,24,.72);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:10px}
+.tl-row{display:flex;align-items:center;gap:9px;background:#101c38;border:1px solid rgba(255,255,255,.16);border-left:4px solid rgba(255,255,255,.25);border-radius:9px;padding:9px 10px;font-size:13px;color:#fff;font-weight:600;opacity:0;animation:tlIn .35s ease both}
+@keyframes tlIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.tl-row .tl-min{flex:0 0 auto;min-width:36px;text-align:center;font-weight:900;font-size:12px;color:#0b142c;background:#ffd76a;border-radius:6px;padding:3px 5px}
+.tl-row .tl-ico{flex:0 0 auto;font-size:16px;line-height:1}
+.tl-row .tl-text{flex:1;line-height:1.35}
+.tl-row.tl-goal.tl-my{background:#0b3d34;border-color:#4de3c1;border-left-color:#4de3c1;color:#c8fff0}
+.tl-row.tl-goal.tl-my .tl-text{color:#7df0d0;font-weight:800}
+.tl-row.tl-goal.tl-opp{background:#3d1220;border-color:#ff6b7d;border-left-color:#ff6b7d;color:#ffd3d8}
+.tl-row.tl-goal.tl-opp .tl-text{color:#ff9aa8;font-weight:800}
+.tl-row.tl-yellow{background:#3a2d06;border-color:#e0b100;border-left-color:#ffc94d;color:#ffeab0}
+.tl-row.tl-red{background:#4a0d0d;border-color:#ff3b3b;border-left-color:#ff3b3b;color:#ffc9c9}
+.tl-row.tl-sub{background:#0f2244;border-color:#5b8cff;border-left-color:#5b8cff;color:#cfe0ff}
+/* 演示胜负开关 */
+.demo-switch{display:flex;align-items:center;gap:6px;background:#fff8e1;border:1px dashed #d8a948;border-radius:10px;padding:8px 10px;margin:0 12px 8px;font-size:12px;color:#8a6a1a}
+.demo-switch b{color:#a06000}
+.demo-switch button{flex:0 0 auto;padding:5px 10px;border-radius:8px;border:1px solid #d8a948;background:#fff;color:#8a6a1a;font-size:12px;font-weight:700;cursor:pointer}
+.demo-switch button.on{background:#ffc94d;color:#3a2a00;border-color:#e0a800}
+.pk-referee{position:absolute;top:-34px;left:50%;transform:translateX(-50%);width:76px;z-index:3}
+.pk-referee img{width:100%;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}
+
+/* ============================================================
+   演示版 · 满屏化覆盖样式（仅 demo，不影响正式版）
+   ============================================================ */
+/* 1. 整页满屏：去掉外层 560px 限制和深色背景 */
+html,body{height:100%;overflow:hidden}
+body{background:linear-gradient(180deg,#a8d8ea 0%,#cfe8b8 40%,#a8d878 100%) !important;color:#3a2a12}
+.game-root{max-width:none !important;width:100%;height:100vh;height:100dvh;padding:0 !important;display:flex;flex-direction:column;position:relative}
+/* 引导气泡在 demo 里统一相对 .game-root 绝对定位（不再 fixed，PC 手机壳下才能跟框走） */
+.guide-wrap{position:absolute !important;left:10px;bottom:calc(12px + env(safe-area-inset-bottom));max-width:calc(100% - 20px);z-index:40}
+.game-header{flex:0 0 auto;padding:10px 14px 6px;background:linear-gradient(180deg,rgba(60,36,0,.35),rgba(60,36,0,0));}
+.game-header h1{color:#3a2400;text-shadow:0 1px 2px rgba(255,255,255,.6)}
+.game-back{color:#5a3800}
+.task-bar{flex:0 0 auto;padding:4px 14px 8px}
+.task-chip{background:rgba(255,252,240,.9);border:1.5px solid #d8b060;color:#7a5c22}
+.task-chip.active{border-color:#ff9800;color:#b06a00;background:#fff5d8}
+.task-chip.active .t-dot{background:#ff9800;box-shadow:0 0 8px #ff9800}
+.task-chip.done{border-color:#7cb342;color:#558b2f}
+.task-chip.done .t-dot{background:#7cb342}
+#gameMain{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;padding:0 !important;text-align:left;color:inherit}
+.game-state{padding:0 !important}
+/* 阵容编辑器/持卡池等场景允许纵向滚动，避免内容被裁掉 */
+#gameMain .editor-pool{margin:12px 12px 0}
+#gameMain .editor-bar{margin:10px 12px 12px}
+/* 点槽位弹出的居中卡片库 */
+.card-sheet-mask{position:absolute;inset:0;background:rgba(20,25,10,.3);z-index:60;animation:fadeIn .2s ease}
+.card-sheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:84%;max-width:380px;z-index:61;background:#fffdf6;border-radius:20px;padding:12px 0 14px;box-shadow:0 12px 40px rgba(0,0,0,.35);animation:popIn .25s cubic-bezier(.2,.9,.3,1.15)}
+.card-sheet .cs-head{display:flex;align-items:center;justify-content:space-between;padding:0 16px 10px}
+.card-sheet .cs-head h4{margin:0;font-size:15px;color:#5a4a2a}
+.card-sheet .cs-close{border:0;background:#f0ead8;color:#8a7a52;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer}
+.card-sheet .sheet-scroll{display:flex;gap:12px;overflow-x:auto;padding:2px 16px 8px;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
+.card-sheet .pool-card{flex:0 0 auto;width:104px;cursor:pointer;transition:transform .15s ease}
+.card-sheet .pool-card:active{transform:scale(.95)}
+.card-sheet .pool-card.used{opacity:.4;pointer-events:none}
+.card-sheet .pc-art{width:100%;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#e8e2d0}
+.card-sheet .pc-art img{width:100%;height:100%;object-fit:cover;display:block}
+.card-sheet .pool-card p{margin:6px 0 2px;font-size:13px;font-weight:600;color:#4a3d22;text-align:center}
+.card-sheet .pc-pts{text-align:center;font-size:12px;color:#b8860b}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes popIn{from{transform:translate(-50%,-50%) scale(.85);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+
+/* 2. 地图容器贴边满屏：去掉边框、圆角、外边距 */
+.map-scroll{flex:1 1 auto;margin:0 !important;border-radius:0 !important;height:100%}
+.map-scene{
+  height:100% !important;min-height:480px;
+  border:0 !important;border-radius:0 !important;box-shadow:none !important;
+  /* 保留 aspect-ratio 让超宽图可横向滑动，但要至少占满宽度 */
+  min-width:100%;
+}
+.map-tip-slide{display:none}
+
+/* 建筑节点：加大尺寸、去掉 filter 灰化（建设中标牌本身就有未解锁感） */
+.b-node img{width:18vh;max-width:160px;min-width:104px}
+.b-node.locked{opacity:1;filter:none}
+.b-node.locked .b-label{background:rgba(255,248,225,.85);color:#8a5a00}
+.b-bee img{width:12vh;max-width:110px;min-width:72px}
+
+/* 3. 蜂哥引导对话框：纯 CSS，弃用 PNG */
+.guide-wrap{max-width:92%}
+.guide-mascot{width:78px;height:auto;filter:drop-shadow(0 4px 10px rgba(0,0,0,.25))}
+.guide-mascot img{width:100%;height:auto;display:block}
+.guide-bubble{
+  position:relative;background:#fffdf4;border:2.5px solid #d8a948;border-radius:18px;
+  padding:14px 18px 16px;font-size:14px;line-height:1.65;color:#3a2400;
+  box-shadow:0 6px 18px rgba(90,58,0,.25);font-weight:600;
+  background-image:none !important;
+}
+.guide-bubble::before{
+  content:"";position:absolute;left:-11px;bottom:22px;width:20px;height:20px;
+  background:#fffdf4;border-left:2.5px solid #d8a948;border-bottom:2.5px solid #d8a948;
+  transform:rotate(45deg);border-radius:0 0 0 4px;
+}
+.guide-bubble .bubble-step{color:#b06a00;font-size:12px;letter-spacing:1px}
+.guide-bubble .bubble-skip{margin-left:10px;padding:3px 12px;border:1px solid #e0d5b8;border-radius:999px;background:#f7f2e3;color:#8a7a52;font-size:12px;cursor:pointer;vertical-align:middle;white-space:nowrap}
+.guide-bubble .bubble-skip:active{transform:scale(.94)}
+.guide-bubble{position:relative}
+.guide-bubble .bubble-close{position:absolute;top:-10px;right:-8px;width:24px;height:24px;border-radius:50%;border:1.5px solid #d8a948;background:#fffdf4;color:#a08030;font-size:12px;line-height:1;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.18);z-index:2}
+.guide-bubble .bubble-close:active{transform:scale(.9)}
+/* 地图上指向目标建筑的脉冲箭头 */
+.guide-arrow{position:absolute;transform:translate(-50%,-100%);font-size:38px;color:#ffb300;text-shadow:0 3px 8px rgba(0,0,0,.45);z-index:25;pointer-events:none;animation:arrowPulse 1s ease-in-out infinite}
+@keyframes arrowPulse{0%,100%{transform:translate(-50%,-100%) scale(1)}50%{transform:translate(-50%,-112%) scale(1.3)}}
+.guide-bubble b{color:#e07b00}
+
+/* 4. PK 弹层全屏化（相对手机壳 .game-root，不跑出框） */
+.pk-mask{
+  position:absolute !important;inset:0 !important;z-index:90 !important;
+  background:rgba(10,15,30,.78) !important;
+  display:flex !important;align-items:center;justify-content:center;
+  padding:0 !important;
+}
+.pk-panel{
+  width:100% !important;max-width:100% !important;height:100% !important;max-height:none !important;
+  margin:0 !important;border:0 !important;border-radius:0 !important;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  padding:24px 20px 32px !important;overflow-y:auto;
+  background:url("./assets/game/PK对战.png") center/cover no-repeat,#0b142c !important;
+}
+.pk-panel .pk-close{margin-top:14px}
+/* 比分牌提亮：深背景上的队名/比分/VS 全改亮色带阴影 */
+.pk-panel .pk-side h4{color:#fff !important;font-weight:800;text-shadow:0 2px 8px rgba(0,0,0,.95);white-space:normal !important;overflow:visible !important;text-overflow:clip !important;font-size:13px;line-height:1.3;word-break:break-all}
+.pk-panel .pk-side .pts{color:#fff !important;font-size:46px !important;font-weight:900;text-shadow:0 3px 12px rgba(0,0,0,.95),0 0 26px rgba(77,227,193,.45)}
+.pk-panel .pk-side.right .pts{text-shadow:0 3px 12px rgba(0,0,0,.95),0 0 26px rgba(255,107,125,.45)}
+.pk-panel .pk-vs{color:#ffc94d !important;font-size:15px !important;font-weight:900;text-shadow:0 2px 8px rgba(0,0,0,.95)}
+.pk-panel .pk-rules{color:#e8eeff !important;text-shadow:0 1px 4px rgba(0,0,0,.9)}
+/* 抽卡战利品 */
+.loot-box{margin-top:14px;width:100%;max-width:360px;background:rgba(10,15,35,.55);border:1px solid rgba(255,201,77,.4);border-radius:14px;padding:12px 14px;text-align:center}
+.loot-title{font-size:14px;font-weight:800;color:#ffe9b0;letter-spacing:1px;text-shadow:0 2px 4px rgba(0,0,0,.8)}
+.loot-draw{margin:10px auto 0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px}
+.loot-back{width:96px;height:138px;border-radius:12px;border:2px dashed #ffc94d;background:repeating-linear-gradient(45deg,#1a2547,#1a2547 8px,#141f3d 8px,#141f3d 16px);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:34px;font-weight:900;color:#ffc94d;transition:transform .15s ease}
+.loot-back small{font-size:11px;font-weight:600;color:#ffe9b0;margin-top:6px;letter-spacing:1px}
+.loot-draw:active .loot-back{transform:scale(.94)}
+.loot-card{width:110px;height:auto;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.6);animation:lootReveal .45s cubic-bezier(.2,1.4,.4,1) both}
+.loot-card.dim{filter:grayscale(.7) brightness(.6)}
+@keyframes lootReveal{from{transform:rotateY(90deg) scale(.6);opacity:0}to{transform:none;opacity:1}}
+.loot-got{font-size:12px;color:#7df0d0;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.loot-lost-row{display:flex;align-items:center;gap:12px;justify-content:center;margin-top:10px}
+.loot-lost-row .loot-card{width:70px;animation:none}
+.loot-lost-name{font-size:13px;color:#ff9aa8;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+
+/* 5. PC 端手机壳模拟：宽屏时把手机框居中显示 */
+@media (min-width:600px){
+  body{
+    background:#1a2332 !important;
+    display:flex;align-items:center;justify-content:center;
+    overflow:auto;padding:24px;
+  }
+  body::before{
+    content:"赛小蜂 · 球员卡玩法演示";position:fixed;top:14px;left:50%;transform:translateX(-50%);
+    color:#8b98bd;font-size:13px;letter-spacing:2px;font-weight:600;z-index:1;
+  }
+  .game-root{
+    width:390px !important;height:844px !important;max-height:calc(100vh - 80px);
+    border-radius:44px;
+    border:10px solid #1a1a1a;
+    box-shadow:
+      0 0 0 2px #3a3a3a,
+      0 24px 80px rgba(0,0,0,.6),
+      0 0 120px rgba(77,227,193,.08);
+    overflow:hidden;
+    position:relative;
+    background:linear-gradient(180deg,#a8d8ea 0%,#cfe8b8 40%,#a8d878 100%);
+  }
+  /* 刘海 */
+  .game-root::before{
+    content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:120px;height:24px;background:#1a1a1a;
+    border-radius:0 0 18px 18px;z-index:100;pointer-events:none;
+  }
+  /* Home 指示条 */
+  .game-root::after{
+    content:"";position:absolute;bottom:6px;left:50%;transform:translateX(-50%);
+    width:120px;height:4px;background:rgba(0,0,0,.4);
+    border-radius:99px;z-index:100;pointer-events:none;
+  }
+  .game-header{padding-top:28px}
+  /* 引导气泡在手机壳内：缩小尺寸避免占满 */
+  .guide-mascot{width:64px}
+  .guide-bubble{font-size:13px;padding:12px 14px 14px}
+}
+</style>
+</head>
+<body>
+<div id="app" class="game-root">
+  <header class="game-header">
+    <a class="game-back" href="./me.html">‹ 返回</a>
+    <h1>球员卡玩法<span class="demo-badge">演示版</span></h1>
+    <button id="backMapBtn" class="back-map" style="display:none">🗺 地图</button>
+  </header>
+  <div id="taskBar" class="task-bar"></div>
+  <div id="gameMain" class="game-state" role="status">正在加载演示数据…</div>
+
+  <!-- 卡通引导角色：必须放在 .game-root 里，PC 手机壳模式下才能跟着手机框走 -->
+  <div class="guide-wrap">
+    <div id="mascot" class="guide-mascot" title="点我再听一次">
+      <img id="mascotImg" src="./assets/game/fengge/标准形象.png" alt="蜂哥">
+    </div>
+    <div id="guideBubble" class="guide-bubble hide"></div>
+  </div>
+</div>
+
+<script src="./assets/game/lib/confetti.browser.js"></script>
+<script src="./assets/game/lib/lucky-canvas.umd.js"></script>
+<!-- 玩法模块：按顺序加载，顺序不可调整 -->
+<script src="./game/core/api.js?v=20261021-demo31"></script>
+<script src="./game/core/data.js?v=20261021-demo31"></script>
+<script src="./game/core/guide.js?v=20261021-demo31"></script>
+<script src="./game/views/shell.js?v=20261021-demo31"></script>
+<script src="./game/views/home.js?v=20261021-demo31"></script>
+<script src="./game/views/codex.js?v=20261021-demo31"></script>
+<script src="./game/views/lineup.js?v=20261021-demo31"></script>
+<script src="./game/core/sound.js?v=20261021-demo31"></script>
+<script src="./game/games/spin.js?v=20261021-demo31"></script>
+<script src="./game/games/scratch.js?v=20261021-demo31"></script>
+<script src="./game/games/penalty.js?v=20261021-demo31"></script>
+<script src="./game/views/editor-events.js?v=20261021-demo31"></script>
+<script src="./game/views/pk.js?v=20261021-demo31"></script>
+<script src="./game/app.js?v=20261021-demo31"></script>
+<script src="./i18n-fixed-en.js?v=20261031-fixed1"></script>
+<script src="./i18n-runtime.js?v=20261031-fixed1"></script>
+</body>
+</html>

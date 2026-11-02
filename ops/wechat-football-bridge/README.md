@@ -3,7 +3,7 @@
 固定入口：`https://api.saixiaofeng.com/wechat/football/v1`
 固定公网出口：`124.221.239.63`
 
-该服务只允许五类受控动作：接口探测、生成服务号带参关注二维码、发送服务号模板消息、创建自定义菜单和读取当前自定义菜单。请求必须携带时间戳、随机数和 HMAC-SHA256 签名；用于获取普通 `access_token` 的服务号 AppSecret 保存在服务器环境变量中，不写入仓库。菜单创建仅接受指向 `https://www.sxffootball.cn` 的网页入口。现有服务号网页 OAuth 链路仍按原配置运行。
+该服务只允许七类受控动作：接口探测、生成服务号带参关注二维码、发送服务号模板消息、发送客服消息（`custom/send`，用于关注菜单回复 1/2/3 下发小程序卡片与客服二维码）、上传服务号永久素材（`material/upload`，仅接受 `https://www.sxffootball.cn` 域名拉图）、创建自定义菜单和读取当前自定义菜单。请求必须携带时间戳、随机数和 HMAC-SHA256 签名；用于获取普通 `access_token` 的服务号 AppSecret 保存在服务器环境变量中，不写入仓库。菜单创建仅接受指向 `https://www.sxffootball.cn` 的网页入口。现有服务号网页 OAuth 链路仍按原配置运行。
 
 运行前提：Ubuntu、Node.js 18 或更高版本、Nginx，以及 `api.saixiaofeng.com` 的现有有效 HTTPS 证书。
 

@@ -1,0 +1,1162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b3d2e">
+  <title>AI 形象照演示｜赛小蜂足球</title>
+  <style>
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{margin:0;padding:0}
+    body{background:#f2f5f3;color:#172f25;font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei',Arial,sans-serif;line-height:1.5}
+    button,input{font-family:inherit}
+    .demo-root{position:relative;isolation:isolate;min-height:100vh;max-width:520px;margin:0 auto;padding-bottom:40px;background:#f2f5f3}
+    .demo-root:before{content:'';position:absolute;z-index:-1;top:0;left:0;right:0;height:300px;background:linear-gradient(100deg,#073e30 0%,#0d5b3f 58%,#16704a 100%);border-radius:0 0 28px 28px}
+    .topbar{display:flex;align-items:center;gap:12px;padding:18px 18px 14px;color:#f6fbf8}
+    .topbar img{width:38px;height:38px;border-radius:10px;background:#fff;object-fit:contain;padding:3px}
+    .topbar .tt{display:flex;flex-direction:column;min-width:0}
+    .topbar .tt strong{font-size:17px;font-weight:700;letter-spacing:1px}
+    .topbar .tt span{font-size:11px;color:#a9c9ba;letter-spacing:.4px}
+    .topbar .demo-flag{margin-left:auto;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:20px;border:1px solid #ffffff40;color:#d6f2e4;background:#ffffff14;flex-shrink:0}
+    .panel{margin:14px 12px 0;padding:18px 16px 16px;background:#fff;border-radius:16px}
+    .notice{margin:10px 12px 0;padding:14px 15px;border-radius:14px;background:linear-gradient(115deg,#fcf2da,#efe3bb);border:1px solid #eddfa9;color:#6d572c;font-size:12.5px}
+    .notice strong{display:block;font-size:13.5px;color:#54421d;margin-bottom:6px;letter-spacing:.4px}
+    .notice ul{margin:0;padding-left:16px}
+    .notice li{margin:3px 0}
+    .step-head{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+    .step-head em{font-style:normal;font-size:11px;font-weight:700;color:#0c5c40;background:#e8f5ee;border-radius:6px;padding:2px 7px;letter-spacing:1px}
+    .step-head strong{font-size:15px;font-weight:700;letter-spacing:.3px;color:#183d2a}
+    .step-head small{margin-left:auto;font-size:11px;color:#8a998e}
+    .upload{display:flex;gap:12px;align-items:center;padding:12px;border:1px dashed #c9d8cf;border-radius:12px;background:#fbfdfb}
+    .upload .thumb{width:66px;height:88px;flex-shrink:0;border-radius:9px;background:#eef4f0 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#a4b6aa;font-size:10px;text-align:center;border:1px solid #e2ece6}
+    .upload .meta{flex:1;min-width:0}
+    .upload .meta strong{display:block;font-size:13.5px;color:#22402f}
+    .upload .meta span{display:block;font-size:11.5px;color:#8a998e;margin-top:4px;overflow-wrap:anywhere}
+    .upload .meta .pick{margin-top:9px;display:inline-block;padding:7px 14px;border-radius:8px;background:#0c5c40;color:#fff;font-size:12.5px;font-weight:600;letter-spacing:.5px}
+    .upload input[type=file]{display:none}
+    .body-form{margin-top:12px;padding:12px;border-radius:12px;background:#fbfdfb;border:1px solid #e2ece6}
+    .body-head{font-size:12.5px;font-weight:700;color:#22402f}
+    .body-head small{display:block;font-size:11px;font-weight:400;color:#8a998e;margin-top:3px}
+    .body-row{display:flex;gap:10px;margin-top:10px}
+    .body-field{flex:1;display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid #dfe9e3;border-radius:9px;background:#fff;font-size:11.5px;color:#5d6f63}
+    .body-field span{flex-shrink:0}
+    .body-field input{flex:1;min-width:0;border:0;background:transparent;font-size:14px;font-weight:700;color:#183d2a;outline:none;text-align:right}
+    .body-field em{font-style:normal;color:#a4b6aa;font-size:11px}
+    .body-type{display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;border:1px solid #dfe9e3;border-radius:9px;background:#fff;font-size:11.5px;color:#5d6f63}
+    .body-type select{flex:1;min-width:0;border:0;background:transparent;font-size:13px;font-weight:600;color:#183d2a;outline:none;text-align:right;appearance:none;-webkit-appearance:none;padding-right:2px}
+    .body-tip{margin:8px 0 0;font-size:11px;color:#8a998e;line-height:1.45}
+    .color-row{display:none;align-items:center;gap:8px;margin-top:10px;font-size:11.5px;color:#5d6f63}
+    .color-row.on{display:flex}
+    .text-row{display:flex;gap:9px;align-items:flex-start;margin-top:10px;padding:10px 11px;border-radius:10px;background:#f7fbf9;border:1px solid #e2ece6;cursor:pointer}
+    .text-row input{flex-shrink:0;margin:2px 0 0;width:15px;height:15px;accent-color:#0c5c40}
+    .text-row .txt{min-width:0}
+    .text-row .txt b{display:block;font-size:12.5px;font-weight:600;color:#22402f;letter-spacing:.2px}
+    .text-row .txt span{display:block;font-size:11px;color:#8a998e;margin-top:3px;line-height:1.45}
+    .color-row i{width:16px;height:16px;border-radius:4px;border:1px solid #00000018;flex-shrink:0}
+    .jersey-mode{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px;background:#f2f7f4;border:1px solid #e2ece6;border-radius:12px}
+    .jersey-mode button{padding:10px 6px;border:0;border-radius:9px;background:transparent;color:#5d6f63;font-size:12.5px;font-weight:600;letter-spacing:.2px}
+    .jersey-mode button.on{background:#fff;color:#07593f;box-shadow:0 1px 4px #163e2514}
+    .mode-body{margin-top:12px}
+    .preset-head{font-size:12.5px;font-weight:700;color:#22402f;letter-spacing:.2px}
+    .preset-head small{display:block;font-size:11px;font-weight:400;color:#8a998e;margin-top:3px}
+    .preset-colors{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:10px}
+    .preset-color{display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 2px 6px;border:1.5px solid #e3ebe5;border-radius:10px;background:#fbfdfb;color:#5d6f63;font-size:10px;line-height:1.2;letter-spacing:.2px}
+    .preset-color i{width:22px;height:22px;border-radius:50%;border:1px solid #0000001f;box-shadow:inset 0 -2px 4px #00000012}
+    .preset-color.on{border-color:#0c5c40;background:#f2f9f4;box-shadow:0 0 0 1px #0c5c40 inset;color:#07593f;font-weight:700}
+    .preset-styles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+    .preset-style{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px 7px;border:1.5px solid #e3ebe5;border-radius:10px;background:#fbfdfb}
+    .preset-style .mini{display:block;width:100%;padding:2px 6px;border-radius:6px;background:#edf2ef}
+    .preset-style .mini svg{display:block;width:100%;height:auto}
+    .preset-style b{font-size:11px;font-weight:600;color:#5d6f63;letter-spacing:.1px;text-align:center;line-height:1.3}
+    .preset-style.on{border-color:#0c5c40;background:#f2f9f4;box-shadow:0 0 0 1px #0c5c40 inset}
+    .preset-style.on b{color:#07593f}
+    .preset-note{margin-top:9px;font-size:10.5px;color:#8a998e;line-height:1.55}
+    .crop-wrap{display:none;margin-top:12px}
+    .crop-wrap.on{display:block}
+    .crop-box{position:relative;width:100%;aspect-ratio:4/5;overflow:hidden;border-radius:12px;background:#0e1a14;touch-action:none;cursor:grab}
+    .crop-box.dragging{cursor:grabbing}
+    .crop-box img{position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none;pointer-events:none}
+    .crop-box .frame{position:absolute;inset:0;pointer-events:none;border-radius:12px;box-shadow:0 0 0 1px #ffffff38 inset}
+    .crop-box .frame:after{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:#ffffff30}
+    .crop-box .frame:before{content:'';position:absolute;top:44%;left:0;right:0;height:1px;background:#ffffff30}
+    .crop-tip{position:absolute;left:8px;bottom:8px;padding:3px 8px;border-radius:20px;background:#0b271cbf;color:#e8f6ee;font-size:10.5px;letter-spacing:.3px}
+    .crop-tools{display:flex;align-items:center;gap:10px;margin-top:10px}
+    .crop-tools span{font-size:11.5px;color:#7c8d81;flex-shrink:0}
+    .crop-tools input[type=range]{flex:1;min-width:0;accent-color:#0c5c40}
+    .crop-tools button{flex-shrink:0;padding:8px 13px;border:0;border-radius:9px;background:#e8f5ee;color:#0c5c40;font-size:12.5px;font-weight:700;letter-spacing:.3px}
+    .crop-tools button.done{background:#0c5c40;color:#fff}
+    .poses{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+    .pose{position:relative;padding:10px 8px 9px;border:1.5px solid #e3ebe5;border-radius:12px;background:#fbfdfb;text-align:center;transition:border-color .15s,background .15s}
+    .pose img{display:block;width:100%;height:auto;aspect-ratio:3/4;object-fit:cover;object-position:50% 18%;border-radius:8px;background:#eef4ee;border:1px solid #e6eee8}
+    .pose.on img{border-color:#0c5c40}
+    .pose strong{display:block;font-size:12.5px;font-weight:600;color:#22402f;margin-top:6px;letter-spacing:.3px}
+    .pose small{display:block;font-size:10px;color:#8a998e;margin-top:2px}
+    .pose.on{border-color:#0c5c40;background:#f2f9f4;box-shadow:0 0 0 1px #0c5c40 inset}
+    .pose.on strong{color:#07593f}
+    .models{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .model-card{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:10px 11px;border:1.5px solid #e3ebe5;border-radius:11px;background:#fbfdfb;text-align:left}
+    .model-card strong{font-size:13px;font-weight:700;color:#22402f;letter-spacing:.2px}
+    .model-card small{font-size:10.5px;color:#8a998e;line-height:1.35}
+    .model-card em{font-style:normal;margin-top:2px;font-size:10.5px;color:#0c5c40;font-weight:700;letter-spacing:.3px}
+    .model-card.on{border-color:#0c5c40;background:#f2f9f4;box-shadow:0 0 0 1px #0c5c40 inset}
+    .model-card.off{opacity:.55}
+    .model-card.off em{color:#96866a}
+    .model-note{margin-top:9px;font-size:10.5px;color:#8a998e;line-height:1.55}
+    .compose{margin:16px 12px 0;padding:0}
+    .compose button{width:100%;min-height:48px;border:0;border-radius:12px;background:#0c5c40;color:#fff;font-size:15px;font-weight:700;letter-spacing:1.5px}
+    .compose button[disabled]{background:#b9c9c0;color:#f4f8f5}
+    .compose .hint{margin-top:9px;text-align:center;font-size:11px;color:#8a998e;letter-spacing:.3px}
+    .result{margin:14px 12px 0}
+    .result-card{padding:14px;background:#fff;border-radius:16px;display:none}
+    .result-card.on{display:block}
+    .result-card .shots{display:grid;grid-template-columns:1fr;gap:8px}
+    .result-card .shots.two{grid-template-columns:1fr 1fr}
+    .result-card img{display:block;width:100%;border-radius:12px;border:1px solid #e8efea;background-color:#fff;background-image:conic-gradient(#e8ecea 25%,transparent 0 50%,#e8ecea 0 75%,transparent 0);background-size:16px 16px}
+    .result-card .bar{display:flex;align-items:center;gap:8px;margin-top:11px;font-size:11.5px;color:#5d6f63}
+    .result-card .bar em{font-style:normal;color:#0c5c40;font-weight:700}
+    .result-card .bar button{margin-left:8px;padding:7px 13px;border-radius:8px;border:1px solid #cfe0d6;background:#f7fbf9;color:#0c5c40;font-size:12px;font-weight:600}
+    .result-card .bar button.save{margin-left:auto;border-color:#0c5c40;background:#0c5c40;color:#fff}
+    .status{margin:12px 12px 0;padding:0 2px;font-size:11.5px;color:#8a998e;text-align:center;min-height:16px}
+    .status.err{color:#b4482f}
+    .foot{margin:24px 16px 0;font-size:11px;color:#8a998e;line-height:1.75}
+    .foot strong{color:#5d6f63;font-size:11.5px;display:block;margin-bottom:5px}
+    .foot code{background:#e8f0ea;border-radius:4px;padding:1px 5px;color:#3d5a49;font-size:10.5px}
+  </style>
+  <style>
+    .platform-tool .demo-root{max-width:none;display:grid;grid-template-columns:minmax(360px,1fr) minmax(300px,.85fr);gap:16px;padding:0 0 24px;background:white}
+    .platform-tool .demo-root:before,.platform-tool .topbar,.platform-tool .notice,.platform-tool .foot{display:none}
+    .platform-tool .panel{grid-column:1;margin:0;padding:16px;border:1px solid #e2e8e4;border-radius:6px}
+    .platform-tool .compose,.platform-tool .status{grid-column:1;margin:0}
+    .platform-tool .result{grid-column:2;grid-row:1 / span 7;margin:0;position:sticky;top:0;align-self:start}
+    .platform-tool .result-card{padding:0;border-radius:6px;display:block}
+    .platform-tool .result-card:not(.on) .bar{display:none}
+    .platform-tool .shots{min-height:450px;background:#f4f6f5}
+    .platform-tool .result-card img{max-height:72vh;object-fit:contain}
+    .platform-tool .bar{flex-wrap:wrap}
+    @media(max-width:760px){.platform-tool .demo-root{grid-template-columns:1fr}.platform-tool .result{grid-column:1;grid-row:auto;position:static}}
+  </style>
+</head>
+<body>
+<div class="demo-root">
+  <header class="topbar">
+    <img src="/service-account-h5/assets/logo-saixiaofeng-football.png" alt="赛小蜂足球">
+    <div class="tt"><strong>AI 形象照</strong><span>抱膀定妆照 · 个人工具</span></div>
+    <span class="demo-flag">演示版</span>
+  </header>
+
+  <section class="notice">
+    <strong>这是能力演示，不是正式功能</strong>
+    <ul>
+      <li>已接入<b>图生图（参考图）模式</b>：用你上传的脸重新拍一张抱膀定妆照</li>
+      <li><b>身高体重</b>：第 01 步可填身高体重，也可以直接选体型（偏瘦／匀称／结实／微胖／偏胖），用来生成不同的肩宽、胸背厚度和腰腹轮廓，避免所有人身材都一个样；不填就按你照片里的真实身材还原</li>
+      <li>参考图临时上传，服务端读取后删除，不写入球员档案</li>
+      <li><b>有球衣</b>：上传球衣设计图或球衣照片，系统把“你的脸 + 球衣图”拼成一张参考板，让模型还原主色、肩部拼接、袖口与侧身条纹、领口和左胸队徽</li>
+      <li><b>没球衣</b>：直接选<b>颜色样板</b>（10 色 × 3 款式），每张卡片都用你选的颜色画出球衣样子，插肩、侧条效果能直接看到；不送球衣图，出图最稳，球衣上一定不会有文字、号码或队徽</li>
+      <li>球衣上的文字、号码默认留空（第 02 步可勾选让 AI 试写）：AI 拼字不稳定，正式功能会用模板叠字</li>
+      <li>成品不烧「AI生成」角标：Seedream 4.5 在源头关掉水印；图片由 AI 生成这一点仍在本页标注</li>
+      <li><b>出图模型</b>：本页当前只开放 <b>Seedream 4.5</b>；模型清单由平台后台上架，混元 3.5 与 Seedream 5.0 Flash 暂未上架，页面不显示</li>
+      <li>Seedream 4.5 竖版 2K，服务端抠图后返回透明 PNG，保留原始尺寸</li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <div class="step-head"><em>01</em><strong>本人照片</strong><small>裁到脸和肩膀</small></div>
+    <label class="upload" for="photoInput">
+      <span class="thumb" id="photoThumb">未选择</span>
+      <span class="meta">
+        <strong>上传一张正面照片</strong>
+        <span id="photoName">面部越清楚越像本人，建议头肩近照、光线均匀</span>
+        <span class="pick">选择照片</span>
+      </span>
+      <input id="photoInput" type="file" accept="image/*">
+    </label>
+    <div class="crop-wrap" id="cropWrap">
+      <div class="crop-box" id="cropBox">
+        <img id="cropImg" alt="裁剪预览">
+        <div class="frame"></div>
+        <div class="crop-tip">拖动调整位置 · 用滑杆调整大小</div>
+      </div>
+      <div class="crop-tools">
+        <span>缩放</span>
+        <input id="zoomRange" type="range" min="100" max="240" step="1" value="130">
+        <button id="cropConfirm" type="button">用这张</button>
+      </div>
+    </div>
+    <div class="body-form">
+      <div class="body-head">身高体重与体型<small>不填就按照片里人物的真实身材还原</small></div>
+      <div class="body-row">
+        <label class="body-field"><span>身高</span><input id="heightInput" type="number" inputmode="numeric" min="120" max="230" step="1" placeholder="170"><em>cm</em></label>
+        <label class="body-field"><span>体重</span><input id="weightInput" type="number" inputmode="numeric" min="20" max="200" step="1" placeholder="60"><em>kg</em></label>
+      </div>
+      <label class="body-type"><span>体型</span>
+        <select id="bodyTypeInput">
+          <option value="">按身高体重自动判断</option>
+          <option value="lean">偏瘦</option>
+          <option value="slim">匀称偏瘦</option>
+          <option value="normal">匀称</option>
+          <option value="strong">结实</option>
+          <option value="heavy">微胖</option>
+          <option value="large">偏胖</option>
+        </select>
+      </label>
+      <p class="body-tip">只影响肩宽、胸背厚度、手臂粗细和腰腹轮廓，脸和五官不变；同一个姿势换个体型，出来的身材就不一样。</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="step-head"><em>02</em><strong>球衣</strong><small>有球衣 / 没球衣</small></div>
+    <div class="jersey-mode" id="jerseyMode">
+      <button type="button" data-mode="photo" class="on">有球衣 · 上传照片</button>
+      <button type="button" data-mode="preset">没球衣 · 选颜色样板</button>
+    </div>
+    <div class="mode-body" id="photoMode">
+      <label class="upload" for="jerseyInput">
+        <span class="thumb" id="jerseyThumb">未选择</span>
+        <span class="meta">
+          <strong>上传球衣图</strong>
+          <span id="jerseyName">系统会读取球衣的主色和款式；球衣上的文字、号码由后期叠加，AI 不拼字</span>
+          <span class="pick">选择球衣图</span>
+        </span>
+        <input id="jerseyInput" type="file" accept="image/*">
+      </label>
+      <div class="color-row" id="colorRow"><i id="colorSwatch"></i><span id="colorText">已取主色</span></div>
+      <label class="text-row" for="jerseyTextInput">
+        <input id="jerseyTextInput" type="checkbox">
+        <span class="txt">
+          <b>球衣上有文字 / 号码，让 AI 尝试还原</b>
+          <span>不勾选（推荐）：球衣留空，后期用模板叠字；勾选：AI 会试着写字，很可能是乱码</span>
+        </span>
+      </label>
+    </div>
+    <div class="mode-body" id="presetMode" hidden>
+      <div class="preset-head">选颜色，再挑款式<small>卡片就是出图后的球衣样子，没有文字、号码和队徽</small></div>
+      <div class="preset-colors" id="presetColors"></div>
+      <div class="preset-styles" id="presetStyles"></div>
+      <div class="preset-note" id="presetNote"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="step-head"><em>03</em><strong>选择姿势预设</strong><small>实拍示例</small></div>
+    <div class="poses" id="poses">
+      <div class="pose on" data-pose="front">
+        <img src="assets/pose-presets/pose-front.jpg" alt="正面抱膀" width="480" height="640" loading="lazy">
+        <strong>正面抱膀</strong><small>标准定妆</small>
+      </div>
+      <div class="pose" data-pose="side">
+        <img src="assets/pose-presets/pose-three-quarter.jpg" alt="半侧抱膀" width="480" height="640" loading="lazy">
+        <strong>半侧抱膀</strong><small>更立体</small>
+      </div>
+      <div class="pose" data-pose="low">
+        <img src="assets/pose-presets/pose-low.jpg" alt="低位抱膀" width="480" height="640" loading="lazy">
+        <strong>低位抱膀</strong><small>放松站姿</small>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="modelPanel" hidden>
+    <div class="step-head"><em>04</em><strong>出图模型</strong><small id="modelCount"></small></div>
+    <div class="models" id="modelList"></div>
+    <div class="model-note" id="modelNote"></div>
+  </section>
+
+  <div class="compose">
+    <button id="generateBtn">生成定妆照</button>
+    <div class="hint" id="composeHint">透明 PNG · 预计 30–75 秒</div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="result">
+    <div class="result-card" id="resultCard">
+      <div class="shots" id="resultShots"><p style="margin:auto;color:#738079;text-align:center">生成后在此预览</p></div>
+      <div class="bar"><em id="resultMeta">—</em><button id="saveBtn" class="save">保存到本地</button><button id="againBtn">再生成一张</button></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <strong>技术边界（给产品看）</strong>
+    当前链路：页面 → <code>/aiPortraitDemo</code> → <b>Seedream 4.5</b>（百度云 VOD 广州网关「BS模型」<code>doubao-seedream-4-5</code>，1728×2304 JPEG，一次 1 张，需配置 <code>BAIDU_VOD_KEY</code>）。混元影像 3.5（TokenHub）与 Seedream 5.0 Flash（火山方舟）的接入代码与凭据都保留在目录里，但已标 <code>hidden</code>：后端不下发、请求直接拒绝，页面看不到也选不到。<br>
+    当前实现只送 1 张参考图，所以选了球衣图时，前端把“人脸 + 球衣图”拼成一张参考板再送模型（Seedream 原生支持多图，后续可把脸和球衣拆成两张分别送）；当前提示词按结构逐项还原主色、肩部拼接、袖口与侧身条纹、领口和左胸队徽，胸前文字和号码一律留空，交给后期模板叠加（AI 拼字会乱码）。<br>
+    02 步按“有球衣 / 没球衣”分两态：有球衣才上传图片并拼参考板；没球衣直接选颜色样板，色板和款式卡片都是可视化的（<code>jerseySvg()</code> 用当前颜色画前视图，插肩白袖、侧条白条实时联动），只把样板色和款式描述写进提示词（不送球衣图），因此球衣上不会出现任何文字、号码或队徽，适合直接当球员标准照使用。<br>
+    03 步的三张姿势缩略图是实拍示例（<code>assets/pose-presets/*.jpg</code>，480×640、每张约 32KB），与后端姿势文案同源，前端只做等比缩放展示。<br>
+    04 步的模型清单来自后端目录（<code>GET /aiPortraitDemo</code>），前端只能选后端下发的 key；上架哪些模型、默认哪个、是否允许客户自选，由平台后台写 <code>platform_settings/aiPortraitModels</code>，但标了 <code>hidden</code> 的模型不会被这份配置重新打开。Seedream 4.5 走百度云 VOD 广州网关 <code>POST https://vod.gz.baidubce.com/v1/images/generations</code>（OpenAI Image Generations 规范、参数透传方舟，模型名不带日期后缀），服务端配置 <code>BAIDU_VOD_KEY</code>，尺寸可用 <code>SEEDREAM45_SIZE</code> 覆盖；实测该网关对 4.5 不接受 <code>output_format</code>（会返回 400 InvalidParameter），默认不发送，确需强制时可用 <code>SEEDREAM45_OUTPUT_FORMAT</code> 打开。Vidu Q2 已按确认下架，不再提供。<br>
+    正式上线还需：会话鉴权、按次扣费、生成失败退回、人脸上传单独同意与“删除我的照片”入口、AI 生成标识。
+  </div>
+</div>
+
+<script>
+(function () {
+  var API = '/aiPortraitDemo'
+  var embeddedAdmin = Boolean(window.location && /(?:\?|&)adminTool=1(?:&|$)/.test(window.location.search))
+  if (window.location && !embeddedAdmin) {
+    document.body.innerHTML = '<main style="padding:32px;font-family:sans-serif"><h2>工具已迁至平台后台</h2><a href="https://pingtai.sxffootball.cn/">打开平台后台</a></main>'
+    return
+  }
+  var toolTicket = ''
+  var toolReady = null
+  if (embeddedAdmin) {
+    document.body.classList.add('platform-tool')
+    toolReady = new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { reject(new Error('后台生图会话未就绪，请重新打开标签')) }, 15000)
+      window.addEventListener('message', function (event) {
+        if (event.source !== window.parent || event.origin !== 'https://pingtai.sxffootball.cn' || !event.data || event.data.type !== 'portrait-tool-session') return
+        clearTimeout(timer)
+        if (!event.data.ticket) { reject(new Error(event.data.error || '后台生图会话未就绪')); return }
+        toolTicket = event.data.ticket
+        resolve()
+      })
+      window.parent.postMessage({ type: 'portrait-tool-ready' }, 'https://pingtai.sxffootball.cn')
+    })
+  }
+  function portraitFetch(url, options) {
+    if (!embeddedAdmin) return fetch(url, options)
+    return toolReady.then(function () {
+      var body = options.method === 'GET' ? { action: 'adminToolModels' } : JSON.parse(options.body || '{}')
+      if (options.method !== 'GET') body.action = body.action === 'prepareReference' ? 'adminToolPrepare' : body.action === 'cancelReference' ? 'adminToolCancel' : 'adminToolGenerate'
+      body.adminTicket = toolTicket
+      return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' })
+    })
+  }
+  var state = {
+    pose: 'front', jerseyColor: '', photo: '', jerseyImg: null,
+    // mode：photo=有球衣（上传照片取款式）；preset=没球衣（选颜色样板）
+    mode: 'photo', jerseyStyle: 'plain',
+    presetColor: '#0c5c40', presetLabel: '翡翠绿',
+    // 出图模型：由 GET /aiPortraitDemo 返回的目录决定，前端只能选后端给的 key
+    model: ''
+  }
+  // 纯色样板：不送球衣参考图，只按“颜色 + 款式”文字出图。
+  // 出图最稳，球衣上一定不会有文字、号码或队徽乱码，适合“只想要一张干净定妆照”的场景。
+  var JERSEY_PRESETS = [
+    { color: '#0c5c40', label: '翡翠绿' },
+    { color: '#1f9cf0', label: '天蓝' },
+    { color: '#173a8a', label: '深海蓝' },
+    { color: '#c62828', label: '中国红' },
+    { color: '#f07a1c', label: '活力橙' },
+    { color: '#f2c81d', label: '明黄' },
+    { color: '#6a3fa0', label: '紫罗兰' },
+    { color: '#f199b6', label: '樱粉' },
+    { color: '#1c1f24', label: '墨黑' },
+    { color: '#f5f6f7', label: '纯白' }
+  ]
+  var STYLE_LABELS = { plain: '纯色圆领', raglan: '白色插肩', striped: '白色侧条' }
+  // 款式卡片顺序与后端 JERSEY_STYLES 的 key 一致（plain/raglan/striped）
+  var JERSEY_STYLE_LIST = [
+    { key: 'plain', label: '纯色圆领' },
+    { key: 'raglan', label: '白色插肩' },
+    { key: 'striped', label: '白色侧条' }
+  ]
+  var generating = false
+  var crop = { img: null, zoom: 1.3, ox: 0, oy: 0, scale: 1, viewW: 0, viewH: 0, ready: false }
+
+  var photoInput = document.getElementById('photoInput')
+  var jerseyInput = document.getElementById('jerseyInput')
+  var photoThumb = document.getElementById('photoThumb')
+  var jerseyThumb = document.getElementById('jerseyThumb')
+  var photoName = document.getElementById('photoName')
+  var jerseyName = document.getElementById('jerseyName')
+  var colorRow = document.getElementById('colorRow')
+  var jerseyTextInput = document.getElementById('jerseyTextInput')
+  // 体型输入：身高体重留空＝按照片真实身材还原，不回填默认值，避免把偏胖/偏瘦的人改成标准身材
+  var heightInput = document.getElementById('heightInput')
+  var weightInput = document.getElementById('weightInput')
+  var bodyTypeInput = document.getElementById('bodyTypeInput')
+  var colorSwatch = document.getElementById('colorSwatch')
+  var colorText = document.getElementById('colorText')
+  var presetColors = document.getElementById('presetColors')
+  var presetStyles = document.getElementById('presetStyles')
+  var presetNote = document.getElementById('presetNote')
+  var jerseyMode = document.getElementById('jerseyMode')
+  var photoMode = document.getElementById('photoMode')
+  var presetMode = document.getElementById('presetMode')
+  var generateBtn = document.getElementById('generateBtn')
+  var againBtn = document.getElementById('againBtn')
+  var saveBtn = document.getElementById('saveBtn')
+  // 当前展示的成片（data URL），保存到本地时直接用它，不需要再请求服务端
+  var currentShots = []
+  var statusEl = document.getElementById('status')
+  var resultCard = document.getElementById('resultCard')
+  var resultShots = document.getElementById('resultShots')
+  var resultMeta = document.getElementById('resultMeta')
+  var cropWrap = document.getElementById('cropWrap')
+  var cropBox = document.getElementById('cropBox')
+  var cropImg = document.getElementById('cropImg')
+  var zoomRange = document.getElementById('zoomRange')
+  var cropConfirm = document.getElementById('cropConfirm')
+  var modelPanel = document.getElementById('modelPanel')
+  var modelList = document.getElementById('modelList')
+  var modelNote = document.getElementById('modelNote')
+  var composeHint = document.getElementById('composeHint')
+
+  // ---------- 出图模型（后台目录 → 客户选择） ----------
+  var models = []
+  var userPickedModel = false
+  var checkingModels = false
+  var allowUserChoice = true
+
+  function currentModel() {
+    for (var i = 0; i < models.length; i += 1) if (models[i].key === state.model) return models[i]
+    return null
+  }
+
+  function refreshModels() {
+    if (!models.length) return
+    modelPanel.hidden = !allowUserChoice
+    document.getElementById('modelCount').textContent = models.length + ' 个'
+    modelList.innerHTML = ''
+    models.forEach(function (item) {
+      var card = document.createElement('button')
+      card.type = 'button'
+      card.className = 'model-card' + (item.key === state.model ? ' on' : '') + (item.ready ? '' : ' off')
+      card.setAttribute('data-key', item.key)
+      var name = document.createElement('strong')
+      name.textContent = item.label
+      var sub = document.createElement('small')
+      sub.textContent = item.tag + ' · ' + item.vendor
+      var action = document.createElement('em')
+      action.textContent = !item.ready
+        ? '未开通'
+        : (item.key === state.model ? (allowUserChoice ? '已选' : '平台指定') : '选择')
+      card.appendChild(name)
+      card.appendChild(sub)
+      card.appendChild(action)
+      modelList.appendChild(card)
+    })
+    var picked = currentModel()
+    modelNote.textContent = (allowUserChoice && models.length > 1)
+      ? '模型由平台后台上架，你可以在可用模型里自己挑；不同模型的出图速度和球衣还原度不一样。'
+      : '当前只开放 ' + (picked ? picked.label : '默认模型') + '，其余模型暂未上架。'
+    composeHint.textContent = picked && picked.key === 'seedream45'
+      ? '透明 PNG · 2K 竖版 · 预计 30–75 秒'
+      : '透明 PNG · 预计 30–75 秒'
+  }
+
+  // 目录由后端下发：可用哪些模型、默认哪个、客户能不能自己选，都由后台决定
+  function loadModels() {
+    return portraitFetch(API, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then(function (response) { return response.json() })
+      .then(function (body) {
+        if (!body || !body.success || !Array.isArray(body.models)) throw new Error((body && body.error) || '模型配置读取失败，请重试')
+        var previousModel = state.model
+        models = body.models
+        allowUserChoice = body.allowUserChoice !== false
+        var ready = models.filter(function (item) { return item.ready })
+        var preferred = ''
+        ready.forEach(function (item) { if (!preferred && item.key === body.defaultModel) preferred = item.key })
+        var kept = allowUserChoice && userPickedModel && ready.some(function (item) { return item.key === previousModel })
+        state.model = kept ? previousModel : preferred
+        if (!kept) userPickedModel = false
+        generateBtn.disabled = generating || !state.model
+        if (!state.model) { modelPanel.hidden = true; throw new Error('暂无可用的默认模型，请联系平台管理员') }
+        refreshModels()
+        return true
+      })
+      .catch(function (error) { state.model = ''; generateBtn.disabled = true; say(error.message || '模型配置读取失败，请重试', true); return false })
+  }
+
+  function say(text, isError) {
+    statusEl.textContent = text || ''
+    statusEl.className = 'status' + (isError ? ' err' : '')
+  }
+
+  // 身高/体重读数：空 → 0（不描述体型）；超出范围 → -1（提示用户改，不静默丢）
+  function readNumber(el, min, max) {
+    if (!el) return 0
+    var raw = String(el.value || '').trim()
+    if (!raw) return 0
+    var value = Number(raw)
+    if (!isFinite(value) || value < min || value > max) return -1
+    return Math.round(value)
+  }
+
+  function readImage(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader()
+      reader.onload = function () { resolve(String(reader.result || '')) }
+      reader.onerror = function () { reject(new Error('读取照片失败')) }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  function loadImage(dataUrl) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image()
+      img.onload = function () { resolve(img) }
+      img.onerror = function () { reject(new Error('图片解析失败')) }
+      img.src = dataUrl
+    })
+  }
+
+  function shrink(dataUrl, maxEdge, quality) {
+    return loadImage(dataUrl).then(function (img) {
+      var scale = Math.min(1, maxEdge / Math.max(img.width, img.height))
+      var w = Math.max(1, Math.round(img.width * scale))
+      var h = Math.max(1, Math.round(img.height * scale))
+      var canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+      return { canvas: canvas, dataUrl: canvas.toDataURL('image/jpeg', quality || 0.86) }
+    })
+  }
+
+  // 图生图只认人脸的相似度，整张街拍自拍必须裁到头肩，
+  // 否则模型会把背景和衣服一起学走，人也不像本人。
+  function layoutCrop(reset) {
+    if (!crop.img) return
+    var viewW = cropBox.clientWidth
+    var viewH = cropBox.clientHeight
+    if (!viewW || !viewH) return
+    var base = Math.max(viewW / crop.img.naturalWidth, viewH / crop.img.naturalHeight)
+    var scale = base * crop.zoom
+    var drawW = crop.img.naturalWidth * scale
+    var drawH = crop.img.naturalHeight * scale
+    var maxX = Math.max(0, drawW - viewW)
+    var maxY = Math.max(0, drawH - viewH)
+    if (reset) {
+      crop.ox = maxX / 2
+      crop.oy = Math.min(drawH * 0.16, maxY)
+    } else if (crop.focus) {
+      // 缩放时保持画面中心不跳
+      crop.ox = crop.focus.x * drawW - viewW / 2
+      crop.oy = crop.focus.y * drawH - viewH / 2
+      crop.focus = null
+    }
+    crop.ox = Math.min(Math.max(0, crop.ox), maxX)
+    crop.oy = Math.min(Math.max(0, crop.oy), maxY)
+    crop.viewW = viewW
+    crop.viewH = viewH
+    crop.scale = scale
+    crop.drawW = drawW
+    crop.drawH = drawH
+    crop.maxX = maxX
+    crop.maxY = maxY
+    crop.ready = true
+    cropImg.style.width = drawW + 'px'
+    cropImg.style.height = drawH + 'px'
+    cropImg.style.left = (-crop.ox) + 'px'
+    cropImg.style.top = (-crop.oy) + 'px'
+  }
+
+  // 参考图里的影棚灰背景、暗角和落地投影会被模型当成“环境”照抄进成片（2026-10-28 用户反馈成片有阴影）。
+  // 送模型前，先把「与图片边框连通的浅灰背景」压成纯白：皮肤有彩度、头发偏暗，都会让生长停住，
+  // 所以只吃背景，不会啃到脸、头发或球衣。
+  function whitenCanvasRegion(canvas, x0, y0, w, h) {
+    if (!w || !h) return
+    var ctx = canvas.getContext('2d')
+    var image
+    try { image = ctx.getImageData(x0, y0, w, h) } catch (error) { return }
+    var data = image.data
+    var total = w * h
+    var visited = new Uint8Array(total)
+    var stack = new Int32Array(total)
+    var top = 0
+    function valueAt(index) {
+      var i = index * 4
+      return (data[i] + data[i + 1] + data[i + 2]) / 3
+    }
+    function push(index, base) {
+      if (index < 0 || index >= total || visited[index]) return
+      var i = index * 4
+      var r = data[i], g = data[i + 1], b = data[i + 2]
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 18) return
+      var value = (r + g + b) / 3
+      if (value < 190) return
+      if (Math.abs(value - base) > 26 && value < 238) return
+      visited[index] = 1
+      stack[top++] = index
+    }
+    for (var x = 0; x < w; x++) {
+      push(x, valueAt(x))
+      push((h - 1) * w + x, valueAt((h - 1) * w + x))
+    }
+    for (var y = 0; y < h; y++) {
+      push(y * w, valueAt(y * w))
+      push(y * w + w - 1, valueAt(y * w + w - 1))
+    }
+    while (top > 0) {
+      var index = stack[--top]
+      var i = index * 4
+      var base = valueAt(index)
+      data[i] = 255
+      data[i + 1] = 255
+      data[i + 2] = 255
+      var cx = index % w
+      var cy = (index - cx) / w
+      if (cx > 0) push(index - 1, base)
+      if (cx < w - 1) push(index + 1, base)
+      if (cy > 0) push(index - w, base)
+      if (cy < h - 1) push(index + w, base)
+    }
+    ctx.putImageData(image, x0, y0)
+  }
+
+  // 导出 4:5 头肩图；HTTP 入口有请求体上限，超长自动降档
+  function exportCrop(maxWidth, quality) {
+    var ratio = crop.viewH / crop.viewW
+    var outW = Math.min(maxWidth, Math.round(crop.viewW / crop.scale))
+    var outH = Math.round(outW * ratio)
+    var canvas = document.createElement('canvas')
+    canvas.width = outW
+    canvas.height = outH
+    var ctx = canvas.getContext('2d')
+    ctx.drawImage(
+      crop.img,
+      crop.ox / crop.scale, crop.oy / crop.scale, crop.viewW / crop.scale, crop.viewH / crop.scale,
+      0, 0, outW, outH
+    )
+    // Keep the reference pixels: background cleanup belongs to the final output.
+    return canvas.toDataURL('image/jpeg', quality)
+  }
+
+  // 拖动或缩放后，之前裁好的图就作废，必须重新点“用这张”
+  function markCropDirty() {
+    if (!crop.ready) return
+    if (cropConfirm.textContent !== '用这张') {
+      cropConfirm.textContent = '用这张'
+      cropConfirm.className = ''
+    }
+    if (state.photo) {
+      state.photo = ''
+      photoName.textContent = '构图已调整，请点“用这张”确认'
+    }
+  }
+
+  function commitCrop() {
+    if (!crop.ready) return Promise.reject(new Error('请先选择照片'))
+    // 高清 JPEG 直接上传对象存储；生成请求只发送签名凭证，不再挤入 100KB 网关。
+    var steps = [[1600, 0.94], [1600, 0.90], [1400, 0.90]]
+    var index = 0
+    function attempt() {
+      var dataUrl = exportCrop(steps[index][0], steps[index][1])
+      if (dataUrl.length <= 4000000) return Promise.resolve(dataUrl)
+      if (index === steps.length - 1) throw new Error('照片体积过大，请换一张清晰的头肩照')
+      index += 1
+      return attempt()
+    }
+    return Promise.resolve().then(attempt).then(function (dataUrl) {
+      state.photo = dataUrl
+      photoThumb.style.backgroundImage = 'url("' + dataUrl + '")'
+      photoThumb.textContent = ''
+      photoName.textContent = '已选高清头肩图 · 生成时临时上传'
+      cropConfirm.textContent = '已使用'
+      cropConfirm.className = 'done'
+      return dataUrl
+    })
+  }
+
+  function dominantColor(canvas) {
+    if (!canvas) return ''
+    var small = document.createElement('canvas')
+    small.width = 36
+    small.height = 36
+    var ctx = small.getContext('2d')
+    ctx.drawImage(canvas, 0, 0, 36, 36)
+    var data = ctx.getImageData(0, 0, 36, 36).data
+    var r = 0, g = 0, b = 0, count = 0
+    for (var i = 0; i < data.length; i += 4) {
+      var alpha = data[i + 3]
+      if (alpha < 160) continue
+      var pr = data[i], pg = data[i + 1], pb = data[i + 2]
+      if (pr > 236 && pg > 236 && pb > 236) continue
+      if (pr < 26 && pg < 26 && pb < 26) continue
+      r += pr; g += pg; b += pb; count += 1
+    }
+    if (!count) return ''
+    r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count)
+    return '#' + [r, g, b].map(function (v) {
+      var hex = v.toString(16)
+      return hex.length === 1 ? '0' + hex : hex
+    }).join('')
+  }
+
+  // 裁角标是为旧的混元 3.0（云开发免费通道，右下角烧「AI生成」）准备的。
+  // 3.0 已下线，现在 3.5 / Seedream 都不烧角标，后端 watermark 恒为 none，这里不会真的裁。
+  // 保留这段兜底：将来若再接入会烧角标的模型，后端改回 watermark:'trim' 就能继续用。
+  var WATERMARK_CROP = { right: 0.12, bottom: 0.095 }
+  function trimWatermark(src, shouldTrim) {
+    if (!shouldTrim) return Promise.resolve(src)
+    return new Promise(function (resolve) {
+      var img = new Image()
+      img.onload = function () {
+        var w = Math.round(img.naturalWidth * (1 - WATERMARK_CROP.right))
+        var h = Math.round(img.naturalHeight * (1 - WATERMARK_CROP.bottom))
+        var canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h, 0, 0, w, h)
+        try {
+          resolve(canvas.toDataURL('image/jpeg', 0.92))
+        } catch (error) {
+          resolve(src)
+        }
+      }
+      img.onerror = function () { resolve(src) }
+      img.src = src
+    })
+  }
+
+  // 模型只接受 1 张参考图：把“裁好的脸”和“球衣图”拼成一张参考板，
+  // 左边人脸、右边球衣，让模型一次拿到保脸和球衣款式两个条件。
+  // 球衣整张送（不猜正面/背面），避免把单件球衣照片裁掉一半。
+  // 2026-10-28：底色由 #f2f4f3 改成纯白——灰底会被模型当成“成片背景基调”，出片就带灰雾；
+  // 同时把脸的占比从 54% 提到 62%，球衣缩到 34%，把有限的体积预算都给了脸。
+  function drawRefSheet(size) {
+    var canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    var ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, size, size)
+
+    var faceW = Math.round(size * 0.62)
+    var faceH = size
+    var sx = crop.ox / crop.scale
+    var sy = crop.oy / crop.scale
+    var sw = crop.viewW / crop.scale
+    var sh = crop.viewH / crop.scale
+    var faceScale = Math.max(faceW / sw, faceH / sh)
+    var fw = sw * faceScale
+    var fh = sh * faceScale
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, faceW, faceH)
+    ctx.clip()
+    ctx.drawImage(crop.img, sx, sy, sw, sh, (faceW - fw) / 2, (faceH - fh) / 2, fw, fh)
+    ctx.restore()
+    // 参考图里的人脸裁片本身带着影棚灰背景/暗角，先压成纯白再交给模型
+    // Do not whiten or smooth the face reference.
+
+    if (state.jerseyImg) {
+      var boxW = Math.round(size * 0.34)
+      var boxH = boxW
+      var boxX = size - boxW - Math.round(size * 0.02)
+      var boxY = Math.round(size * 0.18)
+      var js = Math.min(boxW / state.jerseyImg.naturalWidth, boxH / state.jerseyImg.naturalHeight)
+      var jw = state.jerseyImg.naturalWidth * js
+      var jh = state.jerseyImg.naturalHeight * js
+      ctx.drawImage(state.jerseyImg, boxX + (boxW - jw) / 2, boxY + (boxH - jh) / 2, jw, jh)
+    }
+    return canvas
+  }
+
+  // 参考板只编码一次，3MB 上限，不静默降成小图。
+  function encodeSheet() {
+    var steps = [[2048, 0.94], [2048, 0.90], [1800, 0.90], [1600, 0.90]]
+    var index = 0
+    function attempt() {
+      var canvas = drawRefSheet(steps[index][0])
+      var dataUrl = canvas.toDataURL('image/jpeg', steps[index][1])
+      if (dataUrl.length <= 4000000) return dataUrl
+      if (index === steps.length - 1) throw new Error('参考图体积过大，请更换照片后重试')
+      index += 1
+      return attempt()
+    }
+    return attempt()
+  }
+
+  function uploadReference(dataUrl) {
+    if (!dataUrl) return Promise.resolve('')
+    var ticket = ''
+    return fetch(dataUrl).then(function (response) { return response.blob() }).then(function (blob) {
+      return portraitFetch(API, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'prepareReference', bytes: blob.size })
+      }).then(function (response) { return response.json() }).then(function (body) {
+        if (!body.success || !body.data) throw new Error(body.error || '高清上传未就绪，请稍后重试')
+        var target = body.data
+        ticket = target.ticket
+        return fetch(target.url, { method: 'PUT', headers: target.headers, body: blob })
+      }).then(function (response) {
+        if (!response.ok) throw new Error('高清参考图上传失败，请重新生成')
+        return ticket
+      })
+    }).catch(function (error) {
+      if (ticket) portraitFetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'cancelReference', ticket: ticket }) }).catch(function () {})
+      throw error
+    })
+  }
+
+  photoInput.addEventListener('change', function () {
+    var file = photoInput.files && photoInput.files[0]
+    if (!file) return
+    say('正在读取照片…')
+    readImage(file).then(loadImage).then(function (img) {
+      crop.img = img
+      crop.zoom = 1.3
+      zoomRange.value = '130'
+      state.photo = ''
+      cropConfirm.textContent = '用这张'
+      cropConfirm.className = ''
+      // 预览用的 <img> 必须真的拿到图，否则裁剪框只剩背景色（表现为一片黑）
+      cropImg.src = img.src
+      cropWrap.className = 'crop-wrap on'
+      // 裁剪框刚显示时 clientWidth 可能还是 0，等一帧再排版
+      requestAnimationFrame(function () {
+        layoutCrop(true)
+        say('请把脸和肩膀放进框内，再点“用这张”。')
+      })
+    }).catch(function (error) { say(error.message, true) })
+  })
+
+  // 横竖屏切换或窗口尺寸变化后重新排版，避免裁剪框越界或空白
+  window.addEventListener('resize', function () {
+    if (!crop.ready) return
+    layoutCrop(false)
+  })
+
+  // 拖动裁剪位置（鼠标和触屏统一用 pointer 事件）
+  var dragging = null
+  cropBox.addEventListener('pointerdown', function (event) {
+    if (!crop.ready) return
+    dragging = { x: event.clientX, y: event.clientY, ox: crop.ox, oy: crop.oy }
+    cropBox.className = 'crop-box dragging'
+    cropBox.setPointerCapture(event.pointerId)
+  })
+  cropBox.addEventListener('pointermove', function (event) {
+    if (!dragging) return
+    crop.ox = dragging.ox - (event.clientX - dragging.x)
+    crop.oy = dragging.oy - (event.clientY - dragging.y)
+    layoutCrop(false)
+    markCropDirty()
+  })
+  function endDrag(event) {
+    if (!dragging) return
+    dragging = null
+    cropBox.className = 'crop-box'
+    try { cropBox.releasePointerCapture(event.pointerId) } catch (error) {}
+  }
+  cropBox.addEventListener('pointerup', endDrag)
+  cropBox.addEventListener('pointercancel', endDrag)
+
+  zoomRange.addEventListener('input', function () {
+    if (!crop.ready) return
+    crop.focus = {
+      x: (crop.ox + crop.viewW / 2) / crop.drawW,
+      y: (crop.oy + crop.viewH / 2) / crop.drawH
+    }
+    crop.zoom = Number(zoomRange.value) / 100
+    layoutCrop(false)
+    markCropDirty()
+  })
+
+  cropConfirm.addEventListener('click', function () {
+    commitCrop().then(function () { say('照片已裁好，可以选姿势生成。') }).catch(function (error) { say(error.message, true) })
+  })
+
+  // 可视化球衣：用当前选中的颜色画出三种款式的前视图（圆领/插肩/侧条），
+  // 让用户不用猜就能看到“插肩白袖”“两侧白条”长什么样，再决定生成哪一款。
+  function jerseySvg(color, style) {
+    var main = color || '#9fb3a7'
+    var sleeve = style === 'raglan' ? '#ffffff' : main
+    var stroke = 'stroke="rgba(0,0,0,.16)" stroke-width="1"'
+    var collar = style === 'raglan'
+      ? '<path d="M25 15 Q32 23 39 15" fill="none" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round"/>'
+      : (style === 'striped'
+        ? '<path d="M26 14.5 L32 22.5 L38 14.5" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linejoin="round"/>'
+        : '<path d="M25.5 15 Q32 22 38.5 15" fill="none" stroke="rgba(0,0,0,.22)" stroke-width="1.8" stroke-linecap="round"/>')
+    // 插肩：白袖之外，再把肩线到腋下的白色三角补上，否则只有袖子白、看不出“插肩”
+    var extras = style === 'striped'
+      ? '<rect x="21" y="24" width="3.4" height="38" fill="#ffffff"/>' +
+        '<rect x="39.6" y="24" width="3.4" height="38" fill="#ffffff"/>'
+      : (style === 'raglan'
+        ? '<path d="M21.4 14 L27.6 14 L21.4 31 Z" fill="#ffffff"/>' +
+          '<path d="M42.6 14 L36.4 14 L42.6 31 Z" fill="#ffffff"/>'
+        : '')
+    return '<svg viewBox="0 0 64 72" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M21 14 L43 14 L44.5 63 Q32 67 19.5 63 Z" fill="' + main + '" ' + stroke + '/>' +
+      '<path d="M21 14 L11 20 Q7 29 11.5 36 L19.5 33 Z" fill="' + sleeve + '" ' + stroke + '/>' +
+      '<path d="M43 14 L53 20 Q57 29 52.5 36 L44.5 33 Z" fill="' + sleeve + '" ' + stroke + '/>' +
+      collar + extras + '</svg>'
+  }
+
+  // 色板与款式卡片渲染（一次性）
+  JERSEY_PRESETS.forEach(function (item) {
+    var chip = document.createElement('button')
+    chip.type = 'button'
+    chip.className = 'preset-color'
+    chip.setAttribute('data-color', item.color)
+    chip.setAttribute('data-label', item.label)
+    chip.innerHTML = '<i style="background:' + item.color + '"></i><span>' + item.label + '</span>'
+    presetColors.appendChild(chip)
+  })
+  JERSEY_STYLE_LIST.forEach(function (item) {
+    var card = document.createElement('button')
+    card.type = 'button'
+    card.className = 'preset-style'
+    card.setAttribute('data-style', item.key)
+    card.innerHTML = '<span class="mini"></span><b>' + item.label + '</b>'
+    presetStyles.appendChild(card)
+  })
+
+  // 有球衣 / 没球衣 两态切换：上传照片走款式参考，没有球衣直接选颜色样板
+  function setJerseyMode(mode) {
+    state.mode = mode === 'preset' ? 'preset' : 'photo'
+    var buttons = jerseyMode.querySelectorAll('button')
+    for (var i = 0; i < buttons.length; i += 1) {
+      buttons[i].className = buttons[i].getAttribute('data-mode') === state.mode ? 'on' : ''
+    }
+    photoMode.hidden = state.mode !== 'photo'
+    presetMode.hidden = state.mode !== 'preset'
+    refreshJerseyUi()
+  }
+
+  // 球衣区域统一刷新：主色行、样板高亮、款式可视卡、说明文案
+  function refreshJerseyUi() {
+    var preset = state.mode === 'preset'
+    var chips = presetColors.querySelectorAll('.preset-color')
+    for (var i = 0; i < chips.length; i += 1) {
+      var on = preset && chips[i].getAttribute('data-color') === state.presetColor
+      chips[i].className = 'preset-color' + (on ? ' on' : '')
+    }
+    var cards = presetStyles.querySelectorAll('.preset-style')
+    for (var j = 0; j < cards.length; j += 1) {
+      var key = cards[j].getAttribute('data-style')
+      cards[j].className = 'preset-style' + (key === state.jerseyStyle ? ' on' : '')
+      var mini = cards[j].querySelector('.mini')
+      // 卡片里的球衣始终用当前选中的颜色画，换色即时可见
+      if (mini) mini.innerHTML = jerseySvg(state.presetColor, key)
+    }
+    var color = preset ? state.presetColor : state.jerseyColor
+    if (color) {
+      colorRow.className = 'color-row on'
+      colorSwatch.style.background = color
+      colorText.textContent = preset
+        ? '样板色 ' + state.presetLabel + ' ' + color
+        : (state.jerseyImg ? '取到球衣主色 ' + color + ' · 款式按球衣图还原' : '取到球衣主色 ' + color)
+    } else {
+      colorRow.className = 'color-row'
+    }
+    presetNote.textContent = preset
+      ? '当前：' + state.presetLabel + ' · ' + (STYLE_LABELS[state.jerseyStyle] || STYLE_LABELS.plain) +
+        '。出图后球衣就是上面卡片的样子，不会有文字、号码或队徽。'
+      : (state.jerseyImg
+        ? '已上传球衣图，款式和图案按图片还原；文字、号码留空。'
+        : '没有球衣图？切到「没球衣」直接选颜色样板，出图最稳。')
+  }
+
+  jerseyMode.addEventListener('click', function (event) {
+    var node = event.target.closest('button[data-mode]')
+    if (!node) return
+    setJerseyMode(node.getAttribute('data-mode'))
+  })
+
+  presetColors.addEventListener('click', function (event) {
+    var node = event.target.closest('.preset-color')
+    if (!node) return
+    state.presetColor = node.getAttribute('data-color')
+    state.presetLabel = node.getAttribute('data-label')
+    refreshJerseyUi()
+  })
+
+  presetStyles.addEventListener('click', function (event) {
+    var node = event.target.closest('.preset-style')
+    if (!node) return
+    state.jerseyStyle = node.getAttribute('data-style')
+    refreshJerseyUi()
+  })
+
+  refreshJerseyUi()
+
+  jerseyInput.addEventListener('change', function () {
+    var file = jerseyInput.files && jerseyInput.files[0]
+    if (!file) return
+    readImage(file).then(function (dataUrl) {
+      return Promise.all([shrink(dataUrl, 480), loadImage(dataUrl)])
+    }).then(function (result) {
+      var out = result[0]
+      state.jerseyImg = result[1]
+      state.jerseyColor = dominantColor(out.canvas)
+      jerseyThumb.style.backgroundImage = 'url("' + out.dataUrl + '")'
+      jerseyThumb.textContent = ''
+      jerseyName.textContent = file.name + ' · 已作为球衣款式参考'
+      // 上传即视为“有球衣”，自动切回照片模式
+      setJerseyMode('photo')
+    }).catch(function (error) { say(error.message, true) })
+  })
+
+  document.getElementById('poses').addEventListener('click', function (event) {
+    var node = event.target.closest('.pose')
+    if (!node) return
+    var children = document.querySelectorAll('.pose')
+    for (var i = 0; i < children.length; i += 1) children[i].className = 'pose'
+    node.className = 'pose on'
+    state.pose = node.getAttribute('data-pose')
+  })
+
+  modelList.addEventListener('click', function (event) {
+    var node = event.target.closest('.model-card')
+    if (!node || !allowUserChoice) return
+    var key = node.getAttribute('data-key')
+    var hit = null
+    models.forEach(function (item) { if (item.key === key) hit = item })
+    if (!hit || !hit.ready) return
+    state.model = key
+    userPickedModel = true
+    refreshModels()
+  })
+
+  function run() {
+    if (generating || checkingModels) return
+    checkingModels = true
+    generateBtn.disabled = true
+    loadModels().then(function (ok) { checkingModels = false; if (ok) runPrepared() })
+  }
+
+  function runPrepared() {
+    if (generating) return
+    // 选了照片但还没点“用这张”，先按当前构图自动裁好，避免把原图直接送上去
+    if (crop.ready && !state.photo) {
+      generating = true
+      generateBtn.disabled = true
+      say('正在准备照片…')
+      commitCrop().then(function () {
+        generating = false
+        generateBtn.disabled = false
+        run()
+      }).catch(function (error) {
+        generating = false
+        generateBtn.disabled = false
+        say(error.message, true)
+      })
+      return
+    }
+    generating = true
+    generateBtn.disabled = true
+    var originalText = generateBtn.textContent
+    generateBtn.textContent = '正在生成…'
+    resultCard.className = 'result-card'
+
+    // 体型：留空 = 按照片里人物的真实身材还原；填了超出范围就提示改，不静默丢成“没填”
+    var height = readNumber(heightInput, 120, 230)
+    var weight = readNumber(weightInput, 20, 200)
+    if (height < 0 || weight < 0) {
+      generating = false
+      generateBtn.disabled = false
+      generateBtn.textContent = originalText
+      say('身高请填 120–230 厘米、体重请填 20–200 公斤；不填就按你照片里的真实身材生成。', true)
+      return
+    }
+
+    var jerseyRef = Boolean(state.jerseyImg && state.photo && state.mode === 'photo')
+    var photo = state.photo
+    if (jerseyRef) {
+      try {
+        photo = encodeSheet()
+      } catch (error) {
+        say(error.message || '参考图准备失败，请重新选择照片', true)
+        generating = false
+        generateBtn.disabled = false
+        generateBtn.textContent = originalText
+        return
+      }
+    }
+    say('正在上传并生成透明 PNG，预计 30–75 秒…')
+
+    uploadReference(photo).then(function (referenceTicket) { return portraitFetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pose: state.pose,
+        jerseyColor: state.mode === 'preset' ? state.presetColor : state.jerseyColor,
+        jerseyPreset: state.mode === 'preset',
+        jerseyStyle: state.jerseyStyle,
+        referenceTicket: referenceTicket || undefined,
+        preserveOriginal: true,
+        transparentOutput: true,
+        jerseyRef: jerseyRef,
+        jerseyText: Boolean(jerseyTextInput && jerseyTextInput.checked),
+        // 体型三件套：留空就不带（后端按参考照片真实身材还原），手动选的体型优先于身高体重自动判断
+        height: height > 0 ? height : undefined,
+        weight: weight > 0 ? weight : undefined,
+        bodyType: bodyTypeInput && bodyTypeInput.value ? bodyTypeInput.value : undefined,
+        model: state.model,
+        aspectRatio: '3:4'
+      })
+    }) }).then(function (response) {
+      return response.json().then(function (body) { return { ok: response.ok, body: body } })
+    }).then(function (res) {
+      if (!res.ok || !res.body || !res.body.success) {
+        throw new Error((res.body && (res.body.error || res.body.detail)) || '生成失败')
+      }
+      var data = res.body.data || {}
+      if (data.transparent !== true || data.mimeType !== 'image/png' || !/^data:image\/png;base64,/.test(data.image || '')) {
+        throw new Error('未获得透明 PNG，请重新生成')
+      }
+      // 后端目录当前只上架 Seedream 4.5，一次只出 1 张
+      var shots = (data.images && data.images.length) ? data.images : [data.image]
+      // 后端 watermark 恒为 none（Seedream 4.5 不烧角标），这里只走兜底不裁的路径
+      var prepared = Promise.all(shots.map(function (src) { return trimWatermark(src, data.watermark === 'trim') }))
+      return prepared.then(function (trimmed) {
+        resultShots.className = 'shots' + (trimmed.length > 1 ? ' two' : '')
+        resultShots.innerHTML = ''
+        currentShots = trimmed
+        trimmed.forEach(function (src, index) {
+          var shot = document.createElement('img')
+          shot.src = src
+          shot.alt = 'AI 生成结果' + (index + 1)
+          resultShots.appendChild(shot)
+        })
+        var jerseyLabel = data.jerseyMode === 'reference'
+          ? '球衣款式参考'
+          : (data.jerseyMode === 'preset'
+            ? '纯色样板' + (data.jerseyStyleLabel ? ' · ' + data.jerseyStyleLabel : '')
+            : (data.jerseyMode === 'color' ? '球衣按主色' : '默认球衣'))
+        resultMeta.textContent = data.poseLabel + ' · 耗时 ' + Math.round((data.durationMs || 0) / 1000) + ' 秒 · ' +
+          (data.mode === 'reference' ? '参考图模式' : '文生图模式') + ' · ' + jerseyLabel +
+          (data.bodyLabel ? ' · 体型 ' + data.bodyLabel : '') +
+          (data.modelLabel ? ' · ' + data.modelLabel : '')
+        resultCard.className = 'result-card on'
+        if (data.mode === 'reference') {
+          say(data.jerseyMode === 'reference'
+            ? (data.jerseyTextMode === 'ai'
+              ? '生成完成：脸来自你的照片，球衣款式已还原，球衣文字由 AI 试写（可能有错字）。'
+              : '生成完成：脸来自你的照片，球衣按你上传的款式还原（主色、肩部拼接、条纹、队徽）；文字和号码留空，交给后期模板叠加。')
+            : (data.jerseyMode === 'preset'
+              ? '生成完成：脸来自你的照片，身穿纯色样板球衣（' + jerseyLabel + '），不含任何文字、号码或队徽。'
+              : '生成完成：这张是用你的照片当参考图生成的。'))
+        } else if (state.photo) {
+          say('这次没有用上你上传的照片，出的是 AI 示意人物（不是你本人）；请换一张更清楚的正脸照再试', true)
+        } else {
+          say('生成完成。这是 AI 示意人物，不是本人。')
+        }
+      })
+    }).catch(function (error) {
+      say('生成失败：' + (error && error.message ? error.message : '未知错误') + '，可以再试一次', true)
+    }).then(function () {
+      generating = false
+      generateBtn.disabled = false
+      generateBtn.textContent = originalText
+    })
+  }
+
+  generateBtn.addEventListener('click', run)
+  againBtn.addEventListener('click', run)
+  saveBtn.addEventListener('click', function () {
+    var src = currentShots[0]
+    if (!src) { say('还没有可保存的成片，先生成一张', true); return }
+    var stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')
+    var name = '赛小蜂AI形象照-' + stamp + '.png'
+    var link = document.createElement('a')
+    link.href = src
+    link.download = name
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    // 微信内置浏览器经常拦下载：给一句明确的手动保存指引，别让用户以为没反应
+    if (/MicroMessenger/i.test(navigator.userAgent)) {
+      say('正在下载。如果微信拦住没反应：长按上面的图片，选「保存图片」')
+    } else {
+      say('已开始下载：' + name)
+    }
+  })
+  loadModels()
+  window.addEventListener('focus', function () { if (!generating && !checkingModels) loadModels() })
+})()
+</script>
+<script src="./i18n-fixed-en.js?v=20261031-fixed1"></script>
+<script src="./i18n-runtime.js?v=20261031-fixed1"></script>
+</body>
+</html>
