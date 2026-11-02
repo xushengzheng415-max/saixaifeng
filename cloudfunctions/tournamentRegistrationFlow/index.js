@@ -2013,8 +2013,13 @@ async function notifyTeamPlayerJoin(event) {
   if (!serviceBridgeConfigured()) { await record('configuration_required', { errorCode: 'SERVICE_BRIDGE_REQUIRED', errorMessage: '服务号固定出口中转未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_BRIDGE_REQUIRED' } } }
   const team = await getDocument('teams', teamId)
   const invite = text(event.inviteId) ? await getDocument('team_invitations', text(event.inviteId)) : null
-  // 接收人顺序：发起入队邀请的负责人优先，其次球队归属账号；只发给第一个已完成服务号关注绑定的负责人，保证一条通知。
-  const candidateIds = [...new Set([invite && invite.inviterUserId, team && team.ownerId, team && team.ownerUserId, team && team.claimedByUserId, team && team.creatorId].map(text).filter(Boolean))]
+  // 接收人只按「球队认领关系」判定（2026-11-02 用户确认口径：谁认领球队谁收服务号通知）。
+  // 刻意不采纳 team.creatorId：主办方用报名表预建的占位球队也是 creatorId 命中，
+  // 会把入队通知发给从未认领该队的主办方。球队尚未认领时不发送，只如实记 waiting_team_claim。
+  const claimantIds = [team && team.ownerId, team && team.ownerUserId, team && team.claimedByUserId].map(text).filter(Boolean)
+  // 发起该球员邀请的负责人优先，其次认领账号；只在球队确有认领人时才把它作为候选。
+  const inviteOwnerId = invite && text(invite.teamId) === teamId ? text(invite.inviterUserId) : ''
+  const candidateIds = claimantIds.length ? [...new Set([inviteOwnerId, ...claimantIds].filter(Boolean))] : []
   let recipient = null, binding = null
   for (const userId of candidateIds) {
     const user = await getDocument('users', userId)
@@ -2023,7 +2028,12 @@ async function notifyTeamPlayerJoin(event) {
     const bound = (await db.collection('service_account_bindings').where({ sport: SPORT, miniOpenId, subscribed: true }).limit(2).get()).data || []
     if (bound[0] && text(bound[0].officialOpenId)) { recipient = { userId, miniOpenId }; binding = bound[0]; break }
   }
-  if (!recipient) { await record('waiting_follow_bind', { recipientUserId: candidateIds[0] || '', errorCode: 'SERVICE_BINDING_REQUIRED', errorMessage: '球队负责人尚未完成服务号关注绑定' }); return { success: true, data: { status: 'waiting_follow_bind', code: 'SERVICE_BINDING_REQUIRED' } } }
+  if (!recipient) {
+    const claimed = claimantIds.length > 0
+    const waitingStatus = claimed ? 'waiting_follow_bind' : 'waiting_team_claim'
+    await record(waitingStatus, { recipientUserId: candidateIds[0] || '', errorCode: claimed ? 'SERVICE_BINDING_REQUIRED' : 'TEAM_CLAIM_REQUIRED', errorMessage: claimed ? '球队负责人尚未完成服务号关注绑定' : '该球队尚未认领，入队申请通知未发送' })
+    return { success: true, data: { status: waitingStatus, code: claimed ? 'SERVICE_BINDING_REQUIRED' : 'TEAM_CLAIM_REQUIRED' } }
+  }
   const data = {}
   data[text(process.env.SXF_FOOTBALL_SERVICE_JOIN_PLAYER_KEY || 'thing1')] = { value: templateText(playerName, 20) }
   data[text(process.env.SXF_FOOTBALL_SERVICE_JOIN_TEAM_KEY || 'thing2')] = { value: templateText(teamName || text(event.teamName) || (team && (team.name || team.teamName)) || '球队', 20) }
