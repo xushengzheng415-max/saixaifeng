@@ -432,6 +432,6 @@ webLoginApi/uploadFile的staffUploadRights对football/team-registration-imports/
 
 PC TeamDetail/PlayerReviewQueue → rosterExceptionBoard（原赛事/机构/event.teams鉴权）→ playerReviewWorkflow。仅当前赛事参赛关系下读取队员，完整游标分页及范围预算失败显式报错；不新增竞技统计。队员通知持久化player_review_tasks，站内messages按账号去重；tournamentRegistrationFlow.playerReviewNotification验证限时HMAC后按已绑定账号发送，保留真实状态。H5 player-review → 既有servicePrivate自然人手机号会话 → 每次复核本人/监护人或未认领球队管理员权限；重新提交事务校验版本，保留原驳回原因与历史快照。源共享idcard-region.cjs生成webLoginApi部署副本，PC复用同源规则，不更改已有籍贯或稳定ID。发布事实见[专项记录](../releases/player-review-cycle-20261102.md)。
 
-## 2026-11-02 球队名单证件类型（待发布）
+## 2026-11-02 球队名单证件类型（已发布）
 
 TeamDetail新建/编辑→teamPlayerDocument→同源importPersonFields校验→既有零SDK updateRecord。证件类型与号码一同保存，未改身份保留原摘要，修改后标记待核验并移除旧摘要值，不修改稳定ID/历史名单或新增统计。与报名表编辑对齐。见[记录](../releases/team-player-document-type-20261102.md)。
