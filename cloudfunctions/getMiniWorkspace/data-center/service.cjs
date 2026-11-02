@@ -1,8 +1,6 @@
 'use strict'
 const { readAll, readByIds } = require('./reader.cjs')
 const { readPlayerSupportTotals } = require('./support.cjs')
-const scoreRuleStore=require('./score-rule-store.cjs')
-const valuation=require('./valuation.cjs')
 const id = value => value == null ? '' : String(value).trim()
 
 function error(code, message) { const value = new Error(message); value.code = code; return value }
@@ -32,123 +30,19 @@ function createDataService(db) {
     const teamId=id(profile?.teamId || profile?.teamCode)
     const team=options.team === undefined && teamId ? (await readByIds(db,'teams','_id',[teamId]))[0] : options.team
     const testIdentity=synthetic(profile)||synthetic(team), fullCareer=options.fullCareer===true
-    const {complete:coverageComplete,issues}=require('./player-card-snapshot.cjs').playerCardScope(result,playerId)
+    const coverageComplete=result.coverage.playerCardComplete?.[playerId] ?? result.coverage.cardScoreScopeComplete
+    const issues=[...result.issues]
     let support=options.support || {drops:null,status:'unverified',dataVersion:null}
     if(options.supportFailure)issues.push({code:'SUPPORT_READ_FAILED',playerId})
     if(fullCareer && options.support===undefined && !options.supportFailure){
       try{support=(await readPlayerSupportTotals(db,[playerId])).get(playerId)||support}
       catch(failure){issues.push({code:'SUPPORT_READ_FAILED',playerId})}
     }
-    const ruleContext=options.ruleContext||await scoreRuleStore.context(db,[playerId])
-    const built=createPlayerCardSnapshot(rows,{playerId,fullCareer,rules:ruleContext.rules,retainedTier:ruleContext.floorById.get(playerId),identityVerified:Boolean(profile),testIdentity,
+    const built=createPlayerCardSnapshot(rows,{playerId,fullCareer,identityVerified:Boolean(profile),testIdentity,
       matchCount:result.summary.matchCount,metricVersion:result.metricVersion,dataVersion:result.dataVersion,mode:result.scope.mode,
       coverageStatus:coverageComplete?'complete':'partial',supportDrops:support.drops,
       supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues})
-    return {...built,issues,ruleContext,...(options.includeLedger?{ledger:require('./points-ledger.cjs').buildPointsLedger(playerId,result.playerContributions||[],built.card,ruleContext.rules.parameters)}:{})}
-  }
-  // 转会评估身价：只读聚合结果，分位与年龄对比都在同组别内完成。
-  async function buildPlayerValuation(result, playerId, options = {}) {
-    const rows = (result.players || []).filter(row => row.playerId === playerId)
-    const profile = options.profile || {}
-    const params = options.ruleContext?.rules?.parameters || null
-    const divisionsById = options.divisionsById || {}
-    const profilesById = options.profilesById || {}
-    const divisionNameOf = value => id(divisionsById[id(value)]?.name || divisionsById[id(value)]?.divisionName)
-    const keyOf = row => divisionNameOf(row.divisionId) || id(row.divisionId || 'default')
-    const positionBucket = value => {
-      const text = id(value).toUpperCase()
-      if (/GK|GOALKEEPER|守门/.test(text)) return 'GK'
-      if (/DF|DEF|后卫/.test(text)) return 'DF'
-      if (/MF|MID|前卫|中场/.test(text)) return 'MF'
-      if (/FW|ST|CF|前锋/.test(text)) return 'FW'
-      return ''
-    }
-    const aggregate = list => {
-      const matchIds = new Set(), startIds = new Set()
-      let goals = 0, minutesPlayed = 0
-      for (const row of list) {
-        for (const matchId of row.matchIds || []) matchIds.add(id(matchId))
-        for (const matchId of row.startMatchIds || []) startIds.add(id(matchId))
-        goals += Number(row.metrics?.goals ?? row.observed?.goals ?? 0)
-        minutesPlayed += Number(row.metrics?.minutesPlayed ?? row.observed?.minutesPlayed ?? 0)
-      }
-      return { appearances: matchIds.size, starts: startIds.size, goals, minutesPlayed, totalMatches: matchIds.size }
-    }
-    const pointsOf = totals => {
-      if (!params) return null
-      const foundation = Number(params.appearancePoints || 0) * totals.appearances + Number(params.startPoints || 0) * totals.starts + Math.floor(totals.minutesPlayed / (Number(params.minutesPerPoint) || 1))
-      const goalBonus = Math.min(Number(params.goalPoints || 0) * totals.goals, Math.floor(foundation * (Number(params.goalCapPercent) || 0) / 100))
-      return foundation + goalBonus
-    }
-    const ageOf = pid => valuation.parseAge(profilesById[id(pid)]?.birthDate || profilesById[id(pid)]?.birthday)
-    const qualityOf = (totals, bucket) => bucket === 'GK' || !(totals.minutesPlayed > 0) ? null : totals.goals / (totals.minutesPlayed / 90)
-    // 核心三项（出场稳定性、生涯积分、表现质量）任一指标未覆盖完整即待评估，不按 0 计。
-    const FOUNDATION_METRICS = ['appearances', 'starts', 'minutesPlayed']
-    const coreComplete = rows.length > 0 && rows.every(row => FOUNDATION_METRICS.every(metric => row.coverage?.[metric] === 'complete'))
-    if (!coreComplete) return valuation.compute({ playerId, coreCoverage: 'pending', positionBucket: positionBucket(profile.position) })
-    const scopedKey = id(options.divisionId) ? divisionNameOf(options.divisionId) || id(options.divisionId) : ''
-    const counts = new Map()
-    for (const row of rows) counts.set(keyOf(row), (counts.get(keyOf(row)) || 0) + (row.matchIds || []).length)
-    let divisionKey = scopedKey && counts.has(scopedKey) ? scopedKey : ''
-    if (!divisionKey) {
-      let best = '', bestCount = -1
-      for (const [key, count] of counts) if (count > bestCount) { best = key; bestCount = count }
-      divisionKey = best
-    }
-    const rowsByPlayer = new Map()
-    for (const row of result.players || []) {
-      if (keyOf(row) !== divisionKey) continue
-      if (!rowsByPlayer.has(row.playerId)) rowsByPlayer.set(row.playerId, [])
-      rowsByPlayer.get(row.playerId).push(row)
-    }
-    const positionCounts = {}, teamIds = new Set()
-    for (const [pid, list] of rowsByPlayer) {
-      const bucket = positionBucket(profilesById[id(pid)]?.position)
-      if (bucket) positionCounts[bucket] = (positionCounts[bucket] || 0) + 1
-      for (const row of list) teamIds.add(id(row.teamId))
-    }
-    const inputFor = pid => {
-      const totals = aggregate(rowsByPlayer.get(pid) || [])
-      const bucket = positionBucket(profilesById[id(pid)]?.position)
-      return {
-        playerId: pid,
-        points: pointsOf(totals),
-        birthDate: profilesById[id(pid)]?.birthDate || profilesById[id(pid)]?.birthday,
-        qualityMetric: qualityOf(totals, bucket),
-        appearance: { appearances: totals.appearances, starts: totals.starts, minutesPlayed: totals.minutesPlayed, totalMatches: totals.totalMatches },
-        positionBucket: bucket,
-        scarcity: { positionCounts, teamCount: teamIds.size },
-        card: { supportDrops: pid === playerId ? options.supportDrops : undefined, limitedCardCount: 0 },
-        achievements: []
-      }
-    }
-    const peerIds = [...rowsByPlayer.keys()].filter(pid => pid !== playerId)
-    const peerPoints = [], peerAges = [], peerQuality = [], peerTotals = []
-    for (const pid of peerIds) {
-      const input = inputFor(pid)
-      if (input.points != null) peerPoints.push(input.points)
-      if (input.qualityMetric != null) peerQuality.push(input.qualityMetric)
-      const age = ageOf(pid)
-      if (age != null) peerAges.push(age)
-      const computed = valuation.compute(input)
-      if (computed.total != null) peerTotals.push(computed.total)
-    }
-    const snapshots = await readAll(db, 'player_valuations', { playerId: id(playerId) }).catch(() => [])
-    let latest = null
-    for (const row of snapshots) if (!latest || String(row.computedAt || '') > String(latest.computedAt || '')) latest = row
-    const totals = aggregate(rowsByPlayer.get(playerId) || rows)
-    const age = ageOf(playerId)
-    return valuation.compute({
-      ...inputFor(playerId),
-      coreCoverage: 'complete',
-      peerPoints,
-      peerAges,
-      peerQuality,
-      previousPoints: latest && latest.index != null ? latest.index : null,
-      previousTotal: latest && latest.total != null ? latest.total : null,
-      minor: age != null && age < 18,
-      peerTotals
-    })
+    return {...built,issues}
   }
   // One canonical career dataset per batch; identical scope and scoring rules to
   // playerCardForAuthorizedPlayer, without re-reading every match per player.
@@ -161,10 +55,9 @@ function createDataService(db) {
     const profileById=new Map(profiles.map(p=>[id(p._id),p]))
     let supportTotals=new Map(), supportFailure=false
     try{supportTotals=await readPlayerSupportTotals(db,playerIds)}catch(failure){supportFailure=true}
-    const ruleContext=await scoreRuleStore.context(db,playerIds)
     return new Map(await Promise.all(playerIds.map(async playerId=>{
       const profile=profileById.get(playerId)
-      const built=await buildPlayerCard(result,playerId,{fullCareer:true,profile,ruleContext,team:teamById.get(id(profile?.teamId||profile?.teamCode)),support:supportTotals.get(playerId)||{drops:null,status:'unverified',dataVersion:null},supportFailure})
+      const built=await buildPlayerCard(result,playerId,{fullCareer:true,profile,team:teamById.get(id(profile?.teamId||profile?.teamCode)),support:supportTotals.get(playerId)||{drops:null,status:'unverified',dataVersion:null},supportFailure})
       return [playerId,built.card]
     })))
   }
@@ -175,17 +68,6 @@ function createDataService(db) {
     if (!id(playerId)) throw error('DATA_SCOPE_INVALID', '缺少球员信息')
     const result = await query({ platformOwner:true, teamIds:[], tournamentIds:[] }, { playerId:id(playerId), mode:'official' })
     return result.playerCard
-  }
-  // Internal preview only: the registration service has validated the complete
-  // form and assigned the exact future player ID. No profile/card grant is
-  // persisted, and existing IDs must use the normal authorized career reader.
-  async function playerCardForAuthorizedRegistrationDraft(profile) {
-    const playerId=id(profile?._id)
-    if(!playerId||!id(profile?.teamId)||profile?.source!=='team_player_invite')throw error('DATA_SCOPE_INVALID','登记草稿无效')
-    if((await readByIds(db,'players','_id',[playerId])).length)throw error('DATA_SCOPE_INVALID','球员档案已存在，请重新进入认领')
-    const result=await query({platformOwner:true,teamIds:[],tournamentIds:[]},{playerId,mode:'official'})
-    const built=await buildPlayerCard(result,playerId,{profile,fullCareer:true})
-    return {...built.card,registrationPreview:true}
   }
   async function catalog(actor) {
     if(actor.public)throw error('DATA_FORBIDDEN','公开目录须通过赛事公开接口读取')
@@ -211,7 +93,7 @@ function createDataService(db) {
     }
   }
 
-  async function query(actor, input = {}, options = {}) {
+  async function query(actor, input = {}) {
     const scope = validateScope(input)
     const teamIds = new Set((actor.teamIds || []).map(String)), tournamentIds = new Set((actor.tournamentIds || []).map(String))
     if (scope.teamId && !actor.platformOwner && !teamIds.has(scope.teamId)) throw error('DATA_FORBIDDEN', '无权查看该球队的数据')
@@ -224,8 +106,7 @@ function createDataService(db) {
     const { inScope, aggregateStatistics, resultState, effectiveEvents, eventType, matchParticipantIds, synthetic, matchGroupName } = await import('./statistics.mjs')
     matches = [...new Map(matches.filter(row => inScope(row,scope)).map(row => [id(row._id),row])).values()]
     if (actor.matchIds) { const allowed = new Set(actor.matchIds); matches = matches.filter(row => allowed.has(id(row._id))) }
-    // careerView：生涯口径已在上面按授权赛事/球队收窄，不再要求球员当前属于某支球队。
-    if (scope.playerId && !actor.platformOwner && !options.careerView) {
+    if (scope.playerId && !actor.platformOwner) {
       const profile = (await readByIds(db,'players','_id',[scope.playerId]))[0]
       const occurs = matches.some(match => ['home','away'].some(side => {
         const lineup = match[side + 'Lineup'] || match.lineups?.[side] || {}
@@ -234,7 +115,7 @@ function createDataService(db) {
       if (!(profile && teamIds.has(id(profile.teamId || profile.teamCode))) && !occurs) throw error('DATA_FORBIDDEN', '无权查看该球员的数据')
     }
     const matchIds = matches.map(row => row._id)
-    let events = await readByIds(db,'match_events','matchId',matchIds)
+    const events = await readByIds(db,'match_events','matchId',matchIds)
     const lineups = await readByIds(db,'match_lineup_snapshots','matchId',matchIds)
     const lineupByMatchSide = new Map()
     for (const lineup of lineups) {
@@ -259,14 +140,6 @@ function createDataService(db) {
     ])
     const divisionsById = Object.fromEntries(divisions.map(row => [id(row._id || row.id),row]))
     const tournamentsById = Object.fromEntries(tournaments.map(row => [id(row._id || row.id),row]))
-    // 轻量模式赛事是纯工具：比赛/比分/结果不进入数据中心统一统计、生涯与奖项口径。
-    // 只在查询入口按赛事显式标记（tournaments.lightweightMode）过滤，不改 shared 内统计与排名算法本体。
-    const lightweightTournamentIds = new Set(tournaments.filter(row => row.lightweightMode === true).map(row => id(row._id || row.id)))
-    if (lightweightTournamentIds.size) {
-      matches = matches.filter(row => !lightweightTournamentIds.has(id(row.tournamentId)))
-      const keptMatchIds = new Set(matches.map(row => id(row._id)))
-      events = events.filter(row => keptMatchIds.has(id(row.matchId || row.match_id)))
-    }
     const teamsById = Object.fromEntries(matchTeamProfiles.map(row => [id(row._id),row]))
     const participantIds = [...new Set(matches.flatMap(match => [...matchParticipantIds(match,events)]))]
     const matchPlayerProfiles = await readByIds(db,'players','_id',participantIds)
@@ -283,7 +156,7 @@ function createDataService(db) {
     const teamById = new Map(matchTeamProfiles.map(row => [id(row._id),row]))
     result.teams = result.teams.map(row => ({ ...row, teamName:id(teamById.get(row.teamId)?.name || teamById.get(row.teamId)?.teamName) || '历史球队' }))
     const { buildStandings } = require('./standings.cjs')
-    const normalizedMatches = matches.map(match => {
+    result.standings = buildStandings(matches.map(match => {
       const matchEvents = effectiveEvents(match,events)
       const cardCount = (side,types) => matchEvents.filter(event => types.includes(eventType(event)) && (event.teamSide === side || id(event.teamId) === id(match[side + 'TeamId']))).length
       const phase = id(match.phase || match.stageType || match.matchType).toLowerCase()
@@ -296,19 +169,7 @@ function createDataService(db) {
         resultStatus:state === 'official' ? 'approved' : state === 'provisional' ? 'pending_review' : 'not_submitted',
         standingsEligible:state === 'official' && match.standingsEligible !== false && match.isBye !== true && !['knockout','cup','placement','final','semifinal'].includes(phase) && (match.standingsEligible === true || ['group','league','round_robin'].includes(phase)),
         yellowHome:cardCount('home',['yellow_card','second_yellow']),yellowAway:cardCount('away',['yellow_card','second_yellow']),redHome:cardCount('home',['red_card','second_yellow']),redAway:cardCount('away',['red_card','second_yellow']) }
-    })
-    result.standings = buildStandings(normalizedMatches, divisionsById)
-    if (scope.tournamentId) {
-      const eventsByMatchId = Object.fromEntries(normalizedMatches.map(row => [id(row._id || row.id), effectiveEvents(row, events)]))
-      const awardOverrides = await readAll(db, 'award_overrides', { tournamentId: id(scope.tournamentId) }).catch(() => [])
-      result.awards = require('./awards.cjs').compute({
-        matches: normalizedMatches,
-        eventsByMatchId,
-        standings: result.standings,
-        divisions: divisions.map(row => ({ id: id(row._id || row.id), name: row.name })),
-        overrides: awardOverrides
-      })
-    }
+    }),divisionsById)
     const presentation=require('./presentation.cjs')
     result.rankings=await presentation.rankings(result)
     result.records=await presentation.journal({matches,events,actor,scope,context:{teamsById,tournamentsById,playersById,events,requireOriginEvidence:true,requirePlayerOriginEvidence:true}})
@@ -318,30 +179,18 @@ function createDataService(db) {
     result.coverage.accessScope = result.accessScope
     result.summary.playerCount = new Set(result.players.map(row => row.playerId)).size
     if (scope.playerId) {
-      // 不带赛事/球队/组别等范围即为生涯口径，按账号可读范围累计，不再要求平台负责人。
-      const careerScope = scope.mode === 'official' && !actor.public && !['teamId','tournamentId','divisionId','groupName','matchId','from','to'].some(field => scope[field])
-      const built=await buildPlayerCard(result,scope.playerId,{fullCareer:careerScope,includeLedger:options.includeLedger===true})
+      const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','groupName','matchId','from','to'].some(field => scope[field])
+      const built=await buildPlayerCard(result,scope.playerId,{fullCareer})
       result.playerTotal=built.total
       result.playerCard=built.card
-      result.valuation=await buildPlayerValuation(result,scope.playerId,{
-        profile:playersById[id(scope.playerId)],
-        profilesById:playersById,
-        divisionsById,
-        ruleContext:built.ruleContext,
-        supportDrops:built.card?.supportDrops,
-        divisionId:scope.divisionId
-      })
-      if(options.includeLedger)result.pointsLedger=built.ledger
       result.issues=built.issues
     }
     if (!actor.platformOwner) {
       const visible = new Set(result.players.map(row => row.playerId))
-      for(const field of ['playerCardComplete','playerCardMatchIds']) result.coverage[field] = Object.fromEntries(Object.entries(result.coverage[field] || {}).filter(([playerId]) => visible.has(playerId)))
+      result.coverage.playerCardComplete = Object.fromEntries(Object.entries(result.coverage.playerCardComplete || {}).filter(([playerId]) => visible.has(playerId)))
     }
-    delete result.playerContributions
     return { success:true, ...result }
   }
-  async function playerPointsLedgerForAuthorizedPlayer(playerId){const result=await query({platformOwner:true},{playerId:id(playerId),mode:'official'},{includeLedger:true});return result.pointsLedger}
-  return { query, catalog, playerCardForAuthorizedPlayer, playerCardForAuthorizedRegistrationDraft, playerCardsForAuthorizedPlayers,playerPointsLedgerForAuthorizedPlayer }
+  return { query, catalog, playerCardForAuthorizedPlayer, playerCardsForAuthorizedPlayers }
 }
 module.exports = { createDataService, validateScope, error }

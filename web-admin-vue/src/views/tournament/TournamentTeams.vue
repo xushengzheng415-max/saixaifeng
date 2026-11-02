@@ -1820,7 +1820,10 @@ async function onAiLogoSelected(payload) {
         logoAiProvider: data.logoAiProvider || '',
         logoAiGeneratedAt: data.logoAiGeneratedAt || '',
         logoAiPrompt: data.logoAiPrompt || '',
-        logoAiCompliance: data.logoAiCompliance || ''
+        logoAiCompliance: data.logoAiCompliance || '',
+        logoBackgroundMethod: data.logoBackgroundMethod || '',
+        logoBackgroundStatus: data.logoBackgroundStatus || '',
+        logoAlphaTransparentRatio: data.logoAlphaTransparentRatio ?? null
       }
     }
     aiLogoVisible.value = false

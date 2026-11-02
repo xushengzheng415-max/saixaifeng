@@ -49,9 +49,12 @@
         >
           <div class="ai-logo-canvas checkerboard">
             <img :src="item.url" :alt="`候选队徽 ${item.index}`" crossorigin="anonymous" />
-            <span v-if="!item.backgroundRemoved" class="ai-logo-flag">白底原图</span>
-            <span v-else class="ai-logo-flag removed">已去底</span>
+            <span v-if="!item.backgroundRemoved" class="ai-logo-flag">白底（未抠图）</span>
+            <span v-else class="ai-logo-flag removed">已抠图</span>
           </div>
+          <p v-if="!item.backgroundRemoved" class="ai-logo-note">
+            {{ item.backgroundRemovalError || '服务端未返回抠图原因' }}
+          </p>
           <div class="ai-logo-card-actions">
             <el-button
               size="small"
@@ -300,14 +303,112 @@ async function fetchCandidateFile(candidate) {
 }
 
 /**
- * 居中裁成正方形并生成多档尺寸（512/256/128）
+ * 与成人模式队徽链路一致：先铺白底压缩到最长边 ≤500（对应 RemoveBgProcessor.compressImage）。
+ * 先铺白底再绘制的目的与那边相同：避免透明 PNG 的白色在 Canvas 预乘后丢失 RGB，
+ * 后续本地抠白只移除与外边缘连通的白底，队徽内部白色仍然保留。
+ */
+function compressToMaxSide(file, maxSide = 500) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    const url = URL.createObjectURL(file)
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      let { width, height } = image
+      if (width > maxSide || height > maxSide) {
+        const ratio = Math.min(maxSide / width, maxSide / height)
+        width = Math.round(width * ratio)
+        height = Math.round(height * ratio)
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, width)
+      canvas.height = Math.max(1, height)
+      const context = canvas.getContext('2d')
+      context.fillStyle = '#fff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob(blob => {
+        if (!blob) {
+          reject(new Error('候选图压缩失败'))
+          return
+        }
+        resolve(new File([blob], 'ai-team-logo.png', { type: 'image/png' }))
+      }, 'image/png')
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('候选图加载失败'))
+    }
+    image.src = url
+  })
+}
+
+/**
+ * 预留 8% 安全边距并转成正方形（对应 RemoveBgProcessor.addLogoSafeArea）
+ */
+function addLogoSafeArea(file, paddingRatio = 0.08) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    const url = URL.createObjectURL(file)
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      const longestSide = Math.max(image.width, image.height)
+      const canvasSide = Math.max(1, Math.ceil(longestSide / (1 - paddingRatio * 2)))
+      const canvas = document.createElement('canvas')
+      canvas.width = canvasSide
+      canvas.height = canvasSide
+      const context = canvas.getContext('2d')
+      context.clearRect(0, 0, canvasSide, canvasSide)
+      context.drawImage(image, Math.round((canvasSide - image.width) / 2), Math.round((canvasSide - image.height) / 2))
+      canvas.toBlob(blob => {
+        if (!blob) {
+          reject(new Error('队徽安全边距处理失败'))
+          return
+        }
+        resolve(new File([blob], 'ai-team-logo.png', { type: 'image/png' }))
+      }, 'image/png')
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('队徽安全边距处理失败'))
+    }
+    image.src = url
+  })
+}
+
+/**
+ * 统计透明像素占比，用于校验抠图是否真的生效：
+ * < 3% 视为没抠掉背景（仍是白底），> 97% 视为抠成了空图（如 body_seg 对图形输出全透明）。
+ */
+async function computeAlphaRatio(file) {
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const image = await loadImage(objectUrl)
+    const canvas = document.createElement('canvas')
+    canvas.width = image.width
+    canvas.height = image.height
+    const context = canvas.getContext('2d')
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(image, 0, 0)
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+    const total = canvas.width * canvas.height
+    let transparent = 0
+    for (let index = 3; index < data.length; index += 4) {
+      if (data[index] < 8) transparent += 1
+    }
+    return { transparentRatio: total ? transparent / total : 0, total }
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+/**
+ * 按 512/256/128 生成多档尺寸。此时图片已带 8% 安全边距且为正方形，等比缩放即可。
  */
 async function renderSquareSizes(file) {
   const objectUrl = URL.createObjectURL(file)
   try {
     const image = await loadImage(objectUrl)
-    const side = Math.min(image.width, image.height)
-    if (!side) throw new Error('候选图尺寸无效')
+    if (!image.width || !image.height) throw new Error('候选图尺寸无效')
     const output = []
     for (const size of logoSizes) {
       const canvas = document.createElement('canvas')
@@ -315,17 +416,7 @@ async function renderSquareSizes(file) {
       canvas.height = size
       const context = canvas.getContext('2d')
       context.clearRect(0, 0, size, size)
-      context.drawImage(
-        image,
-        Math.max(0, Math.round((image.width - side) / 2)),
-        Math.max(0, Math.round((image.height - side) / 2)),
-        side,
-        side,
-        0,
-        0,
-        size,
-        size
-      )
+      context.drawImage(image, 0, 0, image.width, image.height, 0, 0, size, size)
       const dataUrl = canvas.toDataURL('image/png')
       output.push({ size, dataUrl, blob: dataUrlToBlob(dataUrl) })
     }
@@ -343,13 +434,27 @@ async function applyCandidate(candidate) {
   try {
     let file = await fetchCandidateFile(candidate)
     if (!file) throw new Error('无法读取候选图，请重试或手动上传队徽')
+    // 与成人模式队徽链路一致：先压到 500 内，服务端未抠图时再做本地抠白。
+    file = await compressToMaxSide(file, 500)
+    let backgroundMethod = 'removeLogoBg-object_segment'
     if (!candidate.backgroundRemoved) {
+      backgroundMethod = 'white-bg'
       const stripped = await removeWhiteBackground(file)
       if (stripped?.success && stripped.data) {
         file = new File([dataUrlToBlob(stripped.data)], `ai-team-logo-${Date.now()}.png`, { type: 'image/png' })
+        backgroundMethod = 'local-white-bg'
       }
     }
-    const sizes = await renderSquareSizes(file)
+    const alpha = await computeAlphaRatio(file)
+    const transparentRatio = Number(alpha.transparentRatio.toFixed(4))
+    // 3%~97% 之外视为抠图无效（白底未抠掉或抠成空图），必须提示，不能伪装成透明效果。
+    const cutoutVerified = transparentRatio >= 0.03 && transparentRatio <= 0.97
+    if (!cutoutVerified) {
+      notices.value = [...new Set([...notices.value,
+        `候选图透明像素占比 ${(transparentRatio * 100).toFixed(1)}%，未达到可用抠图标准，写入后将保留白底`])]
+    }
+    const withSafeArea = await addLogoSafeArea(file)
+    const sizes = await renderSquareSizes(withSafeArea)
     if (!sizes.length) throw new Error('队徽裁剪失败')
     const uploaded = {}
     let primary = null
@@ -379,11 +484,17 @@ async function applyCandidate(candidate) {
       logoAiGeneratedAt: new Date().toISOString(),
       logoAiPrompt: candidate.prompt || '',
       logoAiCompliance: aiCompliance.value || 'AI 生成图像，仅用于本赛事球队展示',
+      logoBackgroundMethod: backgroundMethod,
+      logoBackgroundStatus: cutoutVerified ? 'transparent' : 'not_cutout',
+      logoBackgroundRemovalError: candidate.backgroundRemovalError || '',
+      logoAlphaTransparentRatio: transparentRatio,
       updateTime: new Date()
     }
     appliedId.value = candidate.id
     emit('select', { candidate, payload })
-    ElMessage.success('队徽已生成并写入，记得保存球队信息')
+    ElMessage.success(cutoutVerified
+      ? '队徽已生成（透明底）并写入，记得保存球队信息'
+      : '队徽已生成（白底未抠图）并写入，建议补一张透明 PNG')
   } catch (err) {
     console.error('[AI队徽] 写入失败:', err)
     errorMessage.value = err.message || '队徽处理失败，请重试'
@@ -423,6 +534,7 @@ async function applyCandidate(candidate) {
 .ai-logo-flag { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 8px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 12px; }
 .ai-logo-flag.removed { background: rgba(22, 163, 74, .75); }
 .ai-logo-card-actions { display: flex; justify-content: center; }
+.ai-logo-note { margin: 0; color: #b45309; font-size: 12px; line-height: 1.4; word-break: break-all; }
 .ai-logo-loading { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; background: #f4f8ff; color: #1f2d3d; }
 .ai-logo-loading small { display: block; color: #909399; font-size: 12px; margin-top: 2px; }
 .ai-logo-alert { margin: 0; }

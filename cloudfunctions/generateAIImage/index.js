@@ -2,16 +2,10 @@
 const tcb = require("@cloudbase/node-sdk")
 const https = require('https')
 const http = require('http')
-const querystring = require('querystring')
 
-// 队徽 AI 生成：百度通用物体分割（object_segment）用于去底。
-// 环境变量缺失时不阻塞生成，改为返回白底原图并标记 backgroundRemoved=false。
-const BAIDU_API_KEY = process.env.BAIDU_API_KEY || ''
-const BAIDU_SECRET_KEY = process.env.BAIDU_SECRET_KEY || ''
-const BAIDU_TOKEN_URL = '/oauth/2.0/token'
-const BAIDU_OBJECT_SEGMENT_URL = '/rest/2.0/image-classify/v1/object_segment'
-const BAIDU_HOST = 'aip.baidubce.com'
-let baiduTokenCache = { token: '', expireAt: 0 }
+// 队徽 AI 生成：去底统一复用既有 removeLogoBg 云函数（百度通用物体分割 object_segment）。
+// 本函数不读取、不配置、不搬运任何百度凭据，密钥只保留在 removeLogoBg 的线上配置内。
+const LOGO_CUTOUT_FUNCTION = 'removeLogoBg'
 
 /**
  * 下载图片到 Buffer
@@ -163,70 +157,43 @@ async function generateHunyuanImage(event) {
 }
 
 /**
- * 百度智能云表单请求（避免引入 axios 依赖）
+ * 队徽去底：复用既有、已配置百度密钥的 removeLogoBg 云函数（object_segment 通用物体分割）。
+ * 本函数不持有百度凭据；removeLogoBg 的密钥/接口权限归其自身配置维护。
+ * 失败时抛出带原因的错误，由调用方显式标记「已生成但未抠图」，不静默回退白底。
  */
-function baiduFormRequest(apiPath, body) {
-  return new Promise((resolve, reject) => {
-    const payload = String(body || '')
-    const req = https.request({
-      host: BAIDU_HOST,
-      path: apiPath,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(payload)
-      }
-    }, res => {
-      let raw = ''
-      res.on('data', chunk => { raw += chunk })
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(raw))
-        } catch (err) {
-          reject(new Error('百度接口返回非 JSON 内容'))
-        }
-      })
-    })
-    req.on('error', reject)
-    req.setTimeout(30000, () => req.destroy(new Error('百度接口请求超时')))
-    req.write(payload)
-    req.end()
+async function removeLogoBackgroundViaFunction(buffer, tokenRetried = false) {
+  if (!buffer || !buffer.length) throw new Error('待去底图片为空')
+  const cloud = require('wx-server-sdk')
+  cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
+  const res = await cloud.callFunction({
+    name: LOGO_CUTOUT_FUNCTION,
+    data: { action: 'removeBackground', imageBase64: buffer.toString('base64') }
   })
-}
-
-async function getBaiduAccessToken(forceRefresh = false) {
-  const now = Date.now()
-  if (!forceRefresh && baiduTokenCache.token && now < baiduTokenCache.expireAt) return baiduTokenCache.token
-  const body = querystring.stringify({
-    grant_type: 'client_credentials',
-    client_id: BAIDU_API_KEY,
-    client_secret: BAIDU_SECRET_KEY
-  })
-  const data = await baiduFormRequest(BAIDU_TOKEN_URL, body)
-  if (!data || !data.access_token) throw new Error((data && data.error_description) || '获取百度 Access Token 失败')
-  const expiresIn = Number(data.expires_in || 2592000)
-  baiduTokenCache = { token: data.access_token, expireAt: now + Math.max(300, expiresIn - 3600) * 1000 }
-  return baiduTokenCache.token
+  const result = (res && res.result) || {}
+  if (!result.success || !result.data) {
+    const reason = String(result.message || 'removeLogoBg 未返回透明图')
+    // 百度 Token 失效类错误重试一次；其余错误（如接口未开通）直接带原因返回
+    if (!tokenRetried && /110|111|token/i.test(reason)) {
+      return await removeLogoBackgroundViaFunction(buffer, true)
+    }
+    throw new Error(reason)
+  }
+  const transparent = Buffer.from(String(result.data).replace(/^data:image\/\w+;base64,/, ''), 'base64')
+  if (!transparent.length) throw new Error('removeLogoBg 返回空图片')
+  return transparent
 }
 
 /**
- * 用百度通用物体分割（object_segment）给队徽去底，返回透明 PNG Buffer
+ * 按文件头判断真实图片格式。
+ * 混元生图返回的链接实际是 JPEG，若按 .png 落库会造成扩展名与内容不符，
+ * 前端与下游按扩展名判断格式时容易出错。
  */
-async function removeLogoBackgroundWithBaidu(buffer, tokenRetried = false) {
-  const token = await getBaiduAccessToken(false)
-  const body = `image=${encodeURIComponent(buffer.toString('base64'))}`
-  const data = await baiduFormRequest(`${BAIDU_OBJECT_SEGMENT_URL}?access_token=${encodeURIComponent(token)}`, body)
-  if (data && data.error_code) {
-    // 111/110 为 Token 失效类错误，刷新一次后重试
-    if (!tokenRetried && [110, 111].includes(Number(data.error_code))) {
-      baiduTokenCache = { token: '', expireAt: 0 }
-      return await removeLogoBackgroundWithBaidu(buffer, true)
-    }
-    throw new Error(`百度抠图失败 code=${data.error_code} ${data.error_msg || ''}`)
-  }
-  const foreground = (data && data.foreground) || ''
-  if (!foreground) throw new Error('百度抠图未返回透明图')
-  return Buffer.from(foreground, 'base64')
+function detectImageExtension(buffer) {
+  if (!buffer || !buffer.length) return 'png'
+  if (buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'png'
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) return 'jpg'
+  if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return 'webp'
+  return 'png'
 }
 
 const LOGO_STYLES = {
@@ -292,7 +259,7 @@ async function generateTeamLogoCandidates(options = {}) {
   const candidates = []
   const failures = []
   const notices = []
-  const baiduReady = Boolean(BAIDU_API_KEY && BAIDU_SECRET_KEY)
+  const cutoutErrors = []
 
   for (let index = 0; index < count; index += 1) {
     const prompt = buildTeamLogoPrompt(teamName, style, color, index)
@@ -303,19 +270,18 @@ async function generateTeamLogoCandidates(options = {}) {
       let finalBuffer = sourceBuffer
       let backgroundRemoved = false
       let backgroundMethod = 'none'
-      if (baiduReady) {
-        try {
-          finalBuffer = await withBackoffRetry('队徽去底', () => removeLogoBackgroundWithBaidu(sourceBuffer), { maxAttempts: 2, baseDelayMs: 2000 })
-          backgroundRemoved = true
-          backgroundMethod = 'baidu-object-segment'
-        } catch (err) {
-          console.warn('[队徽去底] 失败，回退白底原图:', err.message)
-          notices.push('自动去底失败，已返回白底原图，可手动上传透明 PNG')
-        }
-      } else {
-        notices.push('未配置百度抠图密钥，已返回白底原图，可手动上传透明 PNG')
+      let backgroundRemovalError = ''
+      try {
+        finalBuffer = await withBackoffRetry('队徽去底', () => removeLogoBackgroundViaFunction(sourceBuffer), { maxAttempts: 2, baseDelayMs: 2000 })
+        backgroundRemoved = true
+        backgroundMethod = 'removeLogoBg-object_segment'
+      } catch (err) {
+        backgroundRemovalError = String((err && err.message) || '服务端抠图失败')
+        cutoutErrors.push(backgroundRemovalError)
+        console.warn('[队徽去底] 失败，已生成但未抠图:', backgroundRemovalError)
       }
-      const uploaded = await uploadGeneratedBuffer(finalBuffer, 'team-logos/ai', 'png')
+      const ext = detectImageExtension(finalBuffer)
+      const uploaded = await uploadGeneratedBuffer(finalBuffer, 'team-logos/ai', ext)
       if (!uploaded || !uploaded.url) throw new Error('候选图上传失败')
       candidates.push({
         id: `candidate-${Date.now()}-${index + 1}`,
@@ -328,8 +294,12 @@ async function generateTeamLogoCandidates(options = {}) {
         fileID: uploaded.fileID,
         sourceUrl: imageUrl,
         aspectRatio: '1:1',
+        mimeType: ext === 'jpg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png',
         backgroundRemoved,
         backgroundMethod,
+        backgroundRemovalProvider: LOGO_CUTOUT_FUNCTION,
+        backgroundRemovalError,
+        backgroundRemovalStatus: backgroundRemoved ? 'removed' : 'generated_not_cutout',
         aiGenerated: true
       })
     } catch (err) {
@@ -340,9 +310,16 @@ async function generateTeamLogoCandidates(options = {}) {
 
   const allFailed = candidates.length === 0
   const anyRateLimited = failures.some(item => item.rateLimited)
+  const removedCount = candidates.filter(item => item.backgroundRemoved).length
+  const notRemovedCount = candidates.length - removedCount
+  if (notRemovedCount > 0) {
+    notices.push(`已生成 ${notRemovedCount} 张候选队徽但服务端未能抠图（${[...new Set(cutoutErrors)].join('；') || '未返回原因'}），当前为白底原图，需人工补透明 PNG 或等抠图接口开通后重试`)
+  }
   const message = allFailed
     ? (anyRateLimited ? 'AI 生图接口当前较繁忙（限流），请稍后重试' : 'AI 队徽生成失败，请重试')
-    : `已生成 ${candidates.length}/${count} 张候选队徽`
+    : (notRemovedCount > 0
+      ? `已生成 ${candidates.length}/${count} 张候选队徽，其中 ${notRemovedCount} 张未完成抠图（白底）`
+      : `已生成 ${candidates.length}/${count} 张候选队徽，已完成透明化`)
 
   return {
     success: !allFailed,
@@ -353,7 +330,12 @@ async function generateTeamLogoCandidates(options = {}) {
       candidates,
       failures,
       notices: [...new Set(notices)],
-      backgroundRemovalAvailable: baiduReady,
+      backgroundRemovalProvider: LOGO_CUTOUT_FUNCTION,
+      backgroundRemovalAvailable: removedCount > 0,
+      backgroundRemovalRequested: candidates.length,
+      backgroundRemovalSucceeded: removedCount,
+      backgroundRemovalFailed: notRemovedCount,
+      backgroundRemovalError: cutoutErrors[0] || '',
       aiGenerated: true,
       aiProvider: 'hunyuan-image',
       aiModel: 'hunyuan-image',

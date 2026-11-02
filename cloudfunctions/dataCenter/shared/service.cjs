@@ -219,6 +219,14 @@ function createDataService(db) {
     let matches
     if (scope.tournamentId && (actor.platformOwner || tournamentIds.has(scope.tournamentId))) matches = await readAll(db,'matches',{ tournamentId:scope.tournamentId })
     else if (scope.teamId) matches = [...await readAll(db,'matches',{ homeTeamId:scope.teamId }), ...await readAll(db,'matches',{ awayTeamId:scope.teamId })]
+    // 轻量模式赛事是纯工具（主办方只记比分、做排名）：不参与跨赛事聚合。
+    // 只在“平台级、且未限定单赛事”的跨赛事聚合入口按 tournaments.lightweightMode 显式排除；
+    // 单赛事 scope（含该轻量赛事自己的查询）与 resultCenter 内部口径不受影响，
+    // shared 内的统计与排名算法本体不做任何改动。
+    else if (actor.platformOwner && !scope.tournamentId) {
+      const lightweightIds = new Set((await readAll(db,'tournaments')).filter(row => row.lightweightMode === true).map(row => id(row._id)))
+      matches = (await readAll(db,'matches')).filter(row => !lightweightIds.has(id(row.tournamentId)))
+    }
     else if (actor.platformOwner) matches = await readAll(db,'matches')
     else matches = [...await readByIds(db,'matches','tournamentId',[...tournamentIds]), ...await readByIds(db,'matches','homeTeamId',[...teamIds]), ...await readByIds(db,'matches','awayTeamId',[...teamIds])]
     const { inScope, aggregateStatistics, resultState, effectiveEvents, eventType, matchParticipantIds, synthetic, matchGroupName } = await import('./statistics.mjs')
@@ -234,7 +242,7 @@ function createDataService(db) {
       if (!(profile && teamIds.has(id(profile.teamId || profile.teamCode))) && !occurs) throw error('DATA_FORBIDDEN', '无权查看该球员的数据')
     }
     const matchIds = matches.map(row => row._id)
-    let events = await readByIds(db,'match_events','matchId',matchIds)
+    const events = await readByIds(db,'match_events','matchId',matchIds)
     const lineups = await readByIds(db,'match_lineup_snapshots','matchId',matchIds)
     const lineupByMatchSide = new Map()
     for (const lineup of lineups) {
@@ -259,14 +267,6 @@ function createDataService(db) {
     ])
     const divisionsById = Object.fromEntries(divisions.map(row => [id(row._id || row.id),row]))
     const tournamentsById = Object.fromEntries(tournaments.map(row => [id(row._id || row.id),row]))
-    // 轻量模式赛事是纯工具：比赛/比分/结果不进入数据中心统一统计、生涯与奖项口径。
-    // 只在查询入口按赛事显式标记（tournaments.lightweightMode）过滤，不改 shared 内统计与排名算法本体。
-    const lightweightTournamentIds = new Set(tournaments.filter(row => row.lightweightMode === true).map(row => id(row._id || row.id)))
-    if (lightweightTournamentIds.size) {
-      matches = matches.filter(row => !lightweightTournamentIds.has(id(row.tournamentId)))
-      const keptMatchIds = new Set(matches.map(row => id(row._id)))
-      events = events.filter(row => keptMatchIds.has(id(row.matchId || row.match_id)))
-    }
     const teamsById = Object.fromEntries(matchTeamProfiles.map(row => [id(row._id),row]))
     const participantIds = [...new Set(matches.flatMap(match => [...matchParticipantIds(match,events)]))]
     const matchPlayerProfiles = await readByIds(db,'players','_id',participantIds)
