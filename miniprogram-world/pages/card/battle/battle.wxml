@@ -5,7 +5,7 @@
 
   <view class="vs-wrap" wx:if="{{isVs}}">
     <view class="vs-head">
-      <text class="vs-eyebrow">新手场 · 同城</text>
+      <text class="vs-eyebrow">新手场 · 本赛事</text>
       <text class="vs-title">轻对战</text>
       <text class="vs-sub">同一阵容 + 同一对手 = 同一结果</text>
     </view>

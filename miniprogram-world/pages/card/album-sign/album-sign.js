@@ -42,18 +42,39 @@ Page({
     revealVisible: false,
     revealCard: {},
     revealQuotaText: '',
-    toastText: ''
+    toastText: '',
+    blocked: false,
+    gateTitle: '',
+    gateText: '',
+    scopeText: ''
   },
 
   onShow: function () {
-    this.loadAlbum(this.data.activeKind)
+    this.loadAccess()
+  },
+
+  /** 玩法准入：只对已认领球员卡、且认领赛事与本赛事一致的用户开放 */
+  loadAccess: function () {
+    var self = this
+    api.getAccess().then(function (access) {
+      self.setData({
+        blocked: !access.allowed,
+        gateTitle: access.titleText || '',
+        gateText: access.reasonText || '',
+        scopeText: access.reasonText || ''
+      })
+      if (!access.allowed) return
+      self.loadAlbum(self.data.activeKind)
+    }).catch(function (err) {
+      self.showToast(err.message || '卡册加载失败')
+    })
   },
 
   onUnload: function () {
     this.clearToast()
   },
 
-  /** 切换三类卡分区：真实卡保留签约，虚拟卡与自制卡只读。 */
+  /** 切换卡分区：真实球员卡保留签约，虚拟卡只读。 */
   onSwitchKind: function (e) {
     var key = e.currentTarget.dataset.key
     if (!key || key === this.data.activeKind) return

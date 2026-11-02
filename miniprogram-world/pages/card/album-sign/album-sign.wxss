@@ -300,6 +300,36 @@
   color: #8b93a3;
 }
 
+/* 玩法准入未开放时的说明面板 */
+.gate-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 44rpx 30rpx;
+}
+
+.gate-title {
+  font-size: 30rpx;
+  color: #e8ecf4;
+  letter-spacing: 1rpx;
+}
+
+.gate-text {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #b9c1d0;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.gate-sub {
+  margin-top: 14rpx;
+  font-size: 21rpx;
+  color: #8b93a3;
+  text-align: center;
+  line-height: 1.6;
+}
+
 .last-signed {
   margin-top: 12rpx;
   text-align: center;

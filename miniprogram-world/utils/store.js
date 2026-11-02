@@ -36,11 +36,19 @@ function defaultState() {
     userId: 'demo_natural_person',
     cityCode: mock.CITY.code,
     cityName: mock.CITY.name,
+    eventId: mock.EVENT.eventId,
+    eventName: mock.EVENT.name,
+    /* 玩法准入：只有已认领球员卡（且认领赛事与本赛事一致）的用户才开放 */
+    claim: {
+      claimed: !!mock.CLAIM.claimed,
+      playerId: mock.CLAIM.playerId,
+      eventId: mock.CLAIM.eventId,
+      statusText: mock.CLAIM.statusText
+    },
     mainPlayerId: 'p_1001',
     ownedIds: ['p_1001', 'p_1004', 'p_1007', 'p_1003'],
-    /* 虚拟卡与自制卡单独成册：不进阵容、不参与评估 */
+    /* 虚拟卡单独成册：不进阵容、不参与评估 */
     ownedVirtualIds: ['v_2001', 'v_2002'],
-    ownedFanIds: ['f_3001'],
     cursor: 0,
     quota: {
       dateKey: todayKey(),
@@ -93,14 +101,21 @@ function mergeState(raw) {
   var base = defaultState()
   if (!raw || typeof raw !== 'object' || raw.version !== STATE_VERSION) return base
   var state = base
-  var keys = ['userId', 'cityCode', 'cityName', 'mainPlayerId', 'cursor', 'rosterSize', 'lastSignedName', 'lastSignAt']
+  var keys = ['userId', 'cityCode', 'cityName', 'eventId', 'eventName', 'mainPlayerId', 'cursor', 'rosterSize', 'lastSignedName', 'lastSignAt']
   for (var i = 0; i < keys.length; i++) {
     var k = keys[i]
     if (raw[k] !== undefined) state[k] = raw[k]
   }
   if (Array.isArray(raw.ownedIds)) state.ownedIds = raw.ownedIds.slice()
   if (Array.isArray(raw.ownedVirtualIds)) state.ownedVirtualIds = raw.ownedVirtualIds.slice()
-  if (Array.isArray(raw.ownedFanIds)) state.ownedFanIds = raw.ownedFanIds.slice()
+  if (raw.claim && typeof raw.claim === 'object') {
+    state.claim = {
+      claimed: !!raw.claim.claimed,
+      playerId: raw.claim.playerId || '',
+      eventId: raw.claim.eventId || '',
+      statusText: raw.claim.statusText || ''
+    }
+  }
   if (Array.isArray(raw.slots)) state.slots = raw.slots.slice()
   if (Array.isArray(raw.battleLog)) state.battleLog = raw.battleLog.slice()
   if (raw.coupons && typeof raw.coupons === 'object') {
@@ -176,8 +191,34 @@ function allPlayers() {
   return mock.allPlayers()
 }
 
+/**
+ * 玩法球员池（2026-11-02 用户确认）：只含本赛事、且本赛事已有比赛记录的球员。
+ * 卡池、签约池、阵容校验与对手池统一从这里取，页面不得自行拼池。
+ */
+function playablePlayers(eventId) {
+  var state = getState()
+  return mock.eventPlayers(eventId || state.eventId || mock.EVENT.eventId)
+}
+
+/** 玩法准入：未认领球员卡或认领赛事不符时 allowed=false。 */
+function accessView() {
+  var state = getState()
+  var access = engine.worldAccess({ claim: state.claim, event: mock.EVENT })
+  return {
+    allowed: access.allowed,
+    code: access.code,
+    titleText: access.titleText,
+    reasonText: access.reasonText,
+    eventId: mock.EVENT.eventId,
+    eventName: mock.EVENT.name,
+    eventShortName: mock.EVENT.shortName,
+    divisionLabel: mock.EVENT.divisionLabel,
+    cityText: state.cityName
+  }
+}
+
 function playersById() {
-  var list = allPlayers()
+  var list = playablePlayers()
   var map = {}
   for (var i = 0; i < list.length; i++) map[list[i].playerId] = list[i]
   return map
@@ -187,11 +228,15 @@ function player(playerId) {
   return playersById()[playerId] || null
 }
 
-/** 三类卡全集索引：真实卡按 playerId，虚拟卡/自制卡按 cardId。 */
+/** 卡全集索引：真实卡按 playerId（仅本赛事可玩池），虚拟卡按 cardId。 */
 function cardsById() {
-  var list = mock.allCards()
   var map = {}
-  for (var i = 0; i < list.length; i++) map[list[i].cardId || list[i].playerId] = list[i]
+  var real = playablePlayers()
+  for (var i = 0; i < real.length; i++) map[real[i].playerId] = real[i]
+  var virtuals = mock.allCards().filter(function (card) {
+    return card.cardKind === 'virtual'
+  })
+  for (var j = 0; j < virtuals.length; j++) map[virtuals[j].cardId] = virtuals[j]
   return map
 }
 
@@ -199,7 +244,8 @@ function cardsById() {
 
 function mainCardView() {
   var state = getState()
-  var p = player(state.mainPlayerId) || player(state.ownedIds[0]) || allPlayers()[0]
+  var p = player(state.mainPlayerId) || player(state.ownedIds[0]) || playablePlayers()[0]
+  if (!p) return null
   return {
     playerId: p.playerId,
     name: p.name,
@@ -209,6 +255,8 @@ function mainCardView() {
     headHint: p.name + ' · ' + p.positionLabel + ' · #' + p.number,
     foilTip: '箔光循环扫过 · 按住卡面滑动可带动光斑',
     cityText: state.cityName + ' · ' + state.cityCode,
+    eventText: mock.EVENT.shortName + ' · ' + mock.EVENT.divisionLabel,
+    scopeText: '本赛事球员 · ' + (state.claim.statusText || '已认领'),
     cardUrl: p.cardUrl,
     stats: [
       { label: '综合', num: String(p.ovr) },
@@ -228,33 +276,33 @@ function mainCardView() {
 
 function ownedIdsOfKind(state, kind) {
   if (kind === 'virtual') return state.ownedVirtualIds || []
-  if (kind === 'fanMade') return state.ownedFanIds || []
   return state.ownedIds || []
 }
 
 function albumCounts(state) {
   return {
     real: (state.ownedIds || []).length,
-    virtual: (state.ownedVirtualIds || []).length,
-    fanMade: (state.ownedFanIds || []).length
+    virtual: (state.ownedVirtualIds || []).length
   }
 }
 
 /**
- * 卡册三分区视图。只有真实球员卡分区保留签约与阵容入口；
- * 虚拟卡只进娱乐图鉴，自制卡只做展示与分享。
+ * 卡册两分区视图。真实球员卡只展示本赛事、且本赛事已出场的球员；
+ * 虚拟卡只进娱乐图鉴；球迷自制卡本期不开放。只有真实分区保留签约与阵容入口。
  */
 function albumView(kind) {
   var state = refreshDaily()
-  var active = kind === 'virtual' ? 'virtual' : (kind === 'fanMade' ? 'fanMade' : 'real')
+  var active = kind === 'virtual' ? 'virtual' : 'real'
   var meta = engine.cardKindMeta(active)
   var map = cardsById()
+  var playable = playersById()
   var ids = ownedIdsOfKind(state, active)
   var counts = albumCounts(state)
   var tiles = []
   for (var i = 0; i < ids.length; i++) {
     var c = map[ids[i]]
     if (!c) continue
+    if (active === 'real' && !playable[ids[i]]) continue
     var isMain = active === 'real' && c.playerId === state.mainPlayerId
     tiles.push({
       id: ids[i],
@@ -280,9 +328,8 @@ function albumView(kind) {
   var quota = state.quota
   var freeLeft = engine.dailyFreeLeft(quota, state.membership.tier)
   var member = engine.membershipView(state.membership)
-  var emptyText = '还没有球员卡，先完成一次同城签约'
+  var emptyText = '本赛事还没有你的球员卡，先完成一次本赛事签约'
   if (active === 'virtual') emptyText = '还没有虚拟卡 · 娱乐图鉴入口后续开放'
-  if (active === 'fanMade') emptyText = '还没有自制卡 · 制作入口后续开放'
   return {
     tabs: tabs,
     activeKind: active,
@@ -294,10 +341,9 @@ function albumView(kind) {
     countText: '共 ' + tiles.length + ' 张',
     emptyText: emptyText,
     noteText: active === 'real'
-      ? ''
-      : (active === 'virtual'
-        ? '虚拟卡只进娱乐图鉴，不计分、不进阵容'
-        : '自制卡只做展示与分享，不进 PK、不可交易'),
+      ? '只收藏本赛事、且本赛事已有出场记录的球员卡'
+      : '虚拟卡只进娱乐图鉴，不计分、不进阵容',
+    scopeText: '本赛事 · ' + mock.EVENT.shortName + ' · 球迷自制卡本期不开放',
     freeLeft: freeLeft,
     freeTotal: quota.freeTotal || engine.memberDailyFreeTotal(state.membership.tier),
     remainText: freeLeft > 0 ? ('今日剩余 ' + freeLeft + ' 次') : '明日再来 · 免费 ' + (quota.freeTotal || 1) + ' 次/日',
@@ -393,8 +439,9 @@ function meView() {
     slots: slots,
     slotNote: '槽位只决定能收藏/展示多少张卡，不改变卡片等级与胜负权重',
     membershipTierText: member.tierText,
-    cardCountText: '真实 ' + counts.real + ' 张 · 虚拟 ' + counts.virtual + ' 张 · 自制 ' + counts.fanMade + ' 张',
-    cardPoolText: '真实球员卡参与评估与真实 PK；虚拟卡只进娱乐图鉴；自制卡只做展示与分享',
+    cardCountText: '本赛事 ' + counts.real + ' 张 · 虚拟 ' + counts.virtual + ' 张',
+    cardPoolText: '只玩本赛事球员：本赛事已有出场记录的球员卡才进入卡池；球迷自制卡本期不开放',
+    scopeText: '本赛事 · ' + mock.EVENT.shortName + ' · ' + mock.EVENT.divisionLabel,
     bgFreeText: '满 ' + mvp.FREE_BG_SCORE + ' 分或有效会员可免费更换背景（保留不缩减）',
     bgStoreText: mvp.BACKGROUND_STORE_OPEN
       ? '卡皮肤商城已开放：只售槽位容量，不售背景卡图'
@@ -497,6 +544,8 @@ module.exports = {
   resetDemoState: resetDemoState,
   todayKey: todayKey,
   allPlayers: allPlayers,
+  playablePlayers: playablePlayers,
+  accessView: accessView,
   playersById: playersById,
   player: player,
   cardsById: cardsById,

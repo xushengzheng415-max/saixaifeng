@@ -2,7 +2,7 @@
   <view class="brand-row">
     <view class="brand">
       <text class="brand-name">组阵</text>
-      <text class="brand-sub">{{lineup.cityText}} · 同城名册</text>
+      <text class="brand-sub">{{lineup.cityText}} · 本赛事名册</text>
     </view>
     <view class="tag">{{lineup.filledText}}</view>
   </view>

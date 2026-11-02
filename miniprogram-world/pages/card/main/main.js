@@ -9,6 +9,7 @@ var EMPTY_CARD = {
   headHint: '',
   foilTip: '',
   cityText: '',
+  scopeText: '',
   cardUrl: '',
   portraitNote: ''
 }
@@ -20,20 +21,47 @@ Page({
     stamps: [],
     cardLabel: '球员卡',
     shareTitle: '我的赛小蜂主卡',
-    loading: true
+    loading: true,
+    blocked: false,
+    gateTitle: '',
+    gateText: '',
+    eventText: '',
+    scopeText: ''
   },
 
   onShow: function () {
     this.loadCard()
   },
 
+  /** 先过玩法准入（已认领球员卡 + 本赛事），再取主卡 */
   loadCard: function () {
+    var self = this
+    api.getAccess().then(function (access) {
+      self.setData({
+        blocked: !access.allowed,
+        gateTitle: access.titleText || '',
+        gateText: access.reasonText || '',
+        eventText: access.eventShortName || ''
+      })
+      if (!access.allowed) {
+        self.setData({ loading: false })
+        return
+      }
+      self.loadMainCard()
+    }).catch(function (err) {
+      self.setData({ loading: false })
+      wx.showToast({ title: err.message || '主卡加载失败', icon: 'none' })
+    })
+  },
+
+  loadMainCard: function () {
     var self = this
     api.getMainCard().then(function (view) {
       self.setData({
         card: view,
         stats: view.stats || [],
         stamps: view.stamps || [],
+        scopeText: view.scopeText || '',
         cardLabel: (view.name || '球员') + ' 球员卡',
         shareTitle: '我的赛小蜂主卡 · ' + (view.name || ''),
         loading: false

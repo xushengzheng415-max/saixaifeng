@@ -280,3 +280,43 @@
   letter-spacing: 1rpx;
   color: #6f7683;
 }
+
+/* 玩法范围说明：本赛事 · 已认领 */
+.scope-line {
+  margin-top: 16rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(240, 199, 94, 0.1);
+  border: 1rpx solid rgba(240, 199, 94, 0.28);
+  font-size: 20rpx;
+  color: #d9b264;
+  text-align: center;
+  letter-spacing: 1rpx;
+}
+
+/* 准入未开放时的说明面板 */
+.gate-box {
+  margin-top: 24rpx;
+  padding: 36rpx 28rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gate-text {
+  font-size: 28rpx;
+  color: #e8ecf4;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.gate-sub {
+  margin-top: 16rpx;
+  font-size: 21rpx;
+  color: #8b93a3;
+  text-align: center;
+  line-height: 1.6;
+}

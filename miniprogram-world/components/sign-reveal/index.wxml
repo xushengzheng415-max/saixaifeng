@@ -3,7 +3,7 @@
 
   <view class="reveal-body">
     <view class="reveal-head">
-      <text class="reveal-eyebrow">同城签约 · {{cityText}}</text>
+      <text class="reveal-eyebrow">本赛事签约 · {{cityText}}</text>
       <text class="reveal-close" bindtap="onClose">稍后再看</text>
     </view>
 

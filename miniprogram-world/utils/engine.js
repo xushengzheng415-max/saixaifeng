@@ -26,20 +26,74 @@ var CODES = {
   MODE_INVALID: 'MODE_INVALID',
   COUPON_NOT_ENOUGH: 'COUPON_NOT_ENOUGH',
   SLOT_MAXED: 'SLOT_MAXED',
-  SLOT_INVALID: 'SLOT_INVALID'
+  SLOT_INVALID: 'SLOT_INVALID',
+  CLAIM_REQUIRED: 'CLAIM_REQUIRED',
+  EVENT_MISMATCH: 'EVENT_MISMATCH'
 }
 
 /**
- * 三类卡边界（2026-11-02 已确认）：
- * real 真实球员卡 —— 赛事发放、永久收藏，唯一参与评估与真实 PK 池；
+ * 卡种类边界（2026-11-02 用户确认开放范围）：
+ * real 真实球员卡 —— 赛事发放、永久收藏，唯一参与评估与真实 PK 池；只含本赛事球员；
  * virtual 国漫虚拟卡 —— 只进娱乐图鉴，不计分、不进阵容；
- * fanMade 球迷自制卡 —— 第一版只做展示与分享，不进 PK、不可交易。
+ * 球迷自制卡当期不开放，不提供入口、不展示、不参与任何玩法。
  */
 var CARD_KINDS = [
-  { key: 'real', label: '真实球员卡', short: '真实', hint: '赛事发放 · 永久收藏 · 参与评估', evaluable: true, tagClass: 'is-real' },
-  { key: 'virtual', label: '国漫虚拟卡', short: '虚拟', hint: '娱乐图鉴 · 不计分 · 不进阵容', evaluable: false, tagClass: 'is-virtual' },
-  { key: 'fanMade', label: '球迷自制卡', short: '球迷', hint: '仅展示与分享 · 不计分 · 不进 PK', evaluable: false, tagClass: 'is-fan' }
+  { key: 'real', label: '真实球员卡', short: '本赛事', hint: '赛事发放 · 永久收藏 · 参与评估', evaluable: true, tagClass: 'is-real' },
+  { key: 'virtual', label: '国漫虚拟卡', short: '虚拟', hint: '娱乐图鉴 · 不计分 · 不进阵容', evaluable: false, tagClass: 'is-virtual' }
 ]
+
+/**
+ * 玩法准入（2026-11-02 用户确认）：
+ * 只有「已认领球员卡」且认领赛事与当前赛事一致的用户才能进入球员卡玩法。
+ * 未认领、认领未通过或跨赛事时一律不开放；不得在各页面自行判断。
+ * @returns {{allowed:boolean, code:string, titleText:string, reasonText:string}}
+ */
+function worldAccess(opts) {
+  var options = opts || {}
+  var claim = options.claim
+  var event = options.event || {}
+  var claimRequired = {
+    allowed: false,
+    code: CODES.CLAIM_REQUIRED,
+    titleText: '暂未开放',
+    reasonText: '球员卡玩法只对已认领球员卡的用户开放'
+  }
+  if (!claim || !claim.claimed || !claim.playerId) return claimRequired
+  if (!event.eventId) {
+    return {
+      allowed: false,
+      code: CODES.EVENT_MISMATCH,
+      titleText: '暂无赛事',
+      reasonText: '当前账号还没有正在进行的赛事'
+    }
+  }
+  if (claim.eventId !== event.eventId) {
+    return {
+      allowed: false,
+      code: CODES.EVENT_MISMATCH,
+      titleText: '赛事不符',
+      reasonText: '已认领的球员卡不属于本赛事，暂不可参与本赛事玩法'
+    }
+  }
+  return {
+    allowed: true,
+    code: CODES.ROLE_OK,
+    titleText: claim.statusText || '已认领',
+    reasonText: event.shortName
+      ? ('本赛事 · ' + event.shortName + ' ' + (event.divisionLabel || '') + ' · 只玩本赛事球员')
+      : '只玩本赛事球员'
+  }
+}
+
+/** 可玩球员池过滤：本赛事 + 本赛事已有比赛记录。签约池、卡池与对手池统一走这里。 */
+function playablePool(players, eventId) {
+  var pool = players || []
+  if (!eventId) return []
+  return pool.filter(function (player) {
+    if (!player || player.eventId !== eventId) return false
+    return typeof player.appearances === 'number' && player.appearances > 0
+  })
+}
 
 var SLOT_KEYS = ['collect', 'display', 'gallery']
 
@@ -160,8 +214,8 @@ function includes(list, value) {
 function codeMessage(code) {
   var map = {}
   map[CODES.QUOTA_EXCEEDED] = '今日签约次数已用完'
-  map[CODES.NOT_SAME_CITY] = '只能签约同城球员'
-  map[CODES.NO_ELIGIBLE_CARD] = '同城已无可签球员'
+  map[CODES.NOT_SAME_CITY] = '本赛事内没有可签约球员'
+  map[CODES.NO_ELIGIBLE_CARD] = '本赛事已无可签球员'
   map[CODES.ROSTER_LOCKED] = '该编制尚未解锁'
   map[CODES.LINEUP_INVALID] = '阵容不完整或不合规'
   map[CODES.MINOR_NO_AUTORENEW] = '未成年账号不能开启自动续费'
@@ -169,6 +223,8 @@ function codeMessage(code) {
   map[CODES.COUPON_NOT_ENOUGH] = '兑换券不足，先完成任务领券'
   map[CODES.SLOT_MAXED] = '该槽位已达上限'
   map[CODES.SLOT_INVALID] = '槽位类型无效'
+  map[CODES.CLAIM_REQUIRED] = '球员卡玩法只对已认领球员卡的用户开放'
+  map[CODES.EVENT_MISMATCH] = '已认领的球员卡不属于本赛事，暂不可参与'
   return map[code] || code || ''
 }
 
@@ -293,8 +349,9 @@ function signSameCity(opts) {
   }
 
   var sameCity = []
-  for (var i = 0; i < pool.length; i++) {
-    if (pool[i] && pool[i].cityCode === cityCode) sameCity.push(pool[i])
+  var eligible = options.eventId ? playablePool(pool, options.eventId) : pool
+  for (var i = 0; i < eligible.length; i++) {
+    if (eligible[i] && eligible[i].cityCode === cityCode) sameCity.push(eligible[i])
   }
   if (!sameCity.length) {
     return { ok: false, code: CODES.NOT_SAME_CITY, message: codeMessage(CODES.NOT_SAME_CITY), quota: quota }
@@ -531,7 +588,7 @@ function buildSystemOpponent(opts) {
   return {
     type: 'system_bot',
     opponentId: 'bot_' + stableHash(seed + '|' + String(options.cityCode)).toString(36),
-    label: '同城新手场对手',
+    label: '本赛事新手场对手',
     slots: slots
   }
 }
@@ -562,7 +619,7 @@ function battleResult(input) {
   var result = diff > 0 ? 'win' : (diff < 0 ? 'lose' : 'draw')
 
   var comment = ''
-  if (result === 'win') comment = diff >= 2 ? '前场压制奏效' : '同城编队完成度更高'
+  if (result === 'win') comment = diff >= 2 ? '前场压制奏效' : '本赛事编队完成度更高'
   else if (result === 'lose') comment = diff <= -2 ? '对手位置契合更好' : '末段机会把握不足'
   else comment = '双方完成度接近，本场记平'
 
@@ -635,7 +692,7 @@ function battleLogEntry(result, extras) {
     scoreOpp: result.scoreOpp,
     result: result.result,
     comment: result.comment,
-    opponentLabel: e.opponentLabel || '同城新手场对手',
+    opponentLabel: e.opponentLabel || '本赛事新手场对手',
     deterministicKey: result.deterministicKey
   }
 }
@@ -652,6 +709,8 @@ module.exports = {
   ROSTER_SIZES: ROSTER_SIZES,
   CODES: CODES,
   CARD_KINDS: CARD_KINDS,
+  worldAccess: worldAccess,
+  playablePool: playablePool,
   SLOT_KEYS: SLOT_KEYS,
   cardKindMeta: cardKindMeta,
   isEvaluableKind: isEvaluableKind,

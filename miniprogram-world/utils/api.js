@@ -22,6 +22,7 @@ var CLOUD_FUNCTION = config.CLOUD_FUNCTION || 'webLoginApi'
 /* 每个前端方法对应一个 action，服务端按此表实现 */
 var ACTIONS = {
   login: 'cardWorldLogin',
+  access: 'cardWorldAccess',
   mainCard: 'cardWorldMainCard',
   album: 'cardWorldAlbum',
   ownedCards: 'cardWorldOwnedCards',
@@ -88,6 +89,24 @@ function callCloud(action, payload) {
 
 /* ---------------- 只读 ---------------- */
 
+/**
+ * 玩法准入（2026-11-02 用户确认）：只有已认领球员卡、且认领赛事与本赛事一致才开放。
+ * local 模式在此统一拦截；cloud 模式由服务端校验同一规则后返回同样的 code。
+ */
+function requireAccess() {
+  if (useCloud()) return null
+  var access = store.accessView()
+  if (!access.allowed) throw fail(access.code, access.reasonText)
+  return access
+}
+
+function getAccess() {
+  if (useCloud()) return callCloud(ACTIONS.access)
+  return wrap(function () {
+    return store.accessView()
+  })
+}
+
 function login() {
   if (useCloud()) return callCloud(ACTIONS.login)
   return wrap(function () {
@@ -99,7 +118,10 @@ function login() {
 function getMainCard() {
   if (useCloud()) return callCloud(ACTIONS.mainCard)
   return wrap(function () {
-    return store.mainCardView()
+    requireAccess()
+    var view = store.mainCardView()
+    if (!view) throw fail(engine.CODES.CLAIM_REQUIRED, engine.codeMessage(engine.CODES.CLAIM_REQUIRED))
+    return view
   })
 }
 
@@ -107,6 +129,7 @@ function getAlbum(kind) {
   var active = kind || 'real'
   if (useCloud()) return callCloud(ACTIONS.album, { kind: active })
   return wrap(function () {
+    requireAccess()
     return store.albumView(active)
   })
 }
@@ -114,6 +137,7 @@ function getAlbum(kind) {
 function getLineup() {
   if (useCloud()) return callCloud(ACTIONS.lineup)
   return wrap(function () {
+    requireAccess()
     return store.lineupView('')
   })
 }
@@ -121,6 +145,7 @@ function getLineup() {
 function getBattleLog() {
   if (useCloud()) return callCloud(ACTIONS.battleLog)
   return wrap(function () {
+    requireAccess()
     return store.battleLogView()
   })
 }
@@ -133,6 +158,7 @@ function getOwnedCards() {
     })
   }
   return wrap(function () {
+    requireAccess()
     return store.ownedChips()
   })
 }
@@ -158,6 +184,7 @@ function getMembership() {
 function getMe() {
   if (useCloud()) return callCloud(ACTIONS.me)
   return wrap(function () {
+    requireAccess()
     return store.meView()
   })
 }
@@ -165,6 +192,7 @@ function getMe() {
 function getShop() {
   if (useCloud()) return callCloud(ACTIONS.shop)
   return wrap(function () {
+    requireAccess()
     return store.shopView()
   })
 }
@@ -172,16 +200,18 @@ function getShop() {
 /* ---------------- 写 ---------------- */
 
 /**
- * 同城确定性签约。
+ * 本赛事确定性签约：卡池只含本赛事、且本赛事已有出场记录的球员。
  * @param {object} options { mode, filter }
  */
 function signSameCity(options) {
   var opts = options || {}
   if (useCloud()) return callCloud(ACTIONS.signSameCity, { mode: opts.mode || 'free_daily', filter: opts.filter || null })
   return wrap(function () {
+    requireAccess()
     var state = store.refreshDaily()
     var result = engine.signSameCity({
-      players: store.allPlayers(),
+      players: store.playablePlayers(),
+      eventId: state.eventId,
       cityCode: state.cityCode,
       ownedIds: state.ownedIds,
       cursor: state.cursor,
@@ -231,6 +261,7 @@ function setRosterSize(size) {
   var next = Math.round(size || 0)
   if (useCloud()) return callCloud(ACTIONS.setRosterSize, { size: next })
   return wrap(function () {
+    requireAccess()
     var state = store.refreshDaily()
     if (next !== 5 && next !== 8 && next !== 11) {
       throw fail(engine.CODES.MODE_INVALID, '编制人数无效')
@@ -275,6 +306,7 @@ function setRosterSize(size) {
 function setSlot(key, playerId) {
   if (useCloud()) return callCloud(ACTIONS.setSlot, { key: key || '', playerId: playerId || '' })
   return wrap(function () {
+    requireAccess()
     var state = store.refreshDaily()
     if (!key) throw fail(engine.CODES.LINEUP_INVALID, '缺少槽位')
     if (playerId && state.ownedIds.indexOf(playerId) < 0) {
@@ -294,6 +326,7 @@ function setSlot(key, playerId) {
 function saveLineup(slots) {
   if (useCloud()) return callCloud(ACTIONS.saveLineup, { slots: slots || [] })
   return wrap(function () {
+    requireAccess()
     var state = store.refreshDaily()
     var candidate = slots || state.slots
     var check = engine.validateLineup({
@@ -314,6 +347,7 @@ function saveLineup(slots) {
 function battle() {
   if (useCloud()) return callCloud(ACTIONS.battle, {})
   return wrap(function () {
+    requireAccess()
     var state = store.refreshDaily()
     if (state.rosterSize !== 5) throw fail(engine.CODES.ROSTER_LOCKED, '本期仅开放 5 人新手场')
     var map = store.playersById()
@@ -328,7 +362,7 @@ function battle() {
 
     var seed = store.todayKey() + '|' + state.userId
     var opponent = engine.buildSystemOpponent({
-      players: store.allPlayers(),
+      players: store.playablePlayers(),
       cityCode: state.cityCode,
       seed: seed
     })
@@ -368,6 +402,7 @@ function battle() {
 function setAutoRenew(enabled) {
   if (useCloud()) return callCloud(ACTIONS.setAutoRenew, { enabled: !!enabled })
   return wrap(function () {
+    requireAccess()
     var state = store.getState()
     var result = engine.setAutoRenew(state.membership, enabled)
     if (!result.ok) throw fail(result.code, result.message)
@@ -381,6 +416,7 @@ function setAutoRenew(enabled) {
 function buySlot(kind) {
   if (useCloud()) return callCloud(ACTIONS.buySlot, { kind: kind || '' })
   return wrap(function () {
+    requireAccess()
     var result = store.buySlot(kind)
     if (!result.ok) throw fail(result.code, result.message)
     return {
@@ -399,6 +435,7 @@ module.exports = {
   ACTIONS: ACTIONS,
   useCloud: useCloud,
   login: login,
+  getAccess: getAccess,
   getMainCard: getMainCard,
   getAlbum: getAlbum,
   getLineup: getLineup,

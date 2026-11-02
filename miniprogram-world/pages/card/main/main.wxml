@@ -3,12 +3,23 @@
     <image class="topbar-logo" src="/assets/card/card-world-icon.jpg" mode="aspectFill"></image>
     <view class="topbar-title">
       <text class="topbar-name">赛小蜂足球世界</text>
-      <text class="topbar-sub">我的主卡 · 签约 · 组阵</text>
+      <text class="topbar-sub">我的主卡 · 本赛事签约 · 组阵</text>
     </view>
     <view class="tag">{{card.cityText}}</view>
   </view>
 
-  <view class="panel hero-panel">
+  <view class="panel hero-panel" wx:if="{{blocked}}">
+    <view class="row-between panel-head">
+      <text class="section-title">{{gateTitle}}</text>
+      <text class="head-hint">{{eventText}}</text>
+    </view>
+    <view class="gate-box">
+      <text class="gate-text">{{gateText}}</text>
+      <text class="gate-sub">只开放本赛事、且已被认领的球员卡；球迷自制卡与没有比赛记录的球员暂不参与</text>
+    </view>
+  </view>
+
+  <view class="panel hero-panel" wx:else>
     <view class="row-between panel-head">
       <text class="section-title">我的主卡</text>
       <text class="head-hint">{{card.headHint}}</text>
@@ -17,6 +28,8 @@
     <view class="card-stage">
       <holo-card id="main-holo" card-url="{{card.cardUrl}}" aria-label="{{cardLabel}}" tip-text="{{card.foilTip}}"></holo-card>
     </view>
+
+    <view class="scope-line">{{scopeText}}</view>
 
     <view class="stats-grid">
       <view class="stat" wx:for="{{stats}}" wx:key="label">
@@ -71,7 +84,7 @@
 
   <view class="portrait-note" wx:if="{{card.portraitNote}}">{{card.portraitNote}}</view>
 
-  <view class="foot-note">不随机发放、不可交易 · 主卡与卡册跟随赛事数据</view>
+  <view class="foot-note">只开放本赛事球员卡 · 不随机发放、不可交易</view>
 </view>
 
 <card-tabbar current="main"></card-tabbar>

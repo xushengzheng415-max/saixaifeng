@@ -2,7 +2,7 @@
   <view class="brand-row">
     <view class="brand">
       <text class="brand-name">我的</text>
-      <text class="brand-sub">兑换券 · 槽位 · 三类卡边界</text>
+      <text class="brand-sub">兑换券 · 槽位 · 本赛事卡池</text>
     </view>
     <view class="tag">券 {{me.couponBalanceText}}</view>
   </view>
@@ -42,6 +42,10 @@
       <text class="tiny muted">{{me.cardCountText}}</text>
     </view>
     <view class="rule-line">
+      <text class="rule-key">玩法范围</text>
+      <text class="rule-value">{{me.scopeText}}</text>
+    </view>
+    <view class="rule-line">
       <text class="rule-key">评估与 PK</text>
       <text class="rule-value">{{me.cardPoolText}}</text>
     </view>
@@ -53,7 +57,7 @@
     <text class="panel-note">{{me.bgStoreText}}</text>
   </view>
 
-  <view class="btn-ghost album-btn" bindtap="goAlbum" role="button" aria-label="去卡册">去卡册看看三类卡</view>
+  <view class="btn-ghost album-btn" bindtap="goAlbum" role="button" aria-label="去卡册">去卡册看看本赛事卡</view>
 
   <view class="foot-note">不售卡 · 不售背景卡图 · 商城只售槽位容量</view>
 </view>

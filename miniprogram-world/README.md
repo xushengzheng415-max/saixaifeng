@@ -15,23 +15,33 @@
 
 ## 玩法口径（2026-10-31，用户已确认）
 
-- 同城**确定性签约**：按城市名册游标取人，不随机、不概率；跳过已拥有球员。
+- **本赛事确定性签约**：只在当前赛事名册内按游标取人，不随机、不概率；跳过已拥有球员。
 - 无开包 / 无概率抽取 / 无蜂蜜充值；球员卡不可交易、不可转赠。
 - 5 人新手场**永久免费**；8 人（社区）、11 人（城市）需解锁，未解锁返回 `ROSTER_LOCKED`。
 - 每日免费签约次数：普通账号 1 次，会员 2 次；定向签约单独计数 `directedLeft`；按 Asia/Shanghai 自然日重置。
 - 会员 / 付费不参与对战出分；未成年不能开启自动续费（`MINOR_NO_AUTORENEW`）。
 - 轻对战为 5v5 演示性质，结果由固定键 `bt:{lineupId}:{opponentKey}:rule_v1` 决定，同阵容同对手结果恒等，不改正式赛果与榜单。
 
+## 开放范围（2026-11-02，用户已确认）
+
+第一版按下列范围收口，扩大需产品负责人重新确认：
+
+- **只对已认领球员卡的用户开放**：未认领、认领未通过、或认领球员卡不属于当前赛事时，主卡 / 卡册 / 签约 / 组阵 / 轻对战 / 卡商城一律不开放，页面统一展示不可玩原因（`CLAIM_REQUIRED`、`EVENT_MISMATCH`），不做兜底放行。
+- **只玩本赛事球员**：卡池、签约池、阵容校验与对手池只取当前赛事名册；跨赛事球员即使同城、同档位也不进入任何池。
+- **本赛事没有比赛记录的球员不开放**：以本赛事出场数据为准，报名名单与球队长期球员库不自动视为可玩。
+- **不开放球迷自制卡**：无制作与展示入口，不参与评估、阵容、轻对战或交易。国漫虚拟卡仍只进娱乐图鉴。
+- 规则由 `utils/engine.js` 的 `worldAccess()` / `playablePool()` 统一判定（对应服务端同一规则），页面只展示结果，不各写过滤条件。
+
 规则文本见 [`docs/PRODUCT_RULES.md`](../docs/PRODUCT_RULES.md)、工程说明见
 [`docs/WORLD_PLAYER_MINIPROGRAM.md`](../docs/WORLD_PLAYER_MINIPROGRAM.md)、决策见
-[`docs/ADR.md`](../docs/ADR.md)（2026-10-31）。
+[`docs/ADR.md`](../docs/ADR.md)（2026-10-31、2026-11-02）。
 
 ## 页面结构
 
 | 路由 | 用途 |
 |---|---|
 | `pages/card/main/main` | 主卡：全息卡面（倾斜/眩光）、能力四项、成长印记、快捷入口、分享 |
-| `pages/card/album-sign/album-sign` | 同城签约面板 + 会员与编制面板 + 卡册网格 + 签约揭晓 |
+| `pages/card/album-sign/album-sign` | 本赛事签约面板 + 会员与编制面板 + 卡册网格 + 签约揭晓 |
 | `pages/card/lineup/lineup` | 5/8/11 编制切换、球场四行阵型、保存与发起轻对战 |
 | `pages/card/battle/battle` | VS 页与战报结果页（比分、评论、复现键、分享） |
 | `pages/card/battle-log/battle-log` | 战报列表（最多 20 条，超出丢弃最旧） |
@@ -90,6 +100,7 @@ wx.cloud.callFunction({ name: 'cardWorldProbeNotExist' })
 cd E:\Documents\sxf-football-wt-world
 node tools/test-world-player-miniprogram.cjs   # 前端工程自检 25 项
 node tools/test-world-card-backend.cjs         # 服务端 action 离线回归 25 项（内存假库）
+node tools/verify-world-scope.cjs              # 玩法开放范围 22 项（认领 / 本赛事 / 无比赛 / 球迷卡）
 ```
 
 脚本覆盖：UTC+8 日期键、签约确定性与游标、跳已拥有、配额与跨日重置、定向筛选、跨城/无可用、
@@ -108,6 +119,7 @@ node tools/test-world-card-backend.cjs         # 服务端 action 离线回归 2
 | 前端方法 | action | 说明 |
 |---|---|---|
 | `login` | `cardWorldLogin` | 微信授权 + 手机号命中自然人账号 |
+| `getAccess` | `cardWorldAccess` | 玩法准入：认领状态、当前赛事、不可玩原因 |
 | `getMainCard` | `cardWorldMainCard` | 主卡、四项能力、成长印记 |
 | `getAlbum` | `cardWorldAlbum` | 卡册网格、配额文本、会员与编制状态 |
 | `getOwnedCards` | `cardWorldOwnedCards` | 可选球员 chips |
@@ -119,7 +131,7 @@ node tools/test-world-card-backend.cjs         # 服务端 action 离线回归 2
 | `getBattleLog` | `cardWorldBattleLog` | 只读本人战报 |
 | `getMembership` | `cardWorldMembership` | 档位、日签次数、编制解锁 |
 | `setAutoRenew` | `cardWorldSetAutoRenew` | 未成年返回 `MINOR_NO_AUTORENEW` |
-| `signSameCity` | `cardWorldSignSameCity` | 扣配额、写卡册，返回 `deterministicKey` |
+| `signSameCity` | `cardWorldSignSameCity` | 扣配额、写卡册，返回 `deterministicKey`；卡池只含本赛事球员 |
 
 返回契约：成功时结果字段与本地视图同名同结构（扁平），失败时返回 `{ success:false, code, error }`，
 前端按 `code` 抛错，页面无需改动。
@@ -137,9 +149,10 @@ node tools/test-world-card-backend.cjs         # 服务端 action 离线回归 2
 |---|---|
 | 新增文件 | `cloudfunctions/webLoginApi/cardWorld.cjs`、`cardWorldEngine.cjs` |
 | 接线 | `webLoginApi/index.js` 的 `switch` `default` 分支 6 行（`cardWorld` 前缀交给 `cardWorldService()`） |
-| 集合 | `card_world_players`（同城名册，需运营导入）、`card_world_profiles`、`card_world_cards` |
+| 集合 | `card_world_players`（本赛事名册，需运营导入且只含本赛事有比赛记录球员）、`card_world_profiles`、`card_world_cards` |
 | 环境变量 | `WORLD_MINI_PROGRAM_APP_ID`、`WORLD_MINI_PROGRAM_APP_SECRET`（保留现有变量） |
 | 发布校验 | `node --check` 三文件 + `node tools/check-referee-backend-package.cjs <实际包目录>` + `node tools/test-world-card-backend.cjs` |
+| 规则前置（2026-11-02） | 部署前必须把本条开放范围同步进 `cardWorld.cjs`：准入校验已认领球员卡且与当前赛事一致，`readPlayerPool` 改按 `eventId` 取池并要求 `appearances > 0`，`card_world_players` 增补 `eventId`、`appearances` 字段并在运营导入时过滤；未同步不得部署。（当前源码仍是同城池口径，未改未部署） |
 | 基线 | 必须以最新线上包为基线做差量合入；本 worktree 基于旧 `main`，不能直接打包覆盖线上函数 |
 
 ## 不发版说明
