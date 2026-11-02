@@ -5220,8 +5220,11 @@ async function handleRosterExceptionBoard(event) {
   const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
   const tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
   if (!tournament) return { success: false, error: '赛事不存在' }
+  if(['approvePlayer','rejectPlayer'].includes(action)&&['finished','completed','ended','archived','cancelled'].includes(String(tournament.status||'')))return {success:false,code:'TOURNAMENT_READONLY',error:'赛事已结束，不能修改审核状态'}
 
-  const relationRows = (await db.collection('tournament_teams').where({ tournamentId }).limit(1000).get()).data || []
+  const relationRows = await require('./data-center/reader.cjs').readAll(db, 'tournament_teams', { tournamentId }, { maxRows:10000 })
+  const reviewWorkflow = require('./playerReviewWorkflow.cjs')({cloud,db,secret:String(SERVICE_ACCOUNT_CONFIG.APP_SECRET || '')})
+  if (['reviewQueue','notifyUnclaimed','notifyPlayerMaterials'].includes(action)) return reviewWorkflow.organizer(event,{tournament,relations:relationRows,allowedTeam:team=>organizerRecordAllowed('teams',team,scope),actorId:String(authenticated.user._id)})
   const approvedRelations = relationRows.filter(function (item) {
     return ['approved', 'confirmed', 'active'].indexOf(String(item.status || 'approved')) >= 0
   })
@@ -5268,6 +5271,7 @@ async function handleRosterExceptionBoard(event) {
     if (!team || !organizerRecordAllowed('teams', team, scope)) return { success:false, error:'无权审核该球队球员' }
     const player = mergeRosterPlayerRows([playerByIdResult.data || [], playerByCodeResult.data || []]).find(function (item) { return String(item._id) === playerId })
     if (!player || ['archived', 'deleted'].includes(String(player.status || '').toLowerCase())) return { success:false, error:'球员不存在或不属于当前球队' }
+    if(player.organizerReviewStatus==='rejected')return {success:false,code:'RESUBMISSION_REQUIRED',error:'该球员已驳回，须补充资料并重新提交后复审'}
     const relationDivisionId = String(relation.divisionId || relation.division || 'default')
     const snapshots = (snapshotResult.data || []).filter(function (item) {
       const snapshotDivisionId = String(item.divisionId || item.division || '')
@@ -5294,7 +5298,8 @@ async function handleRosterExceptionBoard(event) {
     const teamId = String(event.teamId || '')
     const playerId = String(event.playerId || '')
     const selectedDivisionId = String(event.divisionId || '')
-    const reason = String(event.reason || '').trim().slice(0, 200)
+    const reason = String(event.reason || '').trim()
+    if(reason.length>500)return {success:false,code:'REASON_TOO_LONG',error:'驳回事项最多500字'}
     if (!teamId || !playerId) return { success:false, error:'缺少球队或球员信息' }
     if (!reason) return { success:false, error:'请选择或填写驳回原因', code:'REASON_REQUIRED' }
     const teamRelations = reviewRelationsByTeamId.get(teamId) || []
@@ -5312,6 +5317,7 @@ async function handleRosterExceptionBoard(event) {
     if (!team || !organizerRecordAllowed('teams', team, scope)) return { success:false, error:'无权审核该球队球员' }
     const player = mergeRosterPlayerRows([playerByIdResult.data || [], playerByCodeResult.data || []]).find(function (item) { return String(item._id) === playerId })
     if (!player || ['archived', 'deleted'].includes(String(player.status || '').toLowerCase())) return { success:false, error:'球员不存在或不属于当前球队' }
+    if(player.organizerReviewStatus==='rejected')return {success:false,code:'ALREADY_REJECTED',error:'该球员已驳回，请等待重新提交；催补资料请使用通知按钮'}
     const relationDivisionId = String(relation.divisionId || relation.division || 'default')
     const snapshots = (snapshotResult.data || []).filter(function (item) {
       const snapshotDivisionId = String(item.divisionId || item.division || '')
@@ -5324,7 +5330,7 @@ async function handleRosterExceptionBoard(event) {
     const now = db.serverDate()
     const actor = String(authenticated.user.nickname || authenticated.user.userName || authenticated.user.phone || authenticated.user._id || '主办方').slice(0, 50)
     await db.collection('players').doc(playerId).update({ data:{
-      organizerReviewStatus:'rejected', organizerReviewReason:reason,
+      organizerReviewStatus:'rejected', organizerReviewReason:reason, organizerReviewTournamentId:tournamentId,
       organizerReviewedAt:now, organizerReviewedBy:String(authenticated.user._id || ''),
       organizerReviewedByName:actor, updateTime:now
     } })
@@ -5332,25 +5338,10 @@ async function handleRosterExceptionBoard(event) {
     if (relationId) await db.collection('tournament_teams').doc(relationId).update({ data:{
       playerReviewStatus:'needs_resubmit', lastPlayerRejectionReason:reason, lastPlayerRejectionAt:now, updateTime:now
     } })
-    // 驳回后服务号通知为 best-effort：发送失败不影响驳回结果，也不向调用方报错。
-    // 调用方身份用两函数共有的服务号 AppSecret 做 HMAC 证明，不新增环境变量。
-    const reviewId = crypto.randomBytes(16).toString('hex')
-    try {
-      const notifySecret = String(SERVICE_ACCOUNT_CONFIG.APP_SECRET || '')
-      if (notifySecret) {
-        const bridgeTimestamp = Date.now()
-        const bridgeNonce = crypto.randomBytes(16).toString('hex')
-        const canonical = ['playerReviewRejected', tournamentId, teamId, playerId, reviewId, String(bridgeTimestamp), bridgeNonce].join('|')
-        const bridgeProof = crypto.createHmac('sha256', notifySecret).update(canonical).digest('hex')
-        await cloud.callFunction({ name:'tournamentRegistrationFlow', data:{
-          action:'notifyPlayerReviewRejected', tournamentId, teamId, playerId, reviewId,
-          divisionId:relationDivisionId, bridgeTimestamp, bridgeNonce, bridgeProof
-        } })
-      }
-    } catch (error) {
-      console.warn('[webLoginApi] 球员驳回服务号通知未发送：', error.message || error)
-    }
-    return { success:true, playerId, reviewStatus:'rejected', reason, message:'已驳回该球员，球队需补充资料后重新提交' }
+    let notification
+    try { notification = await reviewWorkflow.createTask({tournament,team,player:{...player,organizerReviewStatus:'rejected',organizerReviewReason:reason},kind:'rejected',reason,actorId:String(authenticated.user._id),requestId:crypto.randomBytes(16).toString('hex'),divisionId:relationDivisionId}) }
+    catch(error){ notification={success:false,error:'驳回已保存，通知创建失败，请使用通知补资料重试'} }
+    return { success:true, playerId, reviewStatus:'rejected', reason, notification, message:'已驳回该球员，等待补充资料后重新提交' }
   }
 
   if (action === 'listRoster') {
@@ -5649,7 +5640,6 @@ function publicEventView(event, match) {
   const minuteValue = Number(item.minute || item.minuteOfMatch || item.matchMinute || 0)
   return {
     type: type.slice(0, 30),
-    isShootout: item.isShootout === true || ['shootout','penalty_shootout'].includes(String(item.phase || item.period || '').toLowerCase()),
     minute: Number.isFinite(minuteValue) ? Math.max(0, Math.min(130, Math.round(minuteValue))) : 0,
     teamSide: side,
     teamName: side === 'away' ? String(match && match.awayTeamName || '客队') : String(match && match.homeTeamName || '主队'),
@@ -5661,8 +5651,18 @@ function publicEventView(event, match) {
   }
 }
 
-function publicScoreFromEvents(events, match, calculateMatchEventScore) {
-  try { return calculateMatchEventScore({ ...(match || {}), events: Array.isArray(events) ? events : [] }) } catch (error) { if (error.code === 'GOAL_TEAM_REQUIRED') return null; throw error }
+function publicScoreFromEvents(events, match) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(events) ? events : []).forEach(function (event) {
+    const type = String(event && (event.type || event.eventType) || '').trim().toLowerCase()
+    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
+    const awayId = String(match && (match.awayTeamId || match.awayTeam && (match.awayTeam._id || match.awayTeam.id)) || '')
+    const awayName = String(match && (match.awayTeamName || match.awayTeam && (match.awayTeam.name || match.awayTeam.teamName)) || '')
+    let side = String(event && (event.teamSide || event.side) || '').trim().toLowerCase() === 'away' || String(event && event.teamId || '') === awayId || String(event && event.teamName || '') === awayName ? 'away' : 'home'
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
 }
 
 async function getPublicTournamentCenter() {
@@ -6239,6 +6239,13 @@ exports.main = async (event, context) => {
         result = await completeParentProfile(params); break
       case 'reviewRefereeRecord':
         result = await handleRefereeRecordReview(params); break
+      case 'servicePrivateReviewTask':
+      case 'servicePrivateReviewPhoto':
+      case 'servicePrivateReviewSubmit': {
+        const privateAuth = await require('./servicePrivate.cjs')({cloud,config:SERVICE_ACCOUNT_CONFIG,hashSessionToken,dateValue,httpsGet,createSession:createRefereeH5Session}).authenticate(params)
+        result = privateAuth.user ? await require('./playerReviewWorkflow.cjs')({cloud,db:cloud.database(),secret:SERVICE_ACCOUNT_CONFIG.APP_SECRET}).personal(action,params,privateAuth.user) : privateAuth
+        break
+      }
       case 'rosterExceptionBoard':
         result = await handleRosterExceptionBoard(params); break
       case 'recognizeRefereeReport':

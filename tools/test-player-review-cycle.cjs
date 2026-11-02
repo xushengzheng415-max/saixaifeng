@@ -1,0 +1,32 @@
+'use strict'
+const assert=require('node:assert/strict'),create=require('../cloudfunctions/webLoginApi/playerReviewWorkflow.cjs'),crypto=require('node:crypto')
+const clone=x=>structuredClone(x),tables={teams:[{_id:'team',ownerId:'manager',name:'隔离球队'}],team_memberships:[{_id:'coach',teamId:'team',userId:'coach',status:'active',role:'head_coach'}],players:[{_id:'claimed',teamId:'team',name:'隔离本人',playerUserId:'self',guardianUserId:'guardian',organizerReviewStatus:'rejected',organizerReviewReason:'照片模糊，请更换',jerseyNumber:7,birthDate:'2000-01-01',gender:'male',position:'MF',photoFileID:'cloud://isolated/old'},{_id:'unclaimed',teamId:'team',name:'隔离未认领',jerseyNumber:8}],roster_snapshots:[],tournament_teams:[],messages:[],player_review_tasks:[],coaches:[]}
+const match=(row,where)=>typeof where==='function'?where(row):Object.entries(where||{}).every(([k,v])=>typeof v==='function'?v(row[k]):row[k]===v)
+const command={or:xs=>r=>xs.some(w=>match(r,w)),and:xs=>r=>xs.every(w=>match(r,w)),gt:v=>n=>n>v,in:xs=>n=>xs.includes(n)}
+let sends=0
+function collection(name){return{where(where){let size=100,fields=null;return{field(f){fields=f;return this},orderBy(){return this},limit(n){size=n;return this},async get(){let rows=(tables[name]||[]).filter(r=>match(r,where)).sort((a,b)=>a._id.localeCompare(b._id)).slice(0,size).map(clone);if(fields)rows=rows.map(r=>Object.fromEntries(Object.entries(r).filter(([k])=>fields[k])));return{data:rows}}}},doc(id){return{async get(){return{data:clone((tables[name]||[]).find(r=>r._id===id)||null)}},async set({data}){tables[name]||=[];const i=tables[name].findIndex(r=>r._id===id),r={...clone(data),_id:id};if(i<0)tables[name].push(r);else tables[name][i]=r},async update({data}){const row=(tables[name]||[]).find(r=>r._id===id);assert(row);Object.assign(row,clone(data))}}}}}
+const db={command,collection,serverDate:()=>new Date(),runTransaction:async fn=>fn({collection})},cloud={callFunction:async()=>{sends++;return{result:{success:true,data:{status:'waiting_follow_bind'}}}},getTempFileURL:async()=>({fileList:[{tempFileURL:'https://isolated.test/photo.png'}]})}
+const workflow=create({db,cloud,secret:'isolated-secret'}),tournament={_id:'event',name:'隔离赛事'},context={tournament,relations:[{_id:'relation',teamId:'team',divisionId:'division',status:'approved'}],actorId:'organizer',allowedTeam:()=>true}
+async function run(){
+ assert.deepEqual(await workflow.managers(tables.teams[0]),['manager'],'coach job title alone grants no permission')
+ let r=await workflow.organizer({rosterAction:'notifyUnclaimed',teamId:'team',requestId:'claim_request_123456'},context)
+ assert(r.success);let task=tables.player_review_tasks[0];assert.equal(task.playerIds.length,1);assert.deepEqual(task.recipientUserIds,['manager']);assert.equal(tables.messages.length,1);assert(tables.messages[0].path.startsWith('/pages/'));assert(tables.messages[0].webPath.includes('player-review.html?task='));assert.equal(tables.players[0].organizerReviewStatus,'rejected')
+ await workflow.organizer({rosterAction:'notifyUnclaimed',teamId:'team',requestId:'claim_request_123456'},context);assert.equal(tables.player_review_tasks.length,1);assert.equal(tables.messages.length,1,'retry deduplicates inbox')
+ assert.equal((await workflow.personal('servicePrivateReviewTask',{taskId:task._id},{_id:'stranger'})).code,'TASK_ACCESS_DENIED')
+ assert((await workflow.personal('servicePrivateReviewTask',{taskId:task._id},{_id:'manager'})).success)
+ r=await workflow.organizer({rosterAction:'notifyPlayerMaterials',teamId:'team',playerId:'claimed',reason:'请更换清晰照片',requestId:'material_req_123456'},context);assert(r.success);task=tables.player_review_tasks.find(t=>t.kind==='materials');assert.deepEqual(task.recipientUserIds,['guardian','self']);assert(!task.recipientUserIds.includes('manager'),'claimed player never falls back to manager')
+ assert.equal((await workflow.personal('servicePrivateReviewTask',{taskId:task._id},{_id:'manager'})).code,'TASK_ACCESS_DENIED')
+ r=await workflow.personal('servicePrivateReviewTask',{taskId:task._id},{_id:'self'});assert(r.success);assert(!Object.hasOwn(r.rows[0],'idCard'));assert(!Object.hasOwn(r.rows[0],'identityNumber'))
+ const profile={name:'隔离本人',jerseyNumber:7,birthDate:'2000-01-01',gender:'male',position:'MF',documentType:'resident_id'}
+ r=await workflow.personal('servicePrivateReviewSubmit',{taskId:task._id,playerId:'claimed',revision:0,profile},{_id:'self'});assert.equal(r.code,'REVISION_CONFLICT')
+ const snapshots=JSON.stringify(tables.roster_snapshots)
+ r=await workflow.personal('servicePrivateReviewSubmit',{taskId:task._id,playerId:'claimed',revision:1,profile},{_id:'guardian'});assert(r.success);assert.equal(tables.players[0].organizerReviewStatus,'resubmitted');assert.equal(tables.players[0].organizerReviewReason,'照片模糊，请更换');assert.equal(JSON.stringify(tables.roster_snapshots),snapshots);assert.equal(tables.player_review_tasks.find(t=>t._id===task._id).status,'submitted')
+ assert.equal((await workflow.personal('servicePrivateReviewSubmit',{taskId:task._id,playerId:'claimed',revision:1,profile},{_id:'self'})).code,'ALREADY_SUBMITTED')
+ r=await workflow.organizer({rosterAction:'reviewQueue'},context);assert(r.success);assert.equal(r.rows.find(p=>p._id==='claimed').organizerReviewStatus,'resubmitted');assert.equal(r.rows.length,2)
+ r=await workflow.organizer({rosterAction:'notifyPlayerMaterials',teamId:'team',playerId:'claimed',reason:'核对号码',requestId:'another_req_1234567'},context);task=tables.player_review_tasks.find(t=>t.reason==='核对号码');tables.roster_snapshots.push({_id:'formal',tournamentId:'event',teamId:'team',status:'approved',players:[{playerId:'claimed'}]})
+ assert.equal((await workflow.personal('servicePrivateReviewSubmit',{taskId:task._id,playerId:'claimed',revision:1,profile},{_id:'self'})).code,'IN_FORMAL_ROSTER')
+ assert.equal((await workflow.organizer({rosterAction:'notifyUnclaimed',teamId:'other',requestId:'bad_req_123456789'},context)).code,'TEAM_SCOPE_DENIED')
+ assert.equal((await workflow.organizer({rosterAction:'notifyUnclaimed',teamId:'team',requestId:'bad_req_123456789'},{...context,tournament:{...tournament,status:'finished'}})).code,'TOURNAMENT_READONLY')
+ console.log('PASS: isolated notification grouping/idempotency, recipient permissions, no review side effects, private correction, explicit resubmission, stale/repeat submit, formal snapshot protection, scoped queue and ended-event guard; no real messages sent')
+}
+run().catch(e=>{console.error(e);process.exit(1)})

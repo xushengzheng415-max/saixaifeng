@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :model-value="modelValue" title="驳回队员" width="460px" style="max-width:calc(100vw - 32px)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!loading" :show-close="!loading" @close="close">
+  <el-dialog :model-value="modelValue" title="驳回队员" width="560px" style="max-width:calc(100vw - 32px)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!loading" :show-close="!loading" @close="close">
     <div class="review-player"><PlayerAvatar v-if="player" :player="player" /><strong>{{ player?.name || '队员' }}</strong><span v-if="player?.jerseyNumber">{{ player.jerseyNumber }}号</span></div>
     <el-form label-position="top" @submit.prevent="submit">
       <el-form-item label="驳回原因（可多选）" required><el-checkbox-group v-model="selected" :disabled="loading" class="rejection-options"><el-checkbox v-for="item in PLAYER_REJECTION_REASONS" :key="item.value" :label="item.value">{{ item.label }}</el-checkbox></el-checkbox-group></el-form-item>
@@ -21,5 +21,5 @@ function close(){if(!props.loading)emit('update:modelValue',false)}
 function submit(){if(props.loading || !reason.value)return;emit('submit',{decision:'rejected',reason:reason.value})}
 </script>
 <style scoped>
-.review-player{display:flex;align-items:center;gap:12px;margin-bottom:18px;color:#25372b}.review-player strong{min-width:0;flex:1;overflow-wrap:anywhere}.review-player>span{color:#738178;font-size:13px}.rejection-options{display:grid;grid-template-columns:1fr 1fr;width:100%;gap:4px 12px}.rejection-options :deep(.el-checkbox){margin-right:0}
+.review-player{display:flex;align-items:center;gap:12px;margin-bottom:18px;color:#25372b}.review-player strong{min-width:0;flex:1;overflow-wrap:anywhere}.review-player>span{color:#738178;font-size:13px}.rejection-options{display:grid;grid-template-columns:1fr 1fr;width:100%;gap:4px 12px}.rejection-options :deep(.el-checkbox){margin-right:0;min-height:36px;height:auto;white-space:normal}.rejection-options :deep(.el-checkbox__label){white-space:normal}
 </style>
