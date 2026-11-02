@@ -324,14 +324,8 @@
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="身份证号" required>
-                  <el-input
-                    v-model="playerForm.idCard"
-                    placeholder="18位身份证号"
-                    maxlength="18"
-                    @input="onIdCardInput"
-                  />
-                </el-form-item>
+                <el-form-item label="证件类型" required><el-select v-model="playerForm.documentType" style="width:100%" @change="onDocumentTypeChange"><el-option label="身份证" value="resident_id" /><el-option label="护照" value="passport" /></el-select></el-form-item>
+                <el-form-item :label="playerForm.documentType === 'passport' ? '护照号' : '身份证号'" :required="!isEditingPlayer"><el-input v-model="playerForm.idCard" :placeholder="isEditingPlayer ? '不修改可留空' : playerForm.documentType === 'passport' ? '5至30位字母或数字' : '18位身份证号'" :maxlength="playerForm.documentType === 'passport' ? 30 : 18" autocomplete="off" @input="onIdCardInput" /></el-form-item>
               </el-col>
             </el-row>
 
@@ -374,14 +368,14 @@
                 <el-form-item label="出生日期">
                   <el-input
                     v-model="playerForm.birthDate"
-                    placeholder="自动识别"
-                    readonly
+                    :placeholder="playerForm.documentType === 'passport' ? 'YYYY-MM-DD' : '自动识别'"
+                    :readonly="playerForm.documentType !== 'passport'"
                   />
                 </el-form-item>
               </el-col>
               <el-col :span="8">
                 <el-form-item label="籍贯">
-                  <el-input v-model="playerForm.nativePlace" placeholder="自动识别" readonly />
+                  <el-input v-model="playerForm.nativePlace" :placeholder="playerForm.documentType === 'passport' ? '籍贯' : '自动识别'" :readonly="playerForm.documentType !== 'passport'" />
                 </el-form-item>
               </el-col>
               <el-col :span="8">
@@ -616,14 +610,8 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="身份证号" required>
-                <el-input
-                  v-model="playerForm.idCard"
-                  placeholder="18位身份证号"
-                  maxlength="18"
-                  @input="onIdCardInput"
-                />
-              </el-form-item>
+              <el-form-item label="证件类型" required><el-select v-model="playerForm.documentType" style="width:100%" @change="onDocumentTypeChange"><el-option label="身份证" value="resident_id" /><el-option label="护照" value="passport" /></el-select></el-form-item>
+                <el-form-item :label="playerForm.documentType === 'passport' ? '护照号' : '身份证号'" :required="!isEditingPlayer"><el-input v-model="playerForm.idCard" :placeholder="isEditingPlayer ? '不修改可留空' : playerForm.documentType === 'passport' ? '5至30位字母或数字' : '18位身份证号'" :maxlength="playerForm.documentType === 'passport' ? 30 : 18" autocomplete="off" @input="onIdCardInput" /></el-form-item>
             </el-col>
           </el-row>
 
@@ -666,14 +654,14 @@
               <el-form-item label="出生日期">
                 <el-input
                   v-model="playerForm.birthDate"
-                  placeholder="自动识别"
-                  readonly
+                  :placeholder="playerForm.documentType === 'passport' ? 'YYYY-MM-DD' : '自动识别'"
+                  :readonly="playerForm.documentType !== 'passport'"
                 />
               </el-form-item>
             </el-col>
             <el-col :span="8">
               <el-form-item label="籍贯">
-                <el-input v-model="playerForm.nativePlace" placeholder="自动识别" readonly />
+                <el-input v-model="playerForm.nativePlace" :placeholder="playerForm.documentType === 'passport' ? '籍贯' : '自动识别'" :readonly="playerForm.documentType !== 'passport'" />
               </el-form-item>
             </el-col>
             <el-col :span="8">
@@ -1248,6 +1236,7 @@
 
 <script setup>
 import { resolveNativePlace } from '../../../../cloudfunctions/dataCenter/shared/idcard-region.cjs'
+import {playerDocumentForm,preparePlayerDocument} from '../../utils/teamPlayerDocument.js'
 import PlayerAvatar from '../../components/common/PlayerAvatar.vue'
 import PlayerNotifyDialog from '../../components/tournament/PlayerNotifyDialog.vue'
 import PlayerReviewDialog from '../../components/tournament/PlayerReviewDialog.vue'
@@ -1991,7 +1980,7 @@ const cropperImageSrc = ref('')
 const cropperPendingFile = ref(null)
 
 const playerForm = ref({
-  name: '', gender: 'male', birthDate: '', idCard: '',
+  name: '', gender: 'male', birthDate: '', idCard: '', documentType:'resident_id',
   nationality: '中国', nativePlace: '', jerseyNumber: 1,
   position: '', jerseyName: '', clothingSize: '',
   contactName: '', contactPhone: '',
@@ -2072,7 +2061,9 @@ function onNameInput() {
 }
 
 // 身份证号输入处理
+function onDocumentTypeChange(){playerForm.value.idCard=''}
 function onIdCardInput() {
+  if(playerForm.value.documentType==='passport')return
   const idCard = playerForm.value.idCard
   if (idCard && idCard.length === 18) {
     const parsed = parseIdCard(idCard)
@@ -2200,7 +2191,7 @@ function editPlayer(row) {
   editingPlayerOriginal.value = row
   playerForm.value = {
     name: row.name || '', gender: row.gender || 'male',
-    birthDate: row.birthDate || '', idCard: row.idCard || '',
+    birthDate: row.birthDate || '', ...playerDocumentForm(row),
     nationality: row.nationality || '中国', nativePlace: row.nativePlace || '',
     jerseyNumber: row.jerseyNumber || 1, position: row.position || '',
     jerseyName: row.jerseyName || '', clothingSize: row.clothingSize || '',
@@ -2210,7 +2201,7 @@ function editPlayer(row) {
     province: row.province || '', city: row.city || '', district: row.district || '', addressDetail: row.addressDetail || '',
     idCardFront: row.idCardFront || '', idCardBack: row.idCardBack || ''
   }
-  if(!playerForm.value.nativePlace){const inferred=resolveNativePlace(playerForm.value.idCard);if(inferred){playerForm.value.nativePlace=inferred.nativePlace;playerForm.value.nativePlaceSource=inferred.nativePlaceSource}}
+  if(playerForm.value.documentType==='resident_id' && !playerForm.value.nativePlace){const inferred=resolveNativePlace(playerForm.value.idCard);if(inferred){playerForm.value.nativePlace=inferred.nativePlace;playerForm.value.nativePlaceSource=inferred.nativePlaceSource}}
   showAddPlayer.value = true
 }
 
@@ -2293,11 +2284,10 @@ async function submitPlayer() {
     ElMessage.warning('请输入球员姓名')
     return
   }
-  const keepImportedIdentity = isEditingPlayer.value && !playerForm.value.idCard && Boolean(editingPlayerOriginal.value?.identityDigest)
-  if (!keepImportedIdentity && (!playerForm.value.idCard || playerForm.value.idCard.length !== 18)) {
-    ElMessage.warning('请输入18位身份证号')
-    return
-  }
+  let documentPatch
+  try { documentPatch=preparePlayerDocument(playerForm.value,isEditingPlayer.value ? editingPlayerOriginal.value : null) }
+  catch(error){ElMessage.warning(error.message);return}
+  const keepImportedIdentity=documentPatch.keepStoredIdentity
   if (!playerForm.value.photoUrl) {
     ElMessage.warning('请上传球员照片')
     return
@@ -2311,11 +2301,12 @@ async function submitPlayer() {
 
   // 检查同一球队内是否已有相同身份证号的球员（避免重复加入同一球队）
   // 编辑时排除自己
-  if (!isEditingPlayer.value) {
+  if (!keepImportedIdentity) {
     try {
       const existInTeam = await queryList('players', {
         where: {
-          idCard: playerForm.value.idCard,
+          idCard: documentPatch.idCard,
+          ...(isEditingPlayer.value ? {_id:{$ne:editingPlayerId.value}} : {}),
           $or: [
             { teamId: teamId },
             { teamCode: teamId }
@@ -2328,7 +2319,8 @@ async function submitPlayer() {
         return
       }
     } catch (checkErr) {
-      console.warn('检查球员重复失败，继续提交:', checkErr.message)
+      ElMessage.warning('证件重复检查失败，请重试')
+      return
     }
   }
 
@@ -2362,6 +2354,7 @@ async function submitPlayer() {
 
     const data = {
       ...playerForm.value,
+      ...documentPatch,
       playerId: generatePlayerId(team.value.teamCode || teamId, 'C'),
       // 球员归属同时写入主键和历史兼容字段，保证小程序与 PC 端读取一致。
       teamId: teamId,
@@ -2372,7 +2365,8 @@ async function submitPlayer() {
       registerTime: isEditingPlayer.value ? playerForm.value.registerTime : new Date().toISOString()
     }
     if (isEditingPlayer.value) delete data.playerId
-    if (keepImportedIdentity) delete data.idCard
+    delete data.keepStoredIdentity
+    if (keepImportedIdentity) {delete data.idCard;delete data.idNumber}
     if (isEditingPlayer.value) {
       await updateRecord('players', editingPlayerId.value, data)
       ElMessage.success('保存成功')
@@ -2389,7 +2383,8 @@ async function submitPlayer() {
         if (!exist || exist.length === 0) {
           await addRecord('player_library', {
             name: playerForm.value.name,
-            idCard: playerForm.value.idCard,
+            documentType:documentPatch.documentType,
+            idCard:documentPatch.idCard,
             gender: playerForm.value.gender,
             birthDate: playerForm.value.birthDate,
             nativePlace: playerForm.value.nativePlace,
@@ -2618,7 +2613,7 @@ async function submitStaff() {
 
 function resetPlayerForm() {
   playerForm.value = {
-    name: '', gender: 'male', birthDate: '', idCard: '',
+    name: '', gender: 'male', birthDate: '', idCard: '', documentType:'resident_id',
     nationality: '中国', nativePlace: '', jerseyNumber: 1,
     position: '', jerseyName: '', clothingSize: '',
     height: null, weight: null,
