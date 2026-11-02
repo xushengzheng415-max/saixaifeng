@@ -1,5 +1,7 @@
 /* 全息主卡：对齐 H5 卡世界 player-card-holo（holo-cosmos）
-   卡面比例 0.698 / 卡形遮罩内置 base64（不依赖端上加载本地 wxss 图片）/ 星空箔光 / 扫光 / 手指跟随 + 默认循环 */
+   性能约束：真机上禁止 mask / mix-blend-mode / filter / 常驻重绘动画。
+   卡形轮廓由离线烘焙的 foil-shine.png 自带 alpha 承担；
+   扫光与高光只在卡面内部的矩形区域裁剪，动画一律只改 transform / opacity。 */
 
 .holo-wrap {
   width: 100%;
@@ -10,20 +12,34 @@
 }
 
 .holo {
-  --card-mask: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAADXCAYAAAD4BagrAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAARHSURBVHhe7dLZjtxIDAVR//9Pz6BnYKAcViYvtZS2COC8dJNZ2n79MjOzZ/YP/2Dvba+P4eec37a2xxl2Unt/CLSlvc6xL8YPYOvL41lHnWsXji9r60vjOUvWxnO2nmcHxJezx4viOTNr4hlkJ8aXsWRNPCOxJp6xxL4YH/4M4/+/ifH/I3ZwfOBvYwfEh/xmtkN8qPqffdR9IHyY+tvr6zwIPjzVqtK5W5U+AD4s9cxK525TcvOc0TajkplbxBvmDfF/2her/n+LeBO8Gf5dx5k981vFi9e13SJetO7h0vFidS+XjReq+7lcvEDd12Xihen+To8XpOc4LV6Inufr8QL0XF+LP6znOzz+oN7jsPhDepfD4g/pfXaPP6D32i0eLG2OB0o/NsXDpE+r4iHSkiguSR3DOCh1DOOg1DGMg1LHMA5KHcM4KHUM46DUMYyDUscwDkodwzgodQzjoNQxjINSxzAOSh3DOCh1DOOg1DGMg1LHMA5KHcM4KHUM46DUMYyDUscwDkodwzgodQzjoNQxjINSxzAOSh3DOCh1DOOg1DGMg1LXNA5LlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkmVKC5JlSguSZUoLkkzrbgsLVkVD5FoVTxE+rQ6HiR9Wh0Pkj6tjgdJtCoeIn1aHQ+SPq2OB0m0Kh4i0ap4iETteIC0pB0PkEZacVkaieOiNBPHRalSxgUpNYyDUtdiHJK6FuOQ1LUYh6SuxTgkdS3GIaljGAeljmEclDqmcVhKTeOwlJrGYSk1jcNSahqHpdQ0DkupaRyWElFckipRXJIqUVySKlFckipRXJIqUVySKmVckBJlXJASZVyQEmVckBJlXJASZVyQEmVckBJlXJASUVySKmVckBJlXJASZVyQEmVckBJlXJASZVyQElFckipRXJIqUVySZlpxWRppxWVppBWXpZE4LkozcVyUZuK4KM3EcVGaieOiNBPHRWkmiktSYhqHpa7FOCR1TOOwlJrGYSkRxSWpEsUlaaYVl6WRVlyWRlpxWVqyKh4i0ap4iPRpUzxM+m1zPFDaLR6s99o9/oDe57D4Q3qPw+MP6tm+Gn9cz3RavBA9x+nxgnR/l4kXpnu6bLxQ3cfl4wXr+m4TL1zXdbt4A7qW28cb0vkeE29M53lcvEF932PjDfLGtQ8+31fHh6M+tvS318aHpZo14sPTn2xjfKBvZzvHB/w29oX40J/MTogv4SnsQvHl3JFdOL6sO7AbxZd3NXbz+ELPZg+LL/jb7OHxhR/NXhY/gCPYi+PHsAez/+KHsZbZYvxQOsym8YNJmEXxwxkxa8ePiMxWx4/Jj8p2y4/KDsuPyszskf0LRjK8l2RPJKYAAAAASUVORK5CYII=");
   position: relative;
   width: 100%;
   padding-top: 143.27%; /* 卡面 300x430，比例 0.6977 */
   background: transparent;
-  transform-style: preserve-3d;
+  transform-origin: center center;
   transition: transform 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
-  /* 只留一层投影：真机上 filter 层数越多，倾斜时越卡 */
-  filter: drop-shadow(0 20rpx 32rpx rgba(0, 0, 0, 0.7));
   will-change: transform;
 }
 
-.holo.is-active {
+.holo.is-active,
+.holo.is-showcase {
   transition: transform 90ms linear;
+}
+
+/* 卡后静态光晕：给卡片浮起感，取代原来的 drop-shadow（drop-shadow 会让整卡每帧重算） */
+.holo-glow {
+  position: absolute;
+  left: -6%;
+  top: -3%;
+  right: -6%;
+  bottom: -2%;
+  background: radial-gradient(
+    58% 44% at 50% 64%,
+    rgba(240, 199, 94, 0.22) 0%,
+    rgba(240, 199, 94, 0.06) 46%,
+    rgba(240, 199, 94, 0) 72%
+  );
+  pointer-events: none;
 }
 
 .card-art {
@@ -34,125 +50,112 @@
   height: 100%;
 }
 
-/* 卡形遮罩：箔光只落在卡面轮廓内（把卡面 alpha 缩成 150x215 内置成 base64） */
-.card-shine,
-.card-sweep,
-.card-glare {
+/* —— 星空箔光：烘焙图自带卡形 alpha，运行时只做透明度呼吸 —— */
+.card-foil {
   position: absolute;
   left: 0;
   top: 0;
   width: 100%;
   height: 100%;
+  opacity: 0.34;
+  pointer-events: none;
+  will-change: opacity;
+  animation: foilBreath 4.6s ease-in-out infinite alternate;
+}
+
+@keyframes foilBreath {
+  0% { opacity: 0.26; }
+  100% { opacity: 0.42; }
+}
+
+.holo.is-active .card-foil {
+  animation: none;
+  opacity: 0.62;
+}
+
+.holo.is-showcase .card-foil {
+  animation: none;
+  opacity: 0.5;
+}
+
+/* —— 扫光：限制在卡面中段矩形内，纯 transform 平移 —— */
+.sweep-clip {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 20%;
+  bottom: 26%;
   overflow: hidden;
   pointer-events: none;
-  -webkit-mask-image: var(--card-mask);
-  -webkit-mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: 0 0;
-  mask-image: var(--card-mask);
-  mask-size: 100% 100%;
-  mask-repeat: no-repeat;
-  mask-position: 0 0;
+  opacity: 0.42;
 }
 
-/* —— 星空箔光：三层 cosmos 贴图 + 12 段彩虹 —— */
-.card-shine {
-  mix-blend-mode: color-dodge;
-  opacity: 0.3;
-  transition: opacity 200ms ease;
-  /* 只做透明度呼吸（便宜），不再持续改 background-position，避免端上一直重绘 */
-  animation: shineBreath 4.6s ease-in-out infinite alternate;
-}
-
-.holo.is-active .card-shine {
-  animation: none;
-}
-
-@keyframes shineBreath {
-  0% { opacity: 0.24; }
-  100% { opacity: 0.4; }
-}
-
-.tex {
+.sweep-band {
   position: absolute;
   left: 0;
   top: 0;
-  width: 100%;
+  width: 44%;
   height: 100%;
-}
-
-.tex-bottom {
-  opacity: 0.36;
-}
-
-.tex-middle {
-  opacity: 0.24;
-}
-
-.tex-top {
-  opacity: 0.18;
-}
-
-.rain {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background-image: repeating-linear-gradient(
-    82deg,
-    hsl(53, 45%, 62%) 0%,
-    hsl(93, 40%, 55%) 5%,
-    hsl(176, 38%, 55%) 10%,
-    hsl(228, 42%, 58%) 15%,
-    hsl(283, 40%, 58%) 20%,
-    hsl(326, 38%, 56%) 25%,
-    hsl(326, 38%, 56%) 30%,
-    hsl(283, 40%, 58%) 35%,
-    hsl(228, 42%, 58%) 40%,
-    hsl(176, 38%, 55%) 45%,
-    hsl(93, 40%, 55%) 50%,
-    hsl(53, 45%, 62%) 55%
-  );
-  background-size: 220% 220%;
-  background-position: 30% 30%;
-}
-
-/* —— 常驻扫光：保证端上有可见动效 —— */
-.card-sweep {
-  mix-blend-mode: screen;
-  opacity: 0.32;
-}
-
-.streak {
-  position: absolute;
-  top: -20%;
-  left: 0;
-  width: 46%;
-  height: 140%;
   background: linear-gradient(
     100deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.5) 45%,
-    rgba(255, 255, 255, 0.75) 52%,
+    rgba(255, 255, 255, 0.35) 40%,
+    rgba(255, 255, 255, 0.62) 50%,
+    rgba(255, 255, 255, 0.26) 62%,
     rgba(255, 255, 255, 0) 100%
   );
-  transform: translateX(-120%) rotate(14deg);
-  animation: streakMove 5s ease-in-out infinite;
+  transform: translateX(-130%) skewX(-14deg);
   will-change: transform;
+  animation: sweepMove 5.4s ease-in-out infinite;
 }
 
-@keyframes streakMove {
-  0% { transform: translateX(-120%) rotate(14deg); }
-  55% { transform: translateX(230%) rotate(14deg); }
-  100% { transform: translateX(230%) rotate(14deg); }
+@keyframes sweepMove {
+  0%, 8% { transform: translateX(-130%) skewX(-14deg); }
+  62%, 100% { transform: translateX(260%) skewX(-14deg); }
 }
 
-/* —— 镜面高光：跟随手指的径向光 —— */
-.card-glare {
-  mix-blend-mode: soft-light;
-  opacity: 0.42;
-  transition: opacity 160ms ease;
+/* —— 镜面高光：跟随手指的高光圆，只改 transform / opacity —— */
+.glare-clip {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 15%;
+  bottom: 23%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.glare-dot {
+  position: absolute;
+  left: -50%;
+  top: -50%;
+  width: 200%;
+  height: 200%;
+  opacity: 0.38;
+  background: radial-gradient(
+    circle 24% at 50% 50%,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(214, 232, 255, 0.24) 34%,
+    rgba(255, 255, 255, 0) 62%
+  );
+  transition: transform 140ms linear, opacity 220ms ease;
+}
+
+.holo.is-active .glare-dot {
+  opacity: 0.58;
+}
+
+.holo.is-showcase .glare-dot {
+  opacity: 0.58;
+  animation: glareTour 2.6s ease-in-out 1 both;
+}
+
+@keyframes glareTour {
+  0% { transform: translate(-12%, 8%); }
+  25% { transform: translate(10%, -10%); }
+  50% { transform: translate(12%, 10%); }
+  75% { transform: translate(-10%, -8%); }
+  100% { transform: translate(-12%, 8%); }
 }
 
 .holo-tip {

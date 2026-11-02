@@ -1,10 +1,6 @@
 var TILT = 16
-var SHINE_IDLE = 0.3
-var SHINE_ACTIVE = 0.62
-var GLARE_IDLE = 0.42
-var GLARE_ACTIVE = 0.62
-var SWEEP_MS = 3600
-var SWEEP_STEP = 80
+var SHOWCASE_MS = 2600
+var GLARE_IDLE = 'transform: translate(-12%, 8%);'
 
 function clamp01(n) {
   if (n < 0) return 0
@@ -16,14 +12,11 @@ function tiltStyle(rotateX, rotateY) {
   return 'transform: rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' + rotateY.toFixed(2) + 'deg);'
 }
 
-function glareStyle(x, y, opacity) {
-  return (
-    'background-image: radial-gradient(circle at ' + x + '% ' + y + '%, ' +
-    'rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.18) 34%, rgba(255, 255, 255, 0) 64%);' +
-    'background-size: 100% 100%;' +
-    'background-repeat: no-repeat;' +
-    'opacity: ' + opacity + ';'
-  )
+/* glare-dot 是 200% 尺寸的圆盘，位移百分比作用在自身宽度上，所以 50 系数即可把光斑中心落到卡面坐标 */
+function glareStyle(nx, ny) {
+  var tx = (nx - 0.5) * 50
+  var ty = (ny - 0.5) * 50
+  return 'transform: translate(' + tx.toFixed(1) + '%, ' + ty.toFixed(1) + '%);'
 }
 
 Component({
@@ -43,26 +36,23 @@ Component({
   },
 
   data: {
+    stateClass: '',
     tiltStyle: '',
-    shineStyle: 'opacity: ' + SHINE_IDLE + ';',
-    rainStyle: '',
-    glareStyle: glareStyle(50, 38, GLARE_IDLE),
-    activeClass: ''
+    glareStyle: GLARE_IDLE
   },
 
   lifetimes: {
     attached: function () {
-      this.toIdle()
+      this.setData({ stateClass: '', tiltStyle: '', glareStyle: GLARE_IDLE })
     },
     ready: function () {
       var self = this
-      this.toIdle()
       this.ensureRect(function () {
         self.showcase()
       })
     },
     detached: function () {
-      this.stopShowcase()
+      this.cancelShowcase()
     }
   },
 
@@ -77,7 +67,7 @@ Component({
       return !!this._rect && this._rect.width > 4 && this._rect.height > 4
     },
 
-    /** 取卡片位置；ready 时可能还没排好版，失败就短间隔重试，避免端上首次触摸没反应 */
+    /** 取卡片位置；ready 时可能还没排好版，失败就短间隔重试，避免首次触摸没反应 */
     ensureRect: function (done, retries) {
       var self = this
       var left = typeof retries === 'number' ? retries : 2
@@ -99,29 +89,14 @@ Component({
         .exec()
     },
 
-    /** 回到空闲：去掉倾斜，箔光与扫光继续循环 */
-    toIdle: function () {
-      this.setData({
-        activeClass: '',
-        tiltStyle: '',
-        shineStyle: 'opacity: ' + SHINE_IDLE + ';',
-        rainStyle: '',
-        glareStyle: glareStyle(50, 38, GLARE_IDLE)
-      })
-    },
-
-    /** 按归一化坐标落点：倾斜 + 箔光增强 + 彩虹与镜面光跟随 */
+    /** 按归一化坐标落点：倾斜 + 高光跟随（只写 transform，交给合成层） */
     paint: function (nx, ny) {
       var rotateY = (nx - 0.5) * TILT * 2
       var rotateX = (0.5 - ny) * TILT * 2
-      var x = Math.round(nx * 100)
-      var y = Math.round(ny * 100)
       this.setData({
-        activeClass: 'is-active',
+        stateClass: 'is-active',
         tiltStyle: tiltStyle(rotateX, rotateY),
-        shineStyle: 'opacity: ' + SHINE_ACTIVE + ';',
-        rainStyle: 'background-position: ' + x + '% ' + y + '%;',
-        glareStyle: glareStyle(x, y, GLARE_ACTIVE)
+        glareStyle: glareStyle(nx, ny)
       })
     },
 
@@ -134,32 +109,23 @@ Component({
       )
     },
 
-    /** 进页面时自动扫一遍（对齐 H5 showcase），端上一定能看到动效 */
+    /** 进页面自动巡游一遍（对齐 H5 showcase）；高光巡游交给 CSS 动画，只切换一个类 */
     showcase: function () {
       var self = this
-      if (this._showcased || !this.rectValid()) return
+      if (this._showcased || this._touching) return
       this._showcased = true
-      this.stopShowcase()
-      var start = Date.now()
-      this._loopTimer = setInterval(function () {
-        var p = (Date.now() - start) / SWEEP_MS
-        if (p >= 1) {
-          self.stopShowcase()
-          self.toIdle()
-          return
-        }
-        var ang = p * Math.PI * 4
-        self.paint(
-          clamp01(0.5 + Math.cos(ang) * 0.42),
-          clamp01(0.5 + Math.sin(ang * 0.85) * 0.36)
-        )
-      }, SWEEP_STEP)
+      this.setData({ stateClass: 'is-showcase', tiltStyle: '', glareStyle: GLARE_IDLE })
+      this._showcaseTimer = setTimeout(function () {
+        self._showcaseTimer = null
+        if (self._touching) return
+        self.setData({ stateClass: '', tiltStyle: '', glareStyle: GLARE_IDLE })
+      }, SHOWCASE_MS)
     },
 
-    stopShowcase: function () {
-      if (this._loopTimer) {
-        clearInterval(this._loopTimer)
-        this._loopTimer = null
+    cancelShowcase: function () {
+      if (this._showcaseTimer) {
+        clearTimeout(this._showcaseTimer)
+        this._showcaseTimer = null
       }
     },
 
@@ -167,21 +133,17 @@ Component({
       var self = this
       var touch = e && e.touches && e.touches[0]
       this._touching = true
-      this.stopShowcase()
-      /* 先立刻给反馈（箔光/高光提亮），倾斜在拿到卡片位置后一帧内补上 */
-      this.setData({
-        activeClass: 'is-active',
-        shineStyle: 'opacity: ' + SHINE_ACTIVE + ';',
-        glareStyle: glareStyle(50, 38, GLARE_ACTIVE)
-      })
+      this.cancelShowcase()
       if (this.rectValid()) {
         this.applyTouch(touch)
         this.ensureRect()
-      } else {
-        this.ensureRect(function () {
-          if (self._touching) self.applyTouch(touch)
-        })
+        return
       }
+      /* 还没拿到卡片位置：先给提亮反馈，拿到坐标后立即补倾斜 */
+      this.setData({ stateClass: 'is-active' })
+      this.ensureRect(function () {
+        if (self._touching) self.applyTouch(touch)
+      })
     },
 
     onTouchMove: function (e) {
@@ -202,7 +164,7 @@ Component({
     onTouchEnd: function () {
       if (!this._touching) return
       this._touching = false
-      this.toIdle()
+      this.setData({ stateClass: '', tiltStyle: '', glareStyle: GLARE_IDLE })
     }
   }
 })
