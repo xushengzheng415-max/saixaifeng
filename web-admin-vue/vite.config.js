@@ -4,6 +4,7 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import path from 'path'
+import { pcReleaseMetadataPlugin } from '../tools/pc-release-metadata.mjs'
 // import { vitePluginRemoveConsole } from 'vite-plugin-remove-console'  // 暂时注释，构建有问题
 
 export default defineConfig({
@@ -18,6 +19,7 @@ export default defineConfig({
     })())
   },
   plugins: [
+    pcReleaseMetadataPlugin(path.resolve(__dirname,'..'), process.env.VITE_APP_BASE || '/admin/'),
     {
       name:'shared-standings-browser',
       enforce:'pre',

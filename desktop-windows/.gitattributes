@@ -1,0 +1,4 @@
+# Preserve the exact bytes of the already-shipped desktop runtime.
+src/** -text
+scripts/runtime-smoke.cjs -text
+assets/** -text

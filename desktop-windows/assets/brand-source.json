@@ -1,0 +1,23 @@
+{
+  "name": "赛小蜂足球 Windows 应用图标",
+  "mode": "user-supplied-square-rounded",
+  "source": "assets/brand-original-square.png",
+  "sourceSize": [
+    500,
+    500
+  ],
+  "sourceSha256": "f09476bb5fe932a2d9f0f8a114954a45911f39f6f8747c094c27ca6174aaf66a",
+  "loginSource": "assets/brand-original-vertical.png",
+  "loginSourceSha256": "23313036c35ff049c2297396e6bff1edde364cb54164bdd3b2936595ea9b66d5",
+  "verticalBounds": [
+    971,
+    826,
+    3196,
+    3341
+  ],
+  "symbolBottomExclusive": 2444,
+  "cornerRadiusRatio": 0.22,
+  "outsideCorners": "transparent",
+  "background": "unchanged honeycomb artwork",
+  "note": "Preserves the approved raster artwork; PNG/ICO assets, no claim of a vector master."
+}
