@@ -10,6 +10,7 @@ const removed=r=>r.isDeleted===true||['deleted','archived','cancelled','withdraw
 const snapshotIds=s=>unique([].concat(s.playerIds||[],(s.players||[]).map(p=>p.playerId||p.id||p._id)))
 const fail=(code,error)=>({success:false,code,error})
 const taskUrl=id=>'https://www.sxffootball.cn/service-account-h5/player-review.html?task='+encodeURIComponent(id)
+const stamp=v=>new Date(v&&typeof v==='object'&&!(v instanceof Date)?v.$date||v._date:v||0).getTime()||0
 const jsonDoc=r=>Array.isArray(r.data)?r.data[0]:r.data
 module.exports=function createWorkflow({cloud,db,secret}){
  const read=(c,w,f)=>readAll(db,c,w,{fields:f,maxRows:10000})
@@ -105,6 +106,7 @@ module.exports=function createWorkflow({cloud,db,secret}){
    return {success:true,task:{taskId:task._id,kind:task.kind,title:task.title,reason:task.reason,teamName:task.teamName,status:task.status,revision:task.revision},rows}
   }
   const player=visible.find(p=>p._id===text(event.playerId));if(!player)return fail('PLAYER_SCOPE_DENIED','当前账号无权修改该球员')
+  if(stamp(player.organizerReviewedAt)>stamp(task.createdAt))return fail('TASK_SUPERSEDED','审核事项已更新，请打开最新通知')
   if(task.kind==='claim')return fail('CLAIM_REQUIRED','请通过球队小程序邀请球员认领')
   if(action==='servicePrivateReviewPhoto'){
    const raw=text(event.imageBase64),buffer=Buffer.from(raw,'base64')
@@ -154,7 +156,7 @@ module.exports=function createWorkflow({cloud,db,secret}){
   await db.runTransaction(async tx=>{
    const current=jsonDoc(await tx.collection('player_review_tasks').doc(task._id).get())
    const latest=jsonDoc(await tx.collection('players').doc(player._id).get())
-   if(!current||current.status==='submitted'||current.revision!==task.revision||text(latest.organizerReviewStatus)!==text(player.organizerReviewStatus)||JSON.stringify(claims(latest))!==JSON.stringify(claims(player)))throw Object.assign(new Error('资料已更新，请刷新后重新提交'),{code:'REVISION_CONFLICT'})
+   if(!current||current.status==='submitted'||current.revision!==task.revision||text(latest.organizerReviewStatus)!==text(player.organizerReviewStatus)||JSON.stringify(claims(latest))!==JSON.stringify(claims(player))||stamp(latest.organizerReviewedAt)>stamp(task.createdAt))throw Object.assign(new Error('资料已更新，请刷新后重新提交'),{code:'REVISION_CONFLICT'})
    await tx.collection('players').doc(player._id).update({data:patch})
    await tx.collection('player_review_tasks').doc(task._id).update({data:{status:'submitted',revision:task.revision+1,submittedBy:text(user._id),submittedAt:db.serverDate(),updateTime:db.serverDate()}})
   })
