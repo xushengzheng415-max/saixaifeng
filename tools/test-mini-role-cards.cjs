@@ -19,12 +19,12 @@ function harness(file,role,context=base) {
 }
 async function rolePreference() {
   const storage={userInfo:{_id:user.id,phone:user.phone}},app={globalData:{}}
-  let serverRole='organizer'
+  let serverRole='organizer', catalog=base, identityWrites=0
   global.getApp=()=>app;global.getCurrentPages=()=>[]
   global.wx={getStorageSync:key=>storage[key],setStorageSync:(key,value)=>{storage[key]=value},removeStorageSync:key=>delete storage[key],reLaunch(){},cloud:{callFunction(options){
-    if(options.data.action==='setHomeIdentity'){serverRole=options.data.identity;return Promise.resolve({result:{success:true}})}
-    const current=base.workspaces.find(row=>row.id===options.data.workspaceId) || sharedSpace
-    const result={...base,success:true,currentWorkspace:current,currentIdentity:{id:current.type==='tournament_shared'?'event_staff':current.type==='team'?'team_coach':serverRole}}
+    if(options.data.action==='setHomeIdentity'){identityWrites++;serverRole=options.data.identity;return Promise.resolve({result:{success:true}})}
+    const current=catalog.workspaces.find(row=>row.id===options.data.workspaceId) || catalog.currentWorkspace
+    const result={...catalog,success:true,currentWorkspace:current,currentIdentity:{id:current.type==='tournament_shared'?'event_staff':current.type==='team'?'team_coach':serverRole}}
     queueMicrotask(()=>options.success({result}));return Promise.resolve({result})
   }}}
   const file=require.resolve('../miniprogram/utils/workspace');delete require.cache[file];const workspace=require(file)
@@ -41,9 +41,32 @@ async function rolePreference() {
   workspace.saveContext({...base,currentWorkspace:sharedSpace,currentIdentity:{id:'event_staff'}})
   assert.equal(workspace.getPortalRole(),'team_coach','Shared-event resource entry does not switch portal identity')
   await workspace.switchPortalRole('organizer');assert.equal(workspace.getPortalRole(),'organizer')
+  const eventOnly={...org,permissions:['workspace.manage','event.view','event.manage']}
+  catalog={...base,currentWorkspace:eventOnly,workspaces:[eventOnly],homeEntries:entries.filter(row=>row.type!=='team')}
+  workspace.clearContext()
+  assert.equal(workspace.portalRoleOptions(catalog).find(row=>row.id==='team_coach').selectable,true,'An organizer with no team can enter the team creation view')
+  const writesBefore=identityWrites
+  const emptyTeamView=await workspace.switchPortalRole('team_coach')
+  assert.equal(workspace.getPortalRole(),'team_coach')
+  assert.equal(identityWrites,writesBefore,'View selection must not write an unauthorized backend identity')
+  assert.deepEqual(emptyTeamView.currentWorkspace.permissions,eventOnly.permissions)
+  assert.equal(workspace.hasPermission('team.manage',emptyTeamView),false,'Revoked team access is not restored')
+  const emptyTeams=harness('teams/index.js','team_coach',emptyTeamView)
+  assert.equal(emptyTeams.page.data.showTeamEmpty,true)
+  emptyTeams.workspace.hasAuthenticatedUser=()=>true
+  emptyTeams.page.onCreateTeam()
+  assert.equal(emptyTeams.page.data.createVisible,true,'The empty team view opens the existing creation form')
+  workspace.clearContext();await workspace.loadContext()
+  assert.equal(workspace.getPortalRole(),'team_coach','Reload retains the empty team view')
+  catalog={...catalog,currentWorkspace:sharedSpace,workspaces:[sharedSpace]}
+  workspace.clearContext();await workspace.switchPortalRole('organizer')
+  const sharedWrites=identityWrites
+  await workspace.switchPortalRole('team_coach')
+  assert.equal(workspace.getPortalRole(),'team_coach','Shared-event-only accounts can also create their own team')
+  assert.equal(identityWrites,sharedWrites)
   storage.userInfo={_id:'other-user',phone:'13900000000'}
   assert.equal(workspace.getPortalRole({currentIdentity:{id:'team_coach'}}),'team_coach','Portal preference belongs to one account')
-  assert.equal(workspace.portalRoleOptions({currentIdentity:{id:'team_coach'},workspaces:[teamSpace]}).find(row=>row.id==='organizer').selectable,false)
+  assert.equal(workspace.portalRoleOptions({currentIdentity:{id:'team_coach'},workspaces:[teamSpace]}).find(row=>row.id==='organizer').selectable,true)
 }
 async function run() {
   await rolePreference()

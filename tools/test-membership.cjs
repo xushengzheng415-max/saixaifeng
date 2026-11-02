@@ -762,11 +762,15 @@ const tradeOf = (outTradeNo, overrides) => Object.assign({
     assert.ok(account.includes("require('./membership.cjs').homeCard"))
     assert.ok(account.includes("'membership-grant':'会员赠滴'"))
     const h5 = read('service-account-h5/service-personal.js')
-    assert.ok(h5.includes("var PAGE_VERSION='v2.14'"))
+    // 版本号只做「不得倒退」守护，具体小版本随并行改动推进，不写死
+    assert.ok(/var PAGE_VERSION='v2\.(1[5-9]|[2-9][0-9])'/.test(h5), 'H5 版本号不得回退到 v2.15 之前')
     // 会员标识（2026-10-31）：徽章要落在昵称旁，且素材必须随包存在，避免线上只显示文字没有标识
     assert.ok(h5.includes('function memberMarkImg('), '会员标识需要统一的徽章渲染函数')
     assert.ok(h5.includes('id="homeNameMark"'), '会员徽章要落在昵称旁')
     assert.ok(fs.existsSync(path.join(ROOT, 'service-account-h5', 'assets', 'membership', 'member-badge-96.png')), '会员徽章素材 member-badge-96.png 缺失')
+    // 会员背景方案已被用户否决（2026-10-31「其实有这个就行了」），不得再引入「我的」页顶部会员底图
+    assert.ok(!h5.includes('me-member-theme'), '会员标识只用徽章，不再引入会员背景主题类')
+    assert.ok(!read('service-account-h5/service-personal-polish.css').includes('member-hero-bg'), '不得再引用已删除的会员背景底图')
     ;['servicePrivateMembershipStatus', 'servicePrivateMembershipSubscribe', 'servicePrivateMembershipOrderStatus', 'servicePrivateMembershipOrders'].forEach(action => {
       assert.ok(h5.includes(action), 'H5 缺少 ' + action)
     })

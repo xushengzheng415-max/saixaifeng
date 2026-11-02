@@ -8,6 +8,8 @@ const allFiles = ['reader.cjs','statistics.mjs','match-events.mjs','service.cjs'
 allFiles.push('hub.cjs','hub-contract.cjs','hub-directory.cjs','team-history.cjs','valuation-store.cjs')
 allFiles.push('numbering.cjs','numbering-regions.json')
 allFiles.push('tournament-boards.mjs','tournament-boards.cjs')
+// 名单读取与身价展示投影：转会中心、发现页身价展示与各端只读展示共用同一实现。
+allFiles.push('roster.cjs','valuation-view.cjs')
 const requestedFiles = process.argv.filter(arg => arg.startsWith('--file=')).map(arg => arg.slice(7))
 if (requestedFiles.some(file => !allFiles.includes(file))) throw new Error('Unknown shared file')
 const files = requestedFiles.length ? requestedFiles : allFiles

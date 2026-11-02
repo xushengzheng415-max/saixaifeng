@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -100,7 +100,7 @@ const overview = {
 };
 
 const tabs = ['overview', 'organizers', 'accounts', 'tournaments', 'teams', 'content', 'support', 'honeyOrders'];
-const extraTabs = ['dataCenter', 'playerCards', 'feedback', 'cardRules', 'marketingSelfTest', 'aiPortrait', 'paymentSettings'];
+const extraTabs = ['dataCenter', 'playerCards', 'feedback', 'cardRules', 'marketingSelfTest', 'aiPortrait', 'membership', 'paymentSettings'];
 const tabLabels = {
   overview: '运营总览',
   organizers: '主办方联系人',
@@ -115,6 +115,7 @@ const tabLabels = {
   content: '内容运营',
   marketingSelfTest: '自测身价',
   aiPortrait: 'AI 形象照',
+  membership: '会员管理',
   honeyOrders: '蜂蜜充值',
   paymentSettings: '支付设置'
 };
@@ -127,6 +128,14 @@ const tabletDevices = [
   { name: 'portrait-768', width: 768, height: 1024 }
 ].filter(device => !process.env.TABLET_DEVICE || device.name === process.env.TABLET_DEVICE);
 
+// 会员管理页的数据桩：档位、汇总、订单、会员列表都按真实返回结构给空集合，
+// 保证页面外壳（表格、统计卡、空态）在离线验收里能完整渲染。
+const mockMembershipPlans = [
+  { code: 'basic', name: '基础会员', firstPriceCents: 990, renewPriceCents: 1990, yearlyPriceCents: 19900, grantDrops: 200, portraitDiscount: 0.95, portraitDiscountLabel: '9.5 折', visible: true, order: 1 },
+  { code: 'plus', name: '进阶会员', firstPriceCents: 1990, renewPriceCents: 2990, yearlyPriceCents: 29900, grantDrops: 500, portraitDiscount: 0.9, portraitDiscountLabel: '9 折', visible: true, order: 2 },
+  { code: 'pro', name: '专业会员', firstPriceCents: 3990, renewPriceCents: 4990, yearlyPriceCents: 49900, grantDrops: 1000, portraitDiscount: 0.8, portraitDiscountLabel: '8 折', visible: true, order: 3 },
+  { code: 'family', name: '家庭会员', firstPriceCents: 5990, renewPriceCents: 6990, yearlyPriceCents: 69900, grantDrops: 2000, portraitDiscount: 0.8, portraitDiscountLabel: '8 折', visible: false, order: 4 }
+];
 function jsonResult(bodyText) {
   let body = {};
   try { body = JSON.parse(bodyText || '{}'); } catch { body = {}; }
@@ -140,6 +149,19 @@ function jsonResult(bodyText) {
     if (functionName === 'platformOwner' && params.action === 'listRequests') return { success: true, requests: [] };
     if (functionName === 'platformOwner' && params.action === 'honeyOrdersOverview') return { success: true, overview: { available: false, note: '本地验收：未开通支付配置', totals: null, byDay: [], byPack: [] } };
     if (functionName === 'platformOwner' && params.action === 'honeyOrderList') return { success: true, list: { rows: [], total: 0, scanned: 0, page: 1, pageSize: 10 } };
+    if (functionName === 'platformOwner' && params.action === 'membershipPlanGet') return {
+      success: true, source: 'default', sourceLabel: '本地验收桩（未连生产）', ready: true, reason: '', reasonText: '',
+      version: 0, updatedText: '', updatedByName: '', note: '', history: [],
+      plans: mockMembershipPlans, defaults: mockMembershipPlans
+    };
+    if (functionName === 'platformOwner' && params.action === 'membershipOverview') return {
+      success: true, days: 7, available: true, note: '', scanned: 0, limit: 1000, truncated: false, truncatedNote: '',
+      totals: { created: 0, paid: 0, pending: 0, closed: 0, refunded: 0, blocked: 0, grossCents: 0, grossYuan: '0', grantDrops: 0, firstTier: 0, renewTier: 0, successRate: 0 },
+      subscription: { available: true, note: '', truncated: false, active: 0, expiringSoon: 0, expired: 0, total: 0, byLevel: [] },
+      byDay: [], byPlan: []
+    };
+    if (functionName === 'platformOwner' && params.action === 'membershipOrderList') return { success: true, rows: [], total: 0, page: 1, pageSize: 20, pageCount: 1, scanned: 0, available: true, note: '', truncated: false, truncatedNote: '' };
+    if (functionName === 'platformOwner' && params.action === 'membershipSubscriptionList') return { success: true, rows: [], total: 0, page: 1, pageSize: 20, pageCount: 1, scanned: 0, available: true, note: '', truncated: false, truncatedNote: '' };
     return { success: true, data: {}, rows: [], items: [], requests: [], list: { rows: [], total: 0, scanned: 0, page: 1, pageSize: 10 } };
   }
   if (action === 'listPlayerCardTemplates') return { success: true, templates: [], nextCursor: '' };

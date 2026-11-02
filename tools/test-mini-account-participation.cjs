@@ -1,9 +1,9 @@
 'use strict'
 const assert=require('node:assert/strict'),service=require('../cloudfunctions/getMiniWorkspace/accountParticipation.cjs'),cards=require('../miniprogram/utils/workspace-entry-cards')
-function database(tables,cap=3,fail='',allowed=['tournament_teams','tournaments','divisions']) {
+function database(tables,cap=3,fail='',allowed=['tournament_teams','tournaments','divisions'],missing=[]) {
  const reads=[],command={in:values=>({$in:values}),gt:value=>({$gt:value}),and:values=>({$and:values})}
  function matches(row,where){return Object.entries(where).every(([key,value])=>key==='$and'?value.every(part=>matches(row,part)):value && value.$in?value.$in.includes(row[key]):value && value.$gt!==undefined?row[key]>value.$gt:row[key]===value)}
- const db={command,collection(name){assert.ok(allowed.includes(name),'Reads only declared collections');return {where(where){let limit=100,fields;const query={orderBy(){return query},limit(value){limit=value;return query},field(value){fields=value;return query},async get(){reads.push({name,where,fields});if(name===fail)throw Error('Read failed');let rows=(tables[name]||[]).filter(row=>matches(row,where)).sort((a,b)=>a._id.localeCompare(b._id)).slice(0,Math.min(cap,limit));if(fields)rows=rows.map(row=>Object.fromEntries(Object.entries(row).filter(([key])=>fields[key])));return {data:rows}}};return query}}}}
+ const db={command,collection(name){assert.ok(allowed.includes(name),'Reads only declared collections');if(missing.includes(name))throw Object.assign(new Error('collection not exist'),{code:'DATABASE_COLLECTION_NOT_EXIST'});return {where(where){let limit=100,fields;const query={orderBy(){return query},limit(value){limit=value;return query},field(value){fields=value;return query},async get(){reads.push({name,where,fields});if(name===fail)throw Error('Read failed');let rows=(tables[name]||[]).filter(row=>matches(row,where)).sort((a,b)=>a._id.localeCompare(b._id)).slice(0,Math.min(cap,limit));if(fields)rows=rows.map(row=>Object.fromEntries(Object.entries(row).filter(([key])=>fields[key])));return {data:rows}}};return query}}}}
  return {db,reads}
 }
 const format=row=>({id:row._id,name:row.name,logo:row.logoUrl||'',status:row.status,dateText:'2026-09-26 — 2026-10-31'}),division=row=>String(row.divisionId||row.division||'default')

@@ -19,8 +19,10 @@ function matches(row, where) {
   if (!where) return true
   // db.command.or(...) 返回的是 { __or: [条件...] }，即 __or 是 where 自身的键。
   if (Array.isArray(where.__or)) return where.__or.some(sub => matches(row, sub))
+  if (Array.isArray(where.__and)) return where.__and.every(sub => matches(row, sub))
   return Object.keys(where).every(key => {
     const expected = where[key]
+    if (expected && Object.hasOwn(expected, '__gt')) return String(row[key]) > String(expected.__gt)
     if (expected && Array.isArray(expected.__in)) return expected.__in.map(String).indexOf(String(row[key])) >= 0
     return row[key] === expected
   })
@@ -35,14 +37,22 @@ function createDb(seed) {
     serverDate: () => 'SERVER_DATE',
     command: {
       or: conditions => ({ __or: conditions }),
-      in: values => ({ __in: values })
+      in: values => ({ __in: values }),
+      and: conditions => ({ __and: conditions }),
+      gt: value => ({ __gt: value })
     },
     createCollection: async () => ({}),
+    runTransaction: async handler => handler(db),
     collection(name) {
       return {
         doc(id) {
           const find = () => list(name).find(row => String(row._id) === String(id))
           return {
+            set: async ({ data }) => {
+              const row = find()
+              if (row) Object.assign(row, data)
+              else list(name).push({ _id:id, ...data })
+            },
             get: async () => {
               const found = find()
               if (!found) throw new Error('document.getfail document with_id does not exist')
@@ -62,12 +72,15 @@ function createDb(seed) {
           }
         },
         where(where) {
-          const state = { skip: 0, limit: 100 }
+          const state = { skip: 0, limit: 100, order: '' }
           const chain = {
+            field() { return chain },
+            orderBy(field, direction) { state.order = field; state.direction = direction; return chain },
             skip(value) { state.skip = Number(value) || 0; return chain },
             limit(value) { state.limit = Number(value) || 100; return chain },
             get: async () => {
               const rows = list(name).filter(row => matches(row, where))
+              if (state.order) rows.sort((a, b) => String(a[state.order]).localeCompare(String(b[state.order])) * (state.direction === 'desc' ? -1 : 1))
               return { data: rows.slice(state.skip, state.skip + state.limit) }
             },
             count: async () => ({ total: list(name).filter(row => matches(row, where)).length })
@@ -99,7 +112,7 @@ async function callWorkspace(seed, event, openId = OPEN_ID) {
     if (request === 'wx-server-sdk') return sdk
     return originalLoad.call(this, request, parent, isMain)
   }
-  const modulePath = require.resolve('../cloudfunctions/getMiniWorkspace/index.js')
+  const modulePath = require.resolve(process.env.SXF_CLAIM_TEST_FUNCTION || '../cloudfunctions/getMiniWorkspace/index.js')
   delete require.cache[modulePath]
   let main
   try {
@@ -511,7 +524,42 @@ async function run() {
     ok('球队球员库兼容 teamCode 历史归属字段')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/25 通过`)
+  // 已授权主教练不在领队白名单中，扫码仍须恢复子账号并进入当前赛事球队。
+  {
+    const seed = baseSeed()
+    seed.teams = [{ _id:'team-1', name:'主教练授权球队', orgId:'org-1', claimStatus:'unclaimed' }]
+    seed.coaches = [{ _id:'staff-1', teamId:'team-1', teamCode:'team-1', name:'隔离主教练' }]
+    seed.team_invitations = [
+      { _id:'owner-invite', type:'prebuilt_tournament_team', tournamentId:'t-1', teamId:'team-1', status:'pending', allowedClaimPhones:[PHONE_B], inviteExpireAt:FUTURE },
+      { _id:'staff-invite', type:'team_member', teamId:'team-1', orgId:'org-1', staffId:'staff-1', inviteePhone:PHONE_A, source:'organizer_team_access', status:'active', expiresAt:FUTURE, permissions:['team.view','team.manage'] }
+    ]
+    seed.tournament_teams = [{ _id:'registration-1', teamId:'team-1', tournamentId:'t-1', divisionName:'U12', status:'approved' }]
+    const { result, store } = await callWorkspace(seed, {action:'claimableTeams', inviteKey:'key-1'})
+    assert.equal(result.success, true, JSON.stringify(result))
+    assert.equal(result.teams.length, 1)
+    assert.equal(result.teams[0].authorizedManager, true)
+    assert.equal(result.teams[0].workspaceId, 'team:team-1')
+    assert.equal(store.team_invitations.find(row => row._id === 'staff-invite').status, 'accepted')
+    assert.deepEqual(store.team_invitations.find(row => row._id === 'owner-invite').allowedClaimPhones, [PHONE_B])
+    assert.equal(store.teams[0].ownerId, undefined)
+    assert.equal(store.teams[0].claimStatus, 'unclaimed')
+    const viewOnly = JSON.parse(JSON.stringify(seed))
+    viewOnly.team_invitations.find(row => row._id === 'staff-invite').permissions = ['team.view']
+    const viewResult = await callWorkspace(viewOnly,{action:'claimableTeams',inviteKey:'key-1'})
+    assert.equal(viewResult.result.teams[0].authorizedManager, true)
+    assert.deepEqual(viewResult.store.team_memberships[0].permissions, ['team.view'], '只读子账号扫码不能升级管理权限')
+    const revoked = JSON.parse(JSON.stringify(seed))
+    revoked.team_memberships = [{_id:'revoked-1',teamId:'team-1',userId:'user-1',status:'revoked',permissions:['team.view','team.manage']}]
+    assert.equal((await callWorkspace(revoked,{action:'claimableTeams',inviteKey:'key-1'})).result.teams.length, 0)
+    const outside = JSON.parse(JSON.stringify(seed))
+    outside.tournament_teams[0].tournamentId = 'other-tournament'
+    assert.equal((await callWorkspace(outside,{action:'claimableTeams',inviteKey:'key-1'})).result.teams.length, 0)
+    const expired = JSON.parse(JSON.stringify(seed))
+    expired.team_invitations.find(row => row._id === 'staff-invite').expiresAt = PAST
+    assert.equal((await callWorkspace(expired,{action:'claimableTeams',inviteKey:'key-1'})).result.teams.length, 0)
+    ok('主教练子账号扫码激活与球队入口；不变更所有权，拒绝撤权、过期和跨赛事')
+  }
+  console.log(`\n赛事级认领码契约：${passed}/26 通过`)
 }
 
 run().catch(error => {

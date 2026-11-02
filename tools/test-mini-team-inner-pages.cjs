@@ -15,7 +15,19 @@ const staff=withStaff([owner],[
  {_id:'s5',type:'doctor',name:'已撤销队医',status:'archived'}
 ],[{_id:'u1',phone:'13800000002'}],()=> '已掩码')
 assert.equal(staff.length,3);assert(staff.find(row=>row.kind==='coach'));assert(staff.find(row=>row.kind==='doctor'));assert(staff[0].roleText.includes('领队'));assert.equal(staff[0].accountTypeText,'主账户')
-assert(staff.filter(row=>row.staffOnly).every(row=>row.statusText==='已登记'&&!row.permissions))
+assert(staff.filter(row=>row.staffOnly).every(row=>!row.permissions))
+// 报名表导入但既未登记手机号也未关联账号的工作人员身份不可识别，状态为「未登记」；登记了手机号的仍为「已登记」。
+assert.equal(staff.filter(row=>row.staffOnly).find(row=>row.name==='教练甲').statusText,'已登记')
+assert.equal(staff.filter(row=>row.staffOnly).find(row=>row.name==='队医甲').statusText,'未登记')
+// 登录名与报名表姓名不同时，凭成员账号上的 staffId 显式指向合并为一条，不再因姓名不同拆成两条记录；
+// 账号只有微信昵称时展示名册/报名表上的本人姓名。
+const linkedOwner=formatMember({_id:'m2',userId:'u2',role:'owner',staffId:'s9',status:'accepted'},{nickname:'武优秀',phone:'13253439995'},['u2'],()=> '已掩码')
+const linked=withStaff([linkedOwner],[{_id:'s9',type:'other',name:'武朝',role:'工作人员'}],[{_id:'u2',nickname:'武优秀',phone:'13253439995'}],()=> '已掩码')
+assert.equal(linked.length,1);assert.equal(linked[0].name,'武朝');assert.equal(linked[0].staffOnly,undefined)
+assert(linked[0].roleText.includes('负责人')&&linked[0].roleText.includes('工作人员'))
+// 账号已填实名时以本人实名为准，名册姓名不覆盖。
+const selfNamed=withStaff([formatMember({_id:'m3',userId:'u3',role:'owner',staffId:'s10',status:'accepted'},{realName:'张三',nickname:'小张'},['u3'],()=> '')],[{_id:'s10',type:'other',name:'张叁'}],[{_id:'u3',realName:'张三'}],()=> '')
+assert.equal(selfNamed.length,1);assert.equal(selfNamed[0].name,'张三')
 const context={currentWorkspace:{id:'team:1'},participatingEntriesVersion:'team-participation/1',participatingEntriesState:'ready',participatingEntries:[{id:'event1',teamId:'team1',divisionId:'adult'}]}
 const records=[{id:'removed',tournamentId:'event1',divisionId:'adult',status:'removed',competitionStatus:'completed'},{id:'good',tournamentId:'event1',divisionId:'adult',status:'approved',competitionStatus:'completed'},{id:'duplicate',tournamentId:'event1',divisionId:'adult',status:'pending',competitionStatus:'completed'},{id:'other',tournamentId:'event2',divisionId:'adult',status:'approved',competitionStatus:'completed'}]
 const rows=participation.rowsForTeam(records,context,'team1');assert.equal(rows.length,1);assert.equal(rows[0].id,'good');assert.equal(participation.tournamentCount(rows),1)

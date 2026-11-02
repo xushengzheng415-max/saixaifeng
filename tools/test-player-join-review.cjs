@@ -8,7 +8,7 @@ function memory(seed){
   const value=(row,key,id)=>key==='_id'?id:row[key]
   const match=(name,where)=>Object.entries(rows[name]||{}).filter(([id,row])=>Object.entries(where).every(([key,want])=>String(value(row,key,id)??'')===String(want)))
   const copy=row=>structuredClone(row)
-  const db={serverDate:()=>new Date(),async runTransaction(fn){return fn(db)},collection(name){return {
+  const db={serverDate:()=>new Date(),command:{remove:()=>({__removed:true}),set:value=>value},async runTransaction(fn){return fn(db)},collection(name){return {
     doc(id){return {async get(){const row=(rows[name]||{})[id];return {data:row?copy({...row,_id:id}):null}},async set({data}){rows[name]||={};rows[name][id]=copy(data)},async update({data}){if(!(rows[name]||{})[id])throw new Error('document does not exist');Object.assign(rows[name][id],copy(data))}}},
     where(where){return {
       limit(){return this},
@@ -28,10 +28,14 @@ async function main(){
       pending2:{name:'待驳回球员',jerseyNumber:'22',orgId:'org',pendingJoinTeamId:'team',pendingJoinStatus:'pending',pendingJoinRequestId:'jr_2',joinRequestedAt:new Date(500)},
       rejected:{name:'已驳回球员',jerseyNumber:'23',pendingJoinTeamId:'team',pendingJoinStatus:'rejected'}
     },
-    player_team_history:{}
+    player_team_history:{},
+    // 已提交待确认的会话：驳回后必须清空回执，否则球员重开旧链接只会看到上次的结果页。
+    service_entry_sessions:{s1:{gateId:'gate',active:true,phoneVerified:true,registeredPlayerId:'pending2',playerRegistrationReceipt:{choiceToken:'tk',playerId:'pending2',name:'待驳回球员',pendingTeamConfirm:true},playerRegistrationChoice:{mode:'new',playerId:'',nonce:'tk'},playerRegistrationFormDraft:{choiceToken:'tk',values:{name:'待驳回球员'}},playerRegistrationCardDraft:{confirmed:true},playerRegistrationPortraits:[{id:'portrait'}]}}
   })
+  const cloud={calls:[],async callFunction(payload){this.calls.push(payload);return {result:{success:true,data:{status:'delivered'}}}}
+  }
   const review=createPlayerJoinReview({
-    db:m.db, workspaceError, registrantTypeForPlayer:()=>'self', toTime:value=>value?new Date(value).getTime():0,
+    db:m.db, cloud, workspaceError, registrantTypeForPlayer:()=>'self', toTime:value=>value?new Date(value).getTime():0,
     async safeGet(name,where,limit){return m.match(name,where).slice(0,limit).map(([id,row])=>({...m.copy(row),_id:id}))},
     async safeGetTeamPlayers(teamId){return Object.entries(m.rows.players||{}).filter(([,row])=>String(row.teamId||row.teamCode||'')===teamId).map(([id,row])=>({...m.copy(row),_id:id}))},
     async loadTeams(){return [{_id:'team'}]},
@@ -49,11 +53,27 @@ async function main(){
   m.rows.players.inTeam.jerseyNumber='7'
   await assert.rejects(()=>review.review({action:'confirmTeamPlayerJoin',teamId:'team',playerId:'rejected'},identity),e=>e.code==='PLAYER_JOIN_STATE_CHANGED')
   // 驳回只改状态、不建立球队归属，也不写归属日志。
+  process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY='bridge-test'
   const rejected=await review.review({action:'rejectTeamPlayerJoin',teamId:'team',playerId:'pending2',reason:'人数已满'},identity)
+  delete process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY
   assert.equal(rejected.status,'rejected')
   assert.equal(m.rows.players.pending2.pendingJoinStatus,'rejected');assert.equal(m.rows.players.pending2.pendingJoinRejectReason,'人数已满')
   assert.equal(m.rows.players.pending2.teamId,undefined,'驳回不建立球队归属')
   assert.equal(Object.keys(m.rows.player_team_history).length,0)
+  // 驳回后放行重新登记：清回执与草稿、留下驳回印记，并尽力通知球员。
+  assert.equal(rejected.reopenedSessions,1,'驳回后必须清空该球员的登记回执，否则球员重开旧链接只会看到上次结果页')
+  const session=m.rows.service_entry_sessions.s1
+  assert.equal(session.registeredPlayerId,'')
+  assert.equal(session.playerRegistrationChoice.__removed,true)
+  assert.equal(session.playerRegistrationReceipt.__removed,true)
+  assert.equal(session.playerRegistrationFormDraft.__removed,true)
+  assert.equal(session.lastRegistrationRejectReason,'人数已满')
+  assert.equal(session.lastRegistrationRejectPlayerName,'待驳回球员')
+  assert.equal(session.lastRegistrationRejectTeamId,'team')
+  const noticeCall=cloud.calls.find(call=>call.data&&call.data.action==='notifyTeamPlayerJoinRejected')
+  assert.ok(noticeCall,'驳回后应请求服务号驳回通知')
+  assert.equal(noticeCall.data.playerId,'pending2');assert.equal(noticeCall.data.teamId,'team');assert.equal(noticeCall.data.bridgeKey,'bridge-test')
+  assert.equal(rejected.notice.status,'delivered')
   const approved=await review.review({action:'confirmTeamPlayerJoin',teamId:'team',playerId:'pending'},identity)
   assert.equal(approved.status,'approved');assert.equal(approved.playerName,'郑旭升')
   assert.equal(m.rows.players.pending.teamId,'team')

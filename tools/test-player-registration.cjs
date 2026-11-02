@@ -40,6 +40,22 @@ async function main(){
   assert.equal(s.rows.players.b.linkedUserId,undefined,'other namesake stays untouched')
   const retry=await run(s.deps,{...valid,operation:'submit',choiceToken:choice.choiceToken});assert.equal(retry.idempotent,true)
   assert.equal(Object.keys(s.rows.parent_profile_submissions).length,1)
+  // 身份证籍贯推算（2026-10-29 用户确认 A1）：空档案按身份证前 6 位补籍贯与默认国籍。
+  assert.equal(s.rows.players.a.nativePlace,'北京市','claim fills native place from ID card')
+  assert.equal(s.rows.players.a.nativePlaceRegion.provinceCode,'104')
+  assert.equal(s.rows.players.a.nativePlaceRegion.cityLetter,'A')
+  assert.equal(s.rows.players.a.nativePlaceSource,'id_card')
+  assert.equal(s.rows.players.a.nationality,'中国','default nationality is China')
+  assert.match(s.rows.players.a.businessNumber,/^P104A\d{8}$/,'region resolvable so numbering is no longer blocked')
+  // 档案已有真实籍贯/国籍时必须保留，不能被身份证地址覆盖后连带改变永久编号地区。
+  s=setup({realPlace:{teamId:'team',name:valid.name,idCard:id(),jerseyNumber:'20',nativePlace:'河南省郑州市',nativePlaceRegion:{provinceCode:'226',cityLetter:'A'},nativePlaceSource:'manual',nationality:'中国'}})
+  await run(s.deps,{operation:'search',query:valid.name});const realPlaceChoice=await choose(s,'claim','realPlace')
+  await run(s.deps,{...valid,operation:'submit',choiceToken:realPlaceChoice.choiceToken})
+  assert.equal(s.rows.players.realPlace.nativePlace,'河南省郑州市','existing native place is preserved')
+  assert.equal(s.rows.players.realPlace.nativePlaceRegion.provinceCode,'226')
+  assert.equal(s.rows.players.realPlace.nativePlaceRegion.cityLetter,'A')
+  assert.equal(s.rows.players.realPlace.nativePlaceSource,'manual','provenance is preserved')
+  assert.match(s.rows.players.realPlace.businessNumber,/^P226A\d{8}$/,'registered region keeps its own province')
   s=setup({taken:{teamId:'team',name:'其他球员',jerseyNumber:'021',status:'active'}})
   let numberChoice=await choose(s)
   const takenNumber=await run(s.deps,{operation:'check_number',choiceToken:numberChoice.choiceToken,jerseyNumber:'21'})
@@ -95,6 +111,18 @@ async function main(){
   const claimChoice=await choose(s,'claim','inTeam')
   const claimed=await run(s.deps,{...valid,name:'在队球员',operation:'submit',choiceToken:claimChoice.choiceToken})
   assert.equal(claimed.pendingTeamConfirm,false);assert.equal(s.rows.players.inTeam.teamId,'team')
+  // 2026-10-19 用户口径：身份证只是检索方式之一，无身份证的青少年档案凭姓名即可认领，
+  // 提交时补录的身份证号成为该档案凭据；仍受已认领、历史微信关联、手机号不符拦截。
+  s=setup({youth:{teamId:'team',name:'青少年球员',birthDate:'2015-01-01',jerseyNumber:'9'}})
+  claimProof({name:'青少年球员'},{user:{_id:'user'},phone:'13800000000'},'',{})
+  await run(s.deps,{operation:'search',query:'青少年球员'})
+  const youthChoice=await run(s.deps,{operation:'select',mode:'claim',playerId:'youth',idCard:''})
+  assert.equal(youthChoice.mode,'claim');assert.equal(youthChoice.player.hasIdentity,false)
+  const youthId=id(1,'20150101')
+  await run(s.deps,{...valid,name:'青少年球员',idCard:youthId,birthDate:'2015-01-01',jerseyNumber:'9',guardianRelation:'mother',operation:'submit',choiceToken:youthChoice.choiceToken})
+  assert.equal(s.rows.players.youth.idCard,youthId)
+  assert.equal(s.rows.players.youth.guardianUserId,'user')
+  assert.equal(s.rows.players.youth.manualPlaceholder,false)
   s=setup();c=await choose(s)
   const minor={...valid,idCard:id(1,'20150101'),birthDate:'2015-01-01',operation:'submit',choiceToken:c.choiceToken}
   await reject(()=>run(s.deps,minor),'GUARDIAN_REQUIRED')
@@ -154,6 +182,25 @@ async function main(){
   assert.equal(hit.restorable,null)
   s=setup({dup1:{name:'档一',idCard:id(8),status:'archived',linkedUserId:'user'},dup2:{name:'档二',idCard:id(8),status:'archived',linkedUserId:'user'}})
   await reject(()=>run(s.deps,{operation:'search',query:id(8)}),'PLAYER_IDENTITY_REVIEW')
-  console.log('PASS player registration: required fields, explicit claim, masks, scope, identity, active number pool, cutout provenance, idempotence, drafts, concurrency, restore and transfer')
+  // 身份证前置核验（2026-10-29 用户要求）：18 位有效号码先查本队重复，命中即拦住不必提交；
+  // 口径与提交一致（在队 + 待球队确认），排除已选认领目标，且不写球员档案。
+  s=setup({sameId:{teamId:'team',idCard:id(),name:'已有球员',jerseyNumber:'20'}})
+  let checked=await run(s.deps,{operation:'check_id',idCard:id()})
+  assert.equal(checked.success,true);assert.equal(checked.available,false);assert.equal(checked.code,'PLAYER_IDCARD_CONFLICT');assert.match(checked.message,/本队已有该身份证档案/)
+  assert.equal(Object.keys(s.rows.players).length,1,'check_id must not create or claim players')
+  checked=await run(s.deps,{operation:'check_id',idCard:id(4)})
+  assert.equal(checked.available,true);assert.equal(checked.birthDate,'1990-01-01')
+  await reject(()=>run(s.deps,{operation:'check_id',idCard:id().slice(0,17)+'9'}),'IDCARD_INVALID')
+  // 已选认领目标本人不算重复：认领自己档案时不能把自己判成冲突。
+  await run(s.deps,{operation:'search',query:id()})
+  const selfChoice=await run(s.deps,{operation:'select',mode:'claim',playerId:'sameId',idCard:id()})
+  checked=await run(s.deps,{operation:'check_id',idCard:id()})
+  assert.equal(checked.available,true,'claim target is excluded from duplication')
+  assert.equal(s.rows.service_entry_sessions.s.playerIdCheckWindow.count,3)
+  // 待球队确认的入队申请也占住身份证，命中给出等待球队处理的明确口径。
+  s=setup({waiting:{name:'待确认球员',idCard:id(5),pendingJoinTeamId:'team',pendingJoinStatus:'pending',pendingJoinRequestId:'jr_fixture'}})
+  checked=await run(s.deps,{operation:'check_id',idCard:id(5)})
+  assert.equal(checked.available,false);assert.equal(checked.code,'PLAYER_IDCARD_PENDING');assert.match(checked.message,/等待球队/)
+  console.log('PASS player registration: required fields, explicit claim, masks, scope, identity, active number pool, cutout provenance, idempotence, drafts, concurrency, restore and transfer, early id-card check')
 }
 main().catch(e=>{console.error(e);process.exitCode=1})

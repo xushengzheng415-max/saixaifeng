@@ -10,7 +10,32 @@ function matches(user, condition) {
   return Object.keys(condition || {}).every(key => user[key] === condition[key])
 }
 
-function loadLoginFunction(seedUsers, context, authorizedPhone) {
+function createHttpsMock(handler) {
+  const { EventEmitter } = require('events')
+  return function request(url, options, callback) {
+    const req = new EventEmitter()
+    req.write = () => {}
+    req.end = () => {
+      let payload
+      try {
+        payload = handler(url, options)
+      } catch (error) {
+        process.nextTick(() => req.emit('error', error))
+        return
+      }
+      const response = new EventEmitter()
+      response.statusCode = 200
+      callback(response)
+      process.nextTick(() => {
+        response.emit('data', Buffer.from(JSON.stringify(payload)))
+        response.emit('end')
+      })
+    }
+    return req
+  }
+}
+
+function loadLoginFunction(seedUsers, context, authorizedPhone, phoneError, httpsRequest) {
   const users = clone(seedUsers)
   const writes = []
   const command = { or: conditions => ({ __or: conditions }) }
@@ -53,13 +78,14 @@ function loadLoginFunction(seedUsers, context, authorizedPhone) {
     database: () => db,
     openapi: {
       phonenumber: {
-        getPhoneNumber: async () => ({ phoneInfo: { purePhoneNumber: authorizedPhone } })
+        getPhoneNumber: async () => { if(phoneError)throw phoneError;return { phoneInfo: { purePhoneNumber: authorizedPhone } } }
       }
     }
   }
   const originalLoad = Module._load
   Module._load = function(request, parent, isMain) {
     if (request === 'wx-server-sdk') return sdk
+    if (request === 'https' && httpsRequest) return { request: httpsRequest }
     return originalLoad.call(this, request, parent, isMain)
   }
   const modulePath = require.resolve('../cloudfunctions/checkUserByOpenId/index.js')
@@ -147,7 +173,41 @@ async function run() {
     assert.strictEqual(result.user._id,'real-user')
     assert.strictEqual(fixture.writes.length,0)
   }
-  console.log('小程序手机号主账号登录测试通过：7/7，客户端OpenID不能替代微信可信上下文')
+  for(const [errCode,expected]of [[-604101,'PHONE_API_PERMISSION_DENIED'],[-604102,'PHONE_API_TIMEOUT'],[40029,'PHONE_CODE_INVALID'],[40163,'PHONE_CODE_INVALID'],[-604103,'PHONE_API_UNAVAILABLE']]){
+    const fixture=loadLoginFunction([],{OPENID:'isolated-mini'},'',{errCode,errMsg:'isolated API failure'})
+    const result=await fixture.main({phoneCode:'isolated-code'})
+    assert.equal(result.success,false);assert.equal(result.code,expected);assert.equal(fixture.writes.length,0)
+    if(errCode===-604101)assert.doesNotMatch(result.message,/失效|重新授权/)
+  }
+  process.env.SXF_FOOTBALL_MINIPROGRAM_APPSECRET='test-mini-secret'
+  try {
+    {
+      const fixture=loadLoginFunction([],{OPENID:'official-api-openid'},'',{errCode:-604101,errMsg:'openapi.phonenumber.getPhoneNumber:fail system error: error code: -604101'},createHttpsMock(url=>{
+        if(url.indexOf('/cgi-bin/token')>=0)return {access_token:'mock-access-token',expires_in:7200}
+        if(url.indexOf('/wxa/business/getuserphonenumber')>=0)return {errcode:0,errmsg:'ok',phone_info:{purePhoneNumber:'13700137000'}}
+        throw new Error('unexpected url')
+      }))
+      const result=await fixture.main({phoneCode:'official-code'})
+      assert.strictEqual(result.success,true)
+      assert.strictEqual(result.isNewUser,true)
+      assert.strictEqual(result.user.phone,'13700137000')
+      assert.strictEqual(fixture.users[0].phoneVerified,true)
+    }
+    {
+      const fixture=loadLoginFunction([],{OPENID:'official-api-openid'},'',{errCode:-604101,errMsg:'system error: error code: -604101'},createHttpsMock(url=>{
+        if(url.indexOf('/cgi-bin/token')>=0)return {access_token:'mock-access-token',expires_in:7200}
+        return {errcode:40029,errmsg:'invalid code'}
+      }))
+      const result=await fixture.main({phoneCode:'used-code'})
+      assert.strictEqual(result.success,false)
+      assert.strictEqual(result.code,'PHONE_CODE_INVALID')
+      assert.strictEqual(fixture.writes.length,0)
+    }
+  } finally {
+    delete process.env.SXF_FOOTBALL_MINIPROGRAM_APPSECRET
+  }
+  assert.deepEqual(require('../cloudfunctions/checkUserByOpenId/config.json').permissions.openapi,['phonenumber.getPhoneNumber'])
+  console.log('小程序手机号主账号登录测试通过：7身份场景+5错误分类+2官方接口回退，最小手机号接口权限，无失败写入或身份绕过')
 }
 
 run().catch(error => {

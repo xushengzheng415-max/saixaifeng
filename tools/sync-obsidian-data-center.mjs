@@ -6,6 +6,17 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/card-world-holo4-static-20261101.md','发布记录/card-world-holo4-static-20261101.md'],
+  ['docs/releases/card-world-holo3-static-20261101.md','发布记录/card-world-holo3-static-20261101.md'],
+  ['docs/releases/webLoginApi-full-9aa3c6cd-20261101.md','发布记录/webLoginApi-full-9aa3c6cd-20261101.md'],
+  ['docs/releases/card-world-h5-stage12-20261101.md','发布记录/card-world-h5-stage12-20261101.md'],
+  ['docs/handoffs/FRIENDLY_SIGNUP_TRAE_HANDOFF_2026-11-01.md','研发交接/约球报名后端接线Trae交接-20261101.md'],
+  ['docs/releases/referee-registration-return-20261101.md','发布记录/裁判登记授权回跳邀请恢复本地修复-20261101.md'],
+  ['docs/releases/team-account-access-formal-20261101.md','发布记录/共享账号球队权限与主子账号互换正式发布-20261101.md'],
+  ['docs/releases/team-account-access-preview-20261101.md','发布记录/共享账号分配权限与主子账号互换测试版-20261101.md'],
+  ['docs/releases/claim-staff-scan-fix-20261101.md','发布记录/认领码遗漏已授权工作人员本地修复-20261101.md'],
+  ['docs/releases/mini-share-cover-upload-20261101.md','发布记录/小程序1.2.31分享封面替换上传-20261101.md'],
+  ['docs/releases/mini-claim-upload-20261101.md','发布记录/小程序1.2.31球队扫码认领修复上传-20261101.md'],
   ['docs/releases/player-card-render-cache-build-20261031.md','发布记录/成卡渲染口径缓存键与基础卡沿用新版-20261031.md'],
   ['docs/releases/service-entry-confirm-restore-route-20261031.md','发布记录/球员登记确认恢复入队路由修复-20261031.md'],
   ['docs/releases/windows-client-0.2.6-20261031.md','发布记录/Windows客户端0.2.6登录页兼容新版测试端-20261031.md'],
@@ -14,7 +25,9 @@ const files = [
   ['docs/releases/player-reject-service-notification-20261030.md','发布记录/逐人驳回服务号通知复用审核结果模板-20261030.md'],
   ['docs/releases/service-participation-h5-20261030.md','发布记录/服务号我的参赛资料与电子参赛证-20261030.md'],
   ['docs/releases/honey-pay-result-20261030.md','发布记录/蜂蜜充值与会员支付结果识别修复-20261030.md'],
+  ['docs/releases/mini-review-fix-20261031.md','发布记录/小程序审核驳回整改-首屏游客浏览-20261031.md'],
   ['docs/releases/mini-1.2.30-upload-20261031.md','发布记录/小程序1.2.30开发版上传-20261031.md'],
+  ['docs/releases/mini-1.2.31-upload-20261031.md','发布记录/小程序1.2.31开发版上传-20261031.md'],
   ['docs/releases/mini-1.2.27-upload-20261030.md','发布记录/小程序1.2.27开发版上传-20261030.md'],
   ['docs/releases/registration-idcheck-btn-20261029.md','发布记录/登记身份证前置核验与生成球员卡按钮修复-20261029.md'],
   ['docs/releases/membership-phase1a-20261029.md','发布记录/个人会员一期A上线-20261029.md'],

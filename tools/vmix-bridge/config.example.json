@@ -1,0 +1,51 @@
+{
+  "_comment": "赛小蜂 vMix 桥接器示例配置。复制为 config.json 后修改。",
+  "logLevel": "info",
+
+  "feed": {
+    "url": "https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi",
+    "method": "POST",
+    "token": "在此填写 LIVE_FEED_TOKEN（与云函数环境变量一致）",
+    "body": {
+      "action": "liveFeed",
+      "matchId": "在此填写比赛ID"
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "pollIntervalMs": 2000,
+    "timeoutMs": 8000,
+    "mock": false
+  },
+
+  "vmix": {
+    "host": "127.0.0.1",
+    "port": 8088,
+    "timeoutMs": 5000
+  },
+
+  "mappings": {
+    "clock":     { "input": "Scoreboard", "field": "Clock" },
+    "period":    { "input": "Scoreboard", "field": "Period" },
+    "homeName":  { "input": "Scoreboard", "field": "HomeName" },
+    "awayName":  { "input": "Scoreboard", "field": "AwayName" },
+    "homeShort": { "input": "Scoreboard", "field": "HomeShort" },
+    "awayShort": { "input": "Scoreboard", "field": "AwayShort" },
+    "homeScore": { "input": "Scoreboard", "field": "HomeScore" },
+    "awayScore": { "input": "Scoreboard", "field": "AwayScore" },
+    "homeLogo":  { "input": "HomeLogo", "cachePath": "home_logo.png" },
+    "awayLogo":  { "input": "AwayLogo", "cachePath": "away_logo.png" }
+  },
+
+  "events": {
+    "overlayInput": "EventOverlay",
+    "titleField": "EventTitle",
+    "detailField": "EventDetail",
+    "sideField": "EventSide",
+    "showDurationMs": 5000
+  },
+
+  "cacheDir": "cache",
+  "stateFile": "state.json",
+  "clockTickMs": 1000
+}

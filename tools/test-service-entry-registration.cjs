@@ -279,6 +279,25 @@ async function main() {
     await expectCode(entry({ action: 'acceptServiceTeamPlayer', serviceEntrySession: TOKEN_PLAYER }), 'ENTRY_SUBSCRIPTION_REQUIRED')
   })
 
+  // 回归：service_entry_scans.expiresAt 只是扫码链接自身的新鲜度（30 分钟），
+  // 已建立的登记会话有效期是 12 小时。曾经这里连扫描链接一起判过期，
+  // 用户扫码超过半小时后继续登记草稿、提交或点「立即生成」都会被误判成未关注。
+  await test('扫码链接已过 30 分钟但仍在关注 → 不按未关注阻断', async () => {
+    const seed = baseSeed()
+    seed.service_entry_scans[0].expiresAt = new Date(NOW - HOUR)
+    db.__reset(seed)
+    // 越过关注校验后应继续走登记分支，而不是停在 ENTRY_SUBSCRIPTION_REQUIRED
+    await expectCode(entry({ action: 'acceptServiceTeamPlayer', serviceEntrySession: TOKEN_PLAYER }), 'PLAYER_CHOICE_REQUIRED')
+  })
+
+  await test('扫码记录未关注且链接过期 → 仍按未关注阻断', async () => {
+    const seed = baseSeed()
+    seed.service_entry_scans[0].subscribed = false
+    seed.service_entry_scans[0].expiresAt = new Date(NOW - HOUR)
+    db.__reset(seed)
+    await expectCode(entry({ action: 'acceptServiceTeamPlayer', serviceEntrySession: TOKEN_PLAYER }), 'ENTRY_SUBSCRIPTION_REQUIRED')
+  })
+
   await test('手机号重复账号 → ACCOUNT_CONFLICT', async () => {
     const seed = baseSeed()
     seed.users.push({ _id: 'user_parent_dup', phone: '13812345678', phoneNumber: '13812345678', phoneVerified: true })

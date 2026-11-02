@@ -5,7 +5,7 @@ const projectRoot = path.resolve(__dirname, '..')
 
 function loadPage(relativePath, initialStorage) {
   const storage = Object.assign({}, initialStorage || {})
-  const calls = { redirectTo: [], reLaunch: [], switchTab: [] }
+  const calls = { redirectTo: [], reLaunch: [], switchTab: [], navigateTo: [] }
   let definition = null
   global.getApp = function() { return { globalData: {} } }
   global.getCurrentPages = function() { return [] }
@@ -18,6 +18,7 @@ function loadPage(relativePath, initialStorage) {
     redirectTo: function(options) { calls.redirectTo.push(options.url); if (options.success) options.success({ errMsg: 'redirectTo:ok' }) },
     reLaunch: function(options) { calls.reLaunch.push(options.url); if (options.success) options.success({ errMsg: 'reLaunch:ok' }) },
     switchTab: function(options) { calls.switchTab.push(options.url); if (options.success) options.success({ errMsg: 'switchTab:ok' }) },
+    navigateTo: function(options) { calls.navigateTo.push(options.url); if (options.success) options.success({ errMsg: 'navigateTo:ok' }) },
     showToast: function() {},
     showModal: function() {},
     cloud: { callFunction: function() {} }
@@ -74,6 +75,14 @@ const signupPath = '/pages/tournament/signup/signup?id=tournament-1&divisionId=d
 }
 
 {
+  const test = loadPage('miniprogram/pages/onboarding/onboarding.js', { userId: 'user-1', openId: 'open-1' })
+  test.page.data.createdTeam = { id: 'team-1', name: '测试球队', logo: '' }
+  test.page.inviteTeamPlayers()
+  assert.deepStrictEqual(test.calls.navigateTo, ['/pages/team/player-invite/player-invite?teamId=team-1'])
+  assert.strictEqual(test.storage.currentWorkspaceId, 'team:team-1')
+}
+
+{
   const test = loadPage('miniprogram/pages/tournament/signup/signup.js')
   test.page.data.tournamentId = 'tournament-1'
   test.page.data.activeDivisionId = 'division-u12'
@@ -84,4 +93,4 @@ const signupPath = '/pages/tournament/signup/signup?id=tournament-1&divisionId=d
   assert.strictEqual(test.storage.teamOnboardingReturnUrl, signupPath)
 }
 
-console.log('赛事邀约球队开户与回跳路由测试通过：4/4')
+console.log('赛事邀约球队开户、邀请与回跳路由测试通过：5/5')
