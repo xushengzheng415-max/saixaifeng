@@ -33,9 +33,15 @@ export default defineConfig({
       name:'shared-pairing-templates-browser',
       enforce:'pre',
       transform(source,id) {
-        if (!/\/cloudfunctions\/generateSchedule\/(pairingTemplates|topology|confirmedPairings)\.js$/.test(id.replaceAll('\\','/'))) return null
+        const file = id.replaceAll('\\','/')
+        // 浏览器包里不允许残留裸 require：共用的 CJS 云函数模块统一转成 ESM。
+        if (/\/cloudfunctions\/generateSchedule\/stageOrder\.cjs$/.test(file)) {
+          return source.replace('module.exports = {','export default {')
+        }
+        if (!/\/cloudfunctions\/generateSchedule\/(pairingTemplates|topology|confirmedPairings)\.js$/.test(file)) return null
         return source.replace("const templates = require('./pairingTemplates')", "import templates from './pairingTemplates.js'")
           .replace("const topology = require('./topology')", "import topology from './topology.js'")
+          .replace("const stageOrder = require('./stageOrder.cjs')", "import stageOrder from './stageOrder.cjs'")
           .replace('module.exports = {','export default {')
       }
     },
