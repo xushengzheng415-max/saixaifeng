@@ -1235,13 +1235,13 @@
 </template>
 
 <script setup>
-import { canAssignTeamAccounts, teamStaffDisplayRows, teamStaffPhone } from '../../utils/teamAccountAccess.js'
 import { resolveNativePlace } from '../../../../cloudfunctions/dataCenter/shared/idcard-region.cjs'
 import {playerDocumentForm,preparePlayerDocument} from '../../utils/teamPlayerDocument.js'
 import PlayerAvatar from '../../components/common/PlayerAvatar.vue'
 import PlayerNotifyDialog from '../../components/tournament/PlayerNotifyDialog.vue'
 import PlayerReviewDialog from '../../components/tournament/PlayerReviewDialog.vue'
 import { organizerPlayerReviewStatus, organizerPlayerReviewLabel } from '../../utils/playerReviewDisplay.js'
+import { canAssignTeamAccounts, teamStaffDisplayRows, teamStaffPhone } from '../../utils/teamAccountAccess.js'
 import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

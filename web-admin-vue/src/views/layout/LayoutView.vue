@@ -209,7 +209,6 @@
       </aside>
 
       <section class="workspace">
-        <TabletNavigation v-if="!usesWorkspaceShell && usesEmbeddedPageHeader" :items="currentNavItems" :title="currentPageTitle" :active-path="route.path" :active-resolver="isItemActive" @navigate="handleNavClick" />
         <!-- 顶部工具栏 -->
         <header v-if="usesWorkspaceShell" class="workspace-shell-header">
           <button class="product-brand" type="button" aria-label="返回赛事空间" @click="router.push('/tournament-space')">
@@ -242,7 +241,6 @@
         </header>
         <header v-else-if="!usesEmbeddedPageHeader" class="top-header">
           <div class="header-left">
-            <TabletNavigation :items="currentNavItems" :title="currentPageTitle" :active-path="route.path" :active-resolver="isItemActive" @navigate="handleNavClick" />
             <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" link type="primary" @click="returnToTournamentSpace">返回赛事空间</el-button>
             <span class="page-title">{{ currentPageTitle }}</span>
           </div>
@@ -304,7 +302,6 @@
 </template>
 
 <script setup>
-import TabletNavigation from '../../components/TabletNavigation.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { tutorialForPath } from '../../utils/operationTutorials'
@@ -312,11 +309,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, SwitchButton, ArrowDown, Phone, Warning, Message,
   Trophy, UserFilled, User, SetUp, Picture, FirstAidKit, ShoppingBag,
-  Postcard, Place, QuestionFilled, Bell, Reading, Sort
+  Postcard, Place, QuestionFilled, Bell, Reading
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
-import { sidebarRightForRoute } from '../../utils/tournamentStaffRights'
 import { demoModeChangeEvent, isDemoMode, setDemoMode } from '../../utils/demoMode'
 import productLogo from '../../assets/logo-saixiaofeng.png'
 import { provincesData, cityMapData } from '../team/areaData.js'
@@ -396,22 +392,6 @@ const currentRole = ref('')
 const demoModeActive = ref(isDemoMode(String(route.params.id || '')))
 const buildStamp = __SXF_BUILD__
 const isTournamentStaff = computed(() => !demoModeActive.value && sessionStorage.getItem('sxfTournamentStaff') === '1')
-// 赛事共享子账号只能看到已被授予的模块：路由守卫按 grant.permissions 拦截，
-// 侧栏若照常列出全部模块，就会出现“看得见入口、点进去却被送回账号管理”的错觉。
-// 依赖 route.path 是为了在守卫写入新权限后随每次导航重新读取会话存储。
-const staffRights = computed(() => {
-  void route.path
-  if (demoModeActive.value || sessionStorage.getItem('sxfTournamentStaff') !== '1') return null
-  try { return new Set(JSON.parse(sessionStorage.getItem('sxfStaffPermissions') || '[]')) } catch { return new Set() }
-})
-function visibleStaffNavItems(items) {
-  const rights = staffRights.value
-  if (!rights) return items
-  return items.filter(item => {
-    const right = sidebarRightForRoute(item.path)
-    return !right || rights.has(right)
-  })
-}
 const isHeadReferee = ref(false)
 function syncDemoMode() { demoModeActive.value = isDemoMode(String(route.params.id || '')) }
 function exitDemoMode() {
@@ -926,13 +906,6 @@ const organizerNavItems = computed(() => [
     activeWhen: () => /\/tournaments\/[^/]+\/referees$/.test(route.path)
   },
   {
-    path: tournamentWorkspacePath('/transfer'),
-    label: '转会中心',
-    icon: 'Sort',
-    requiresTournament: true,
-    activeWhen: () => /\/tournaments\/[^/]+\/transfer$/.test(route.path)
-  },
-  {
     path: tournamentWorkspacePath('/edit'),
     label: '赛事设置',
     icon: 'Setting',
@@ -979,7 +952,7 @@ const currentNavItems = computed(() => {
   if (currentRole.value === ROLES.REFEREE) {
     return ownerOnly(refereeNavItems.value)
   }
-  return ownerOnly(visibleStaffNavItems(organizerNavItems.value))
+  return ownerOnly(organizerNavItems.value)
 })
 
 // 用户下拉菜单命令
