@@ -1,0 +1,53 @@
+{
+  "task": "schedule-form-workbook-order",
+  "checkedAt": "2026-11-02T08:21:28.524Z",
+  "source": {
+    "codeCommit": "3964f4c5c445595a2c2f875adab06212b1533cd1",
+    "previewRef": "github/preview",
+    "formalRef": "github/main",
+    "changedFile": "web-admin-vue/src/utils/scheduleTemplateWorkbook.mjs",
+    "relatedCommit": "fa5c6927"
+  },
+  "localOrderingCheck": {
+    "tool": "ExcelJS readback of createScheduleTemplateWorkbook",
+    "legacyDataOrder": [1, 2, 7, 10, 13, 3, 4, 8, 11, 14, 5, 6, 9, 12, 15, 16, 17, 18, 19, 20, 21, 23, 22],
+    "modernDataOrder": "unchanged",
+    "finalIsLast": true,
+    "result": "passed"
+  },
+  "live": {
+    "production": {
+      "url": "https://www.sxffootball.cn/admin/",
+      "http": 200,
+      "entryHtmlSha256": "2A0EB4419376AD0E7930704B0A97E3836D0F32C13465C3E99540B5F332DB5B7C",
+      "entryScript": "/admin/assets/index-DBtxv7by.js",
+      "entryScriptHttp": 200,
+      "hostedFiles": 407
+    },
+    "preview": {
+      "url": "https://www.sxffootball.cn/preview/admin/",
+      "http": 200,
+      "entryHtmlSha256": "95C66F955C72D5B327A422DF8319DA4A670BB4E8EA6243A4688EBB7459049239",
+      "entryScript": "/preview/admin/assets/index-PTIQwVZ4.js",
+      "entryScriptHttp": 200,
+      "hostedFiles": 407
+    }
+  },
+  "buildGuards": {
+    "bareRequire": "absent in both channels",
+    "cloudbaseJsSdk": "absent",
+    "previewBase": "/preview/admin/",
+    "formalBase": "/admin/"
+  },
+  "pcAlignment": {
+    "formalSourceSha256": "ef32fb093f1ea70016c8bc6317a6222bca76b94185e9187271836423253e3935",
+    "previewSourceSha256": "ef32fb093f1ea70016c8bc6317a6222bca76b94185e9187271836423253e3935",
+    "sourceAligned": true,
+    "sourceDirty": false
+  },
+  "desktopSmoke": {
+    "production": "passed 8/8",
+    "preview": "passed 8/8"
+  },
+  "cloudFunctions": "unchanged; generateSchedule is the shared formal backend"
+}
