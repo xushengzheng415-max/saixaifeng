@@ -45,6 +45,7 @@ export default defineConfig({
         return source.replace('module.exports={supplementImportedIdentity,editableImportedProfile}', 'export {supplementImportedIdentity,editableImportedProfile}')
       }
     },
+    {name:'shared-idcard-region-browser',enforce:'pre',transform(source,id){if(!id.replaceAll('\\','/').endsWith('/cloudfunctions/dataCenter/shared/idcard-region.cjs'))return null;return source.replace("const regions = require('./numbering-regions.json')","import regions from './numbering-regions.json'").replace('module.exports = { resolveNativePlace, coreName, regionFor, NATIONALITY_DEFAULT }','export { resolveNativePlace, coreName, regionFor, NATIONALITY_DEFAULT }')}},
     vue(),
     AutoImport({
       resolvers: [ElementPlusResolver()]

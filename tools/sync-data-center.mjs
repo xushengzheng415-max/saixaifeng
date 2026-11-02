@@ -6,7 +6,7 @@ const source = path.join(root,'cloudfunctions/dataCenter/shared')
 const consumers = ['getMiniWorkspace','webLoginApi','resultCenter','updateMatch','serviceMatchWorkflow','playerCardPublishWorker']
 const allFiles = ['reader.cjs','statistics.mjs','match-events.mjs','service.cjs','presentation.cjs','support.cjs','player-card-snapshot.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs','substitution.mjs','penalty-shootout.mjs','match-score.cjs']
 const requestedFiles = process.argv.filter(arg => arg.startsWith('--file=')).map(arg => arg.slice(7))
-const numberingFiles=['numbering.cjs','numbering-regions.json']
+const numberingFiles=['numbering.cjs','numbering-regions.json','idcard-region.cjs']
 if (requestedFiles.some(file => ![...allFiles,...numberingFiles].includes(file))) throw new Error('Unknown shared file')
 const files = requestedFiles.length ? requestedFiles.filter(file=>allFiles.includes(file)) : allFiles
 const check = process.argv.includes('--check')
@@ -33,7 +33,7 @@ if (files.includes('match-score.cjs')) {
 }
 // Preserve the already-live registration numbering hook from the unified source.
 if (!requestedFiles.length || requestedFiles.some(file=>numberingFiles.includes(file))) {
-  for(const file of numberingFiles) {
+  for(const file of numberingFiles.filter(file=>file!=='idcard-region.cjs')) {
     const original=await fs.readFile(path.join(source,file))
     const destination=path.join(root,'cloudfunctions/tournamentRegistrationFlow/data-center',file)
     if(check){const copy=await fs.readFile(destination).catch(()=>null);if(!copy || !original.equals(copy)){console.error(`数据中心共享模块未同步：tournamentRegistrationFlow/${file}`);mismatch=true}}
@@ -42,3 +42,12 @@ if (!requestedFiles.length || requestedFiles.some(file=>numberingFiles.includes(
 }
 if (mismatch) process.exitCode = 1
 else console.log(check ? 'PASS: 数据中心部署副本一致' : '数据中心共享模块已同步')
+
+// Native-place inference: web edit and correction share one source; no manual input is overwritten.
+if(!requestedFiles.length||requestedFiles.includes('idcard-region.cjs')){
+ for(const file of ['idcard-region.cjs','numbering-regions.json']){
+  const original=await fs.readFile(path.join(source,file)),destination=path.join(root,'cloudfunctions/webLoginApi/data-center',file)
+  if(check){const copy=await fs.readFile(destination).catch(()=>null);if(!copy||!original.equals(copy)){console.error(`地区模块未同步：webLoginApi/${file}`);process.exitCode=1}}
+  else await fs.writeFile(destination,original)
+ }
+}

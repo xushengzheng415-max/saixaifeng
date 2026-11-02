@@ -2534,6 +2534,8 @@ exports.main = async (event) => {
     if (action === 'bindServiceAccount') return await bindServiceAccount(event)
     if (action === 'notifyTeamPlayerJoin') return await notifyTeamPlayerJoin(event)
     if (action === 'notifyTeamPlayerJoinRejected') return await notifyTeamPlayerJoinRejected(event)
+    if (action === 'hashPlayerReviewIdentity') return await require('./playerReviewIdentity.cjs')(event,{db})
+    if (action === 'notifyPlayerReviewTask') return await require('./playerReviewNotification.cjs')(event,{db,bridge:serviceBridgeJson,configured:serviceBridgeConfigured,rejectTemplate:servicePlayerRejectTemplateId})
     if (action === 'notifyPlayerReviewRejected') return await notifyPlayerReviewRejected(event)
     if (action === 'reviewRegistration') return await reviewRegistration(event)
     if (action === 'cancelTournamentInvitation') return await cancelTournamentInvitation(event)
