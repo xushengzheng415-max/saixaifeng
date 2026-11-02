@@ -118,6 +118,62 @@
   正式通道应走已健康的固定出口 `https://api.saixiaofeng.com/wechat/football/v1`（`/health` 返回 `{"success":true}`），
   该函数尚未配置 `SXF_FOOTBALL_WECHAT_BRIDGE_URL` / `SXF_FOOTBALL_WECHAT_BRIDGE_SECRET`，因此当前真实发送仍不可用。
   配置桥接后 `healthCheck.configured` 才会变 `true`，且不再受本地/云端出口 IP 限制。
+  **（2026-11-02 追加：桥接变量已于 §4.1 补齐，`configured=true`。）**
 - **测试消息**：未发送。通道 40164 阻断后按约定停止重试，未向任何真实用户推送。
+  **（2026-11-02 追加：桥接变量补齐后已完成 1 条真实发送验证，见 §4.1；本节保留为当时记录。）**
 - **回滚包**：发布前基线保存在 `E:\Documents\_sxf-online\fmc-20261102-r3`，如需回滚用
   `fn code update friendlyMatchCenter --dir E:\Documents\_sxf-online\fmc-20261102-r3`。
+
+### 4.1 桥接变量补齐与真实发送验证（2026-11-02 追加）
+
+- **变量**：在原有 5 项基础上补 2 项 → `envVariables` 共 7 项。
+  `SXF_FOOTBALL_WECHAT_BRIDGE_URL` = `https://api.saixiaofeng.com/wechat/football/v1`；
+  `SXF_FOOTBALL_WECHAT_BRIDGE_SECRET` 由 `tournamentRegistrationFlow` 同名变量程序化复制（64 位，与桥接共用密钥，值不入库）。
+- **写入方式**：`fn env pull` 两份到仓库外临时文件 → 合并为临时 `cloudbaserc`（仓库外）→
+  `config update fn friendlyMatchCenter -y --config-file <临时文件>`；仓库内 `cloudbaserc.json` 未改动，
+  `git status` 保持 621 条既有改动。临时文件（含 env 与脚本）用完即删并确认已删。
+- **回读**：7 键齐全；原 5 项（AppID/AppSecret/三个模板 ID）值未变；新 2 项长度分别为 46 / 64，
+  `BRIDGE_SECRET` 与 `tournamentRegistrationFlow` 完全一致。
+- **配置未动代码**：`timeout=120s`、`memory=256MB`、`Nodejs18.15`、`handler=index.main`、触发器 无、
+  自动安装依赖 仍为 **FALSE**；重新下载线上包 5,834 文件与拟发包**0 差异**，
+  整包聚合 SHA-256 `b28f5c1c…fec4c652d8c`，`index.js` `ADF693AA…55EFE7` 未变（配置更新未重传代码）。
+- **healthCheck**：`version=1.8.0`、33 个 action 不变、`configured=true`（桥接已识别）、
+  `templateConfigured=true`、两套模板 `configured=true` 且 `fallbackTo` 为空、`notifyScenes` 路由符合预期。
+- **真实发送**：以线上同一份 `template-fields.cjs` 构造 1 条 `success` 模板数据
+  （`thing1=通道联调·已成局通知`、`time2=2026-11-02 19:00~20:00`、`thing3/thing4/thing5` 已填），
+  按桥接契约 `{ message: { touser, template_id, url, data } }` + `X-Sxf-Timestamp/Nonce/Signature` 发送 →
+  HTTP 200、耗时约 1.6s、返回 `{"success":true,"msgid":…}`（微信侧已受理）。仅发送 **1 条**，
+  接收人为 `service_identities` 中唯一 `phoneVerified:true` 的服务号账号（手机号尾号 `2130`）。
+- **鉴权边界（未绕过）**：管理页动作（`remindInviteSignups`/`cancelInvite` 等）依赖 `cloud.getWXContext().OPENID`，
+  用 CLI 直调同名邀约返回 `UNAUTHORIZED 请先登录`（未产生写入、未触发发送）。因此函数内 `notify.sent` 计数
+  必须在真机登录后由管理页触发，本次通道验证覆盖的是桥接 + 模板数据 + 模板 ID 的真实可用性。
+- **待真机验收**：H5 报名 → 管理页取消/流局（核对 `notify.templateKey=cancel`、`sent>0`）→
+  成局/提醒（核对 `templateKey=success`）→ 服务号会话核对 `thing1/time2/thing3/thing4/thing6` 渲染与「点击查看详情」跳转。
+
+### 4.2 测试通道部署（2026-11-02，仅测试端，未发正式）
+
+- **H5 测试端**：`hosting deploy` 单文件
+  `service-account-h5/friendly-signin.html` → `preview/service-account-h5/friendly-signin.html`（22,511 B）。
+  读回 `https://www.sxffootball.cn/preview/service-account-h5/friendly-signin.html`（带 `Cache-Control: no-cache`）
+  HTTP 200、22,511 B、SHA-256 `3CA2896B0A63E5F80F15013BD7BB294E5FAC12B74017D28592BD0DE3A93F415C` 与本地一致。
+  **正式 `service-account-h5/` 未发布**，线上正式报名页仍是改动前版本。
+  该页自身不含外链 css/js（内联），无需同批资源；后端走 `webLoginApi` 的 `friendlySignInWorkflow` 中继，
+  线上探针 `workflowAction=healthCheck` 返回 `version=friendlyMatchCenter@v1`（中继已在线，无需重发 `webLoginApi`）。
+- **小程序开发版上传**：从 worktree 目录 `E:\Documents\sxf-football-wt-friendly\miniprogram` 导入开发者工具并上传，
+  版本 **1.2.24**（球队端 `wx57164cca8676f411`）。包体 TOTAL 2,620,434 B、main 1,509,027 B、
+  `/packageDiscover/` 371,139 B、`/pages/team/` 310,205 B、`/pages/tournament/` 311,002 B、`/pages/match/` 84,961 B、`/packageA/` 34,100 B。
+  包体小于 1.2.23（3,993,704 B）是因为本次源为 `main` 基线的干净 worktree（未带入主工作区 621 条未提交改动）。
+  预览二维码（开发者工具生成，非体验版码）：`E:\Documents\_sxf-online\friendly-match-20261102\preview-qrcode.png`（47,647 B，入口页 `pages/discover/discover`）。
+  **体验版未设置**：上传只产生开发版，转体验版需在微信公众平台「版本管理」操作并添加体验成员，本轮无后台会话。
+- **本地校验**：变更的 6 个 JS `node --check` 全过；`app.json`/`invite-manage.json` JSON 可解析；
+  3 个 WXML 无比较/三元/方法调用/数组索引违规；`app.json` 38 个页面均存在 `.js`/`.wxml`；
+  `pages/discover/invite-manage/invite-manage` 已注册且 4 个文件齐全（`canvas-id="invitePoster"` 与 `wx.canvasToTempFilePath` 对齐）；
+  `invite-create` 通过 `require('../invite-qr')` 引入 QR 编码模块，无第三方依赖。
+- **action 一致性**：小程序端实际使用的 15 个云 action（`createInvite`、`listTeamInvites`、`listPublicInvites`、
+  `respondPublicInvite`、`listTeamVenues`、`deleteFriendlyMatch`、`promoteFriendlyMatch`、`listInviteSignups`、
+  `checkInInviteSignup`、`proxyCheckInInvite`、`removeInviteSignup`、`confirmInvite`、`cancelInvite`、`abandonInvite`、
+  `remindInviteSignups`）全部在线上 33 个 action 内，无 `UNKNOWN_ACTION` 风险。
+- **验收注意**：消息与海报里的报名链接仍指向正式 `service-account-h5/`（`CONFIG.h5BaseUrl` 未配置，落默认正式地址）。
+  测试端验收需把链接里的 `/service-account-h5/` 换成 `/preview/service-account-h5/`，token 保持不变。
+  如希望测试期自动指向测试端，可临时给 `friendlyMatchCenter` 加 `SERVICE_ACCOUNT_H5_URL=https://www.sxffootball.cn/preview/service-account-h5/`，
+  影响是该函数发出的所有报名链接都指向测试页，验收后须删除，需单独授权。
