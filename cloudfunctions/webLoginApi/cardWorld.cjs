@@ -9,7 +9,7 @@
  *    不覆盖 users.openId、users.openid、users.wechatOpenId 等已有字段。
  * 3. 前端不得上传分数、卡级、资格或对手；签约与对战结果一律在服务端按确定性键计算。
  * 4. 集合（新建于现有业务环境 cloud1-7g8ckb3c7815a011）：
- *    card_world_players  同城名册（运营侧维护，本模块只读）
+ *    card_world_players  本赛事名册（运营侧维护，本模块只读；含 eventId / appearances）
  *    card_world_profiles 玩家卡世界档案（配额、编制、阵容、战报、会员档位）
  *    card_world_cards    已签约卡册（含签约时的球员快照）
  * 5. 读取不静默截断：超出单次读取上限或读取行数与总数不一致时返回明确错误码。
@@ -139,11 +139,14 @@ module.exports = function createCardWorld(deps) {
     }
   }
 
-  /** 同城名册缺失时返回 missing=true，由调用方给出「名册未配置」而不是「只能签同城」。 */
-  async function readPlayerPool(cityCode) {
-    if (!cityCode) return { rows: [], missing: true }
+  /** 本赛事名册缺失时返回 missing=true，由调用方给出「名册未配置」而不是「只能签同城」。 */
+  async function readPlayerPool(eventId) {
+    const id = String(eventId || '').trim()
+    if (!id) return { rows: [], missing: true }
     try {
-      return { rows: await readAll(COLLECTIONS.players, { cityCode: cityCode }, 'rosterOrder'), missing: false }
+      const rows = await readAll(COLLECTIONS.players, { eventId: id }, 'rosterOrder')
+      /* 只保留本赛事已有比赛记录的球员：签约池、卡池与对手池统一走同一过滤器。 */
+      return { rows: engine.playablePool(rows, id), missing: false }
     } catch (error) {
       if (isMissingCollection(error)) return { rows: [], missing: true }
       throw error
@@ -340,6 +343,8 @@ module.exports = function createCardWorld(deps) {
       cityName: String(user.cityName || '').trim(),
       mainPlayerId: '',
       mainCard: null,
+      /* 玩法准入（2026-11-02）：认领球员与所属赛事由服务端解析后存档，客户端不得自报。 */
+      claim: { claimed: false, playerId: '', eventId: '', eventName: '', divisionLabel: '', statusText: '' },
       cursor: 0,
       quota: { dateKey: '', freeTotal: 0, freeUsed: 0, directedLeft: 0 },
       rosterSize: engine.ROSTER_SIZES.NEWBIE,
@@ -381,18 +386,24 @@ module.exports = function createCardWorld(deps) {
     }
   }
 
-  async function ensureCity(profile, params) {
+  /**
+   * 城市解析（2026-11-02 起只用于展示与签约排序，准入由赛事决定）：
+   * 依次取档案已存值 → 请求入参 → 本赛事名册城市，仍缺失时维持原有提示，不静默编造。
+   */
+  async function ensureCity(profile, params, fallbackCode) {
     const stored = String(profile.cityCode || '').trim()
     if (CITY_PATTERN.test(stored)) return { cityCode: stored }
     const incoming = String(params.cityCode || '').trim()
-    if (!CITY_PATTERN.test(incoming)) {
+    const fallback = String(fallbackCode || '').trim()
+    const next = CITY_PATTERN.test(incoming) ? incoming : (CITY_PATTERN.test(fallback) ? fallback : '')
+    if (!next) {
       return { error: fail('WORLD_CITY_REQUIRED', '请先在账号资料中选择所在城市') }
     }
     const cityName = String(params.cityName || profile.cityName || '').trim()
-    await updateProfile(profile._id, { cityCode: incoming, cityName: cityName })
-    profile.cityCode = incoming
+    await updateProfile(profile._id, { cityCode: next, cityName: cityName })
+    profile.cityCode = next
     profile.cityName = cityName
-    return { cityCode: incoming }
+    return { cityCode: next }
   }
 
   /* ---------------- 名册与卡册 ---------------- */
@@ -415,6 +426,7 @@ module.exports = function createCardWorld(deps) {
     player.assists = Number(source.assists) || 0
     player.rosterOrder = Number(source.rosterOrder) || 0
     player.cityCode = String(source.cityCode || '')
+    player.eventId = String(source.eventId || '')
     player.cardUrl = String(source.cardUrl || '')
     player.portraitAuthorized = source.portraitAuthorized === true
     return player
@@ -830,6 +842,112 @@ module.exports = function createCardWorld(deps) {
     return { player: player, card: chosen, cards: ready, players: players, stats: await selfCardStats(nextRef.playerId) }
   }
 
+  /* ---------------- 玩法准入（2026-11-02 用户确认） ---------------- */
+
+  const CLAIM_STATUS_TEXT = '已认领'
+
+  function emptyClaim() {
+    return { claimed: false, playerId: '', eventId: '', eventName: '', divisionLabel: '', statusText: '' }
+  }
+
+  function storedClaim(profile) {
+    const raw = (profile && profile.claim && typeof profile.claim === 'object') ? profile.claim : {}
+    return Object.assign(emptyClaim(), raw)
+  }
+
+  /** 读本人/监护球员在卡世界名册（card_world_players）中的行，用于判定认领所属赛事。 */
+  async function readRosterRowsOf(playerIds) {
+    const ids = (playerIds || []).filter(Boolean)
+    if (!ids.length) return []
+    const rows = []
+    for (const id of ids) {
+      try {
+        rows.push(...(await readAll(COLLECTIONS.players, { playerId: id }, 'rosterOrder')))
+      } catch (error) {
+        if (isMissingCollection(error)) return rows
+        throw error
+      }
+    }
+    return rows
+  }
+
+  /**
+   * 服务端解析玩法准入：
+   * 1) 认领来自本人/监护球员档案（`players` 的 linkedUserId / playerUserId / guardianUserId）；
+   * 2) 赛事来自该档案在本赛事名册中的 `eventId`；
+   * 3) 名册无记录、或同一人同时在多个赛事时，不静默取第一条，统一给出明确原因转人工核对。
+   */
+  async function resolveClaim(user) {
+    if (!user || !user._id) return emptyClaim()
+    const players = await selfPlayers(user._id)
+    if (!players.length) return emptyClaim()
+    const playerIds = players.map(row => String((row && (row._id || row.id)) || '')).filter(Boolean)
+    const rows = await readRosterRowsOf(playerIds)
+    const eventIds = []
+    for (const row of rows) {
+      const eventId = String((row && row.eventId) || '')
+      if (eventId && eventIds.indexOf(eventId) < 0) eventIds.push(eventId)
+    }
+    const base = { claimed: true, playerId: playerIds[0] || '', statusText: CLAIM_STATUS_TEXT }
+    if (!eventIds.length) {
+      return Object.assign(emptyClaim(), base, {
+        detail: '已认领的球员卡不在本赛事名册中，暂不可参与本赛事玩法'
+      })
+    }
+    if (eventIds.length > 1) {
+      return Object.assign(emptyClaim(), base, {
+        detail: '已认领的球员卡同时在多个赛事中，请联系运营核对本赛事'
+      })
+    }
+    const eventId = eventIds[0]
+    const scoped = rows.filter(row => String((row && row.eventId) || '') === eventId)
+    const first = scoped[0] || {}
+    return Object.assign(emptyClaim(), base, {
+      playerId: String(first.playerId || base.playerId),
+      eventId: eventId,
+      eventName: String(first.eventName || ''),
+      divisionLabel: String(first.divisionLabel || ''),
+      cityCode: String(first.cityCode || '')
+    })
+  }
+
+  function sameClaim(left, right) {
+    if (!left || !right) return false
+    return left.claimed === right.claimed
+      && String(left.playerId || '') === String(right.playerId || '')
+      && String(left.eventId || '') === String(right.eventId || '')
+      && String(left.eventName || '') === String(right.eventName || '')
+      && String(left.divisionLabel || '') === String(right.divisionLabel || '')
+      && String(left.detail || '') === String(right.detail || '')
+  }
+
+  /** 准入视图：规则只认 engine.worldAccess，本函数不另写判断。 */
+  function accessView(world) {
+    const claim = storedClaim((world && world.profile) || null)
+    const view = engine.worldAccess({
+      claim: claim,
+      event: { eventId: claim.eventId, shortName: claim.eventName, divisionLabel: claim.divisionLabel }
+    })
+    return {
+      allowed: view.allowed,
+      code: view.code,
+      titleText: view.titleText,
+      reasonText: (!view.allowed && claim.detail) ? String(claim.detail) : view.reasonText,
+      statusText: String(claim.statusText || ''),
+      playerId: String(claim.playerId || ''),
+      eventId: String(claim.eventId || ''),
+      eventName: String(claim.eventName || ''),
+      eventText: claim.eventName ? ('本赛事 · ' + claim.eventName) : ''
+    }
+  }
+
+  /** 玩法类 action 的统一前置校验：不通过时返回明确错误码，不做兜底放行。 */
+  function requireAccess(world) {
+    const access = (world && world.access) || accessView(world)
+    if (access.allowed) return null
+    return fail(access.code || engine.CODES.CLAIM_REQUIRED, access.reasonText)
+  }
+
   /* ---------------- 世界状态 ---------------- */
 
 
@@ -847,7 +965,26 @@ module.exports = function createCardWorld(deps) {
       }))
       return { error: fail('WORLD_PROFILE_FAILED', '卡世界档案初始化失败，请稍后重试') }
     }
-    const city = await ensureCity(profile, params || {})
+    let claim = storedClaim(profile)
+    /* 登录与显式准入请求重新解析认领；其余请求沿用档案缓存，未认领用户每次重新判定。 */
+    if ((options && options.claim) || claim.claimed === false) {
+      let fresh = claim
+      try {
+        fresh = await resolveClaim(user)
+      } catch (error) {
+        console.warn('[cardWorld] 认领解析失败:', String((error && (error.errMsg || error.message)) || error).slice(0, 200))
+      }
+      if (!sameClaim(claim, fresh)) {
+        try {
+          await updateProfile(profile._id, { claim: fresh })
+        } catch (error) {
+          console.warn('[cardWorld] 认领写入失败:', String((error && (error.errMsg || error.message)) || error).slice(0, 200))
+        }
+      }
+      claim = fresh
+    }
+    profile.claim = claim
+    const city = await ensureCity(profile, params || {}, claim.cityCode)
     if (city.error) return { error: city.error }
     let selfMain = null
     /* 只有登录/主卡/设主卡需要读本人球员卡，避免卡册与组阵请求多付一次主数据读取。 */
@@ -859,8 +996,8 @@ module.exports = function createCardWorld(deps) {
       }
     }
     const cards = await readCards(user._id)
-    const pool = await readPlayerPool(city.cityCode)
-    return {
+    const pool = await readPlayerPool(claim.eventId)
+    const world = {
       user: user,
       profile: profile,
       cityCode: city.cityCode,
@@ -869,6 +1006,8 @@ module.exports = function createCardWorld(deps) {
       selfMain: selfMain,
       playersById: buildPlayersById(pool.rows, cards)
     }
+    world.access = accessView(world)
+    return world
   }
 
   async function withWorld(params, wxContext, fn, options) {
@@ -894,19 +1033,31 @@ module.exports = function createCardWorld(deps) {
         ownedCount: (world.cards || []).length,
         mainPlayerId: String(world.profile.mainPlayerId || ''),
         mainCardReady: !!world.selfMain,
-        poolMissing: !!world.pool.missing
+        poolMissing: !!world.pool.missing,
+        access: world.access
       }
-    }, { selfCards: true })
+    }, { selfCards: true, claim: true })
+  }
+
+  /** 卡世界准入：只返回规则结果，页面按 allowed / code / reasonText 展示。 */
+  async function accessAction(params, wxContext) {
+    return withWorld(params, wxContext, async function (world) {
+      return Object.assign({ success: true }, world.access)
+    }, { selfCards: true, claim: true })
   }
 
   async function mainCardAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       return Object.assign({ success: true }, mainCardView(world))
     }, { selfCards: true })
   }
 
   async function setMainCardAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       const selfMain = world.selfMain
       if (!selfMain || !Array.isArray(selfMain.cards) || !selfMain.cards.length) {
         return fail('WORLD_MAIN_CARD_EMPTY', '还没有主卡，请先在「卡册·签约」领取球员卡')
@@ -942,30 +1093,40 @@ module.exports = function createCardWorld(deps) {
 
   async function albumAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       return Object.assign({ success: true }, albumView(world))
     })
   }
 
   async function ownedCardsAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       return { success: true, chips: ownedChips(world) }
     })
   }
 
   async function lineupAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       return Object.assign({ success: true }, lineupView(world, String(params.activeKey || '')))
     })
   }
 
   async function battleLogAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       return Object.assign({ success: true }, battleLogView(world))
     })
   }
 
   async function membershipAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       return Object.assign({ success: true }, membershipView(world.profile))
     })
   }
@@ -980,8 +1141,10 @@ module.exports = function createCardWorld(deps) {
 
   async function signSameCityAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world, user) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       if (world.pool.missing) {
-        return fail('WORLD_POOL_MISSING', '同城名册尚未配置，请联系运营')
+        return fail('WORLD_POOL_MISSING', '本赛事名册尚未配置，请联系运营')
       }
       const profile = world.profile
       const membership = profileMembership(profile)
@@ -993,6 +1156,7 @@ module.exports = function createCardWorld(deps) {
       const result = engine.signSameCity({
         players: world.pool.rows,
         cityCode: world.cityCode,
+        eventId: world.access.eventId,
         ownedIds: ownedIds,
         cursor: cursorBefore,
         mode: String(params.mode || 'free_daily'),
@@ -1037,6 +1201,7 @@ module.exports = function createCardWorld(deps) {
             userId: user._id,
             playerId: player.playerId,
             cityCode: world.cityCode,
+            eventId: world.access.eventId,
             source: 'sign_same_city',
             mode: String(params.mode || 'free_daily'),
             dateKey: dateKey,
@@ -1103,6 +1268,8 @@ module.exports = function createCardWorld(deps) {
 
   async function setRosterSizeAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       const size = Math.round(Number(params.size) || 0)
       if (size !== 5 && size !== 8 && size !== 11) {
         return fail(engine.CODES.MODE_INVALID, '编制人数无效')
@@ -1140,6 +1307,8 @@ module.exports = function createCardWorld(deps) {
 
   async function setSlotAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       const key = String(params.key || '').trim()
       const playerId = String(params.playerId || '').trim()
       const profile = world.profile
@@ -1161,6 +1330,8 @@ module.exports = function createCardWorld(deps) {
 
   async function saveLineupAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       const profile = world.profile
       const size = Number(profile.rosterSize) || engine.ROSTER_SIZES.NEWBIE
       const membership = profileMembership(profile)
@@ -1191,13 +1362,15 @@ module.exports = function createCardWorld(deps) {
 
   async function battleAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world, user) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       const profile = world.profile
       const membership = profileMembership(profile)
       const size = Number(profile.rosterSize) || engine.ROSTER_SIZES.NEWBIE
       if (size !== engine.ROSTER_SIZES.NEWBIE) {
         return fail(engine.CODES.ROSTER_LOCKED, '本期仅开放 5 人新手场')
       }
-      if (world.pool.missing) return fail('WORLD_POOL_MISSING', '同城名册尚未配置，请联系运营')
+      if (world.pool.missing) return fail('WORLD_POOL_MISSING', '本赛事名册尚未配置，请联系运营')
       const slots = currentSlots(profile)
       const check = engine.validateLineup({
         slots: slots,
@@ -1215,7 +1388,7 @@ module.exports = function createCardWorld(deps) {
         seed: seed
       })
       if (!opponent.slots.some(item => item.playerId)) {
-        return fail('WORLD_OPPONENT_MISSING', '同城名册不足，暂时无法生成对手')
+        return fail('WORLD_OPPONENT_MISSING', '本赛事名册不足，暂时无法生成对手')
       }
 
       const result = engine.battleResult({
@@ -1255,6 +1428,8 @@ module.exports = function createCardWorld(deps) {
 
   async function setAutoRenewAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
+      const denied = requireAccess(world)
+      if (denied) return denied
       const profile = world.profile
       if (params.enabled === true) {
         return fail('WORLD_AUTORENEW_ON_H5', '续费与自动续费请在赛小蜂服务号 H5 办理')
@@ -1268,6 +1443,7 @@ module.exports = function createCardWorld(deps) {
 
   const ACTIONS = {
     cardWorldLogin: login,
+    cardWorldAccess: accessAction,
     cardWorldMainCard: mainCardAction,
     cardWorldSetMainCard: setMainCardAction,
     cardWorldAlbum: albumAction,

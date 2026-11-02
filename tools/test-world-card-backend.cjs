@@ -12,24 +12,40 @@ const path = require('path')
 process.env.WORLD_MINI_PROGRAM_APP_ID = 'wx_test_world'
 process.env.WORLD_MINI_PROGRAM_APP_SECRET = 'test_secret'
 const createCardWorld = require(path.join(__dirname, '..', 'cloudfunctions', 'webLoginApi', 'cardWorld.cjs'))
+const worldEngine = require(path.join(__dirname, '..', 'cloudfunctions', 'webLoginApi', 'cardWorldEngine.cjs'))
 
 const docs = {
   users: [{
     _id: 'u1', phone: '13800000000', phoneNumber: '13800000000', cityCode: '330100', cityName: '杭州',
     worldOpenId: '', worldUnionId: ''
-  }],
+  },
+  { _id: 'u_noclaim', phone: '13700000000', phoneNumber: '13700000000', cityCode: '330100', cityName: '杭州' },
+  { _id: 'u_cross', phone: '13600000000', phoneNumber: '13600000000', cityCode: '330100', cityName: '杭州' },
+  { _id: 'u_multi', phone: '13500000000', phoneNumber: '13500000000', cityCode: '330100', cityName: '杭州' }],
+  /* 本人/监护球员档案：玩法认领只认归属字段（linkedUserId / playerUserId / guardianUserId）。 */
+  players: [
+    { _id: 'p1', name: '甲', linkedUserId: 'u1', profileStatus: 'complete', teamId: 't1' },
+    { _id: 'p11', name: '外城', linkedUserId: 'u_cross', profileStatus: 'complete', teamId: 't2' },
+    { _id: 'p20', name: '多赛', linkedUserId: 'u_multi', profileStatus: 'complete', teamId: 't3' }
+  ],
   card_world_players: [
-    { _id: 'pp1', playerId: 'p1', name: '甲', number: 9, position: 'FW', group: 'FW', ovr: 80, skillTag: 'finishing', rosterOrder: 101, cityCode: '330100' },
-    { _id: 'pp2', playerId: 'p2', name: '乙', number: 8, position: 'MF', group: 'MF', ovr: 78, skillTag: 'passing', rosterOrder: 102, cityCode: '330100' },
-    { _id: 'pp3', playerId: 'p3', name: '丙', number: 4, position: 'DF', group: 'DF', ovr: 76, skillTag: 'tackling', rosterOrder: 103, cityCode: '330100' },
-    { _id: 'pp4', playerId: 'p4', name: '丁', number: 1, position: 'GK', group: 'GK', ovr: 79, skillTag: 'saving', rosterOrder: 104, cityCode: '330100' },
-    { _id: 'pp5', playerId: 'p5', name: '戊', number: 11, position: 'FW', group: 'FW', ovr: 77, skillTag: 'pace', rosterOrder: 105, cityCode: '330100' },
-    { _id: 'pp6', playerId: 'p6', name: '己', number: 6, position: 'MF', group: 'MF', ovr: 75, skillTag: 'dribbling', rosterOrder: 106, cityCode: '330100' },
-    { _id: 'pp7', playerId: 'p7', name: '庚', number: 3, position: 'DF', group: 'DF', ovr: 74, skillTag: 'aerial', rosterOrder: 107, cityCode: '330100' },
-    { _id: 'pp8', playerId: 'p8', name: '辛', number: 2, position: 'DF', group: 'DF', ovr: 73, skillTag: 'tackling', rosterOrder: 108, cityCode: '330100' },
-    { _id: 'pp9', playerId: 'p9', name: '壬', number: 7, position: 'MF', group: 'MF', ovr: 76, skillTag: 'passing', rosterOrder: 109, cityCode: '330100' },
-    { _id: 'pp10', playerId: 'p10', name: '癸', number: 22, position: 'GK', group: 'GK', ovr: 72, skillTag: 'saving', rosterOrder: 110, cityCode: '330100' },
-    { _id: 'pp11', playerId: 'p11', name: '外城', number: 10, position: 'FW', group: 'FW', ovr: 80, rosterOrder: 201, cityCode: '330200' }
+    { _id: 'pp1', playerId: 'p1', name: '甲', number: 9, position: 'FW', group: 'FW', ovr: 80, skillTag: 'finishing', rosterOrder: 101, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 5 },
+    { _id: 'pp2', playerId: 'p2', name: '乙', number: 8, position: 'MF', group: 'MF', ovr: 78, skillTag: 'passing', rosterOrder: 102, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 4 },
+    { _id: 'pp3', playerId: 'p3', name: '丙', number: 4, position: 'DF', group: 'DF', ovr: 76, skillTag: 'tackling', rosterOrder: 103, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 3 },
+    { _id: 'pp4', playerId: 'p4', name: '丁', number: 1, position: 'GK', group: 'GK', ovr: 79, skillTag: 'saving', rosterOrder: 104, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 3 },
+    { _id: 'pp5', playerId: 'p5', name: '戊', number: 11, position: 'FW', group: 'FW', ovr: 77, skillTag: 'pace', rosterOrder: 105, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 2 },
+    { _id: 'pp6', playerId: 'p6', name: '己', number: 6, position: 'MF', group: 'MF', ovr: 75, skillTag: 'dribbling', rosterOrder: 106, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 2 },
+    { _id: 'pp7', playerId: 'p7', name: '庚', number: 3, position: 'DF', group: 'DF', ovr: 74, skillTag: 'aerial', rosterOrder: 107, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 1 },
+    { _id: 'pp8', playerId: 'p8', name: '辛', number: 2, position: 'DF', group: 'DF', ovr: 73, skillTag: 'tackling', rosterOrder: 108, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 1 },
+    { _id: 'pp9', playerId: 'p9', name: '壬', number: 7, position: 'MF', group: 'MF', ovr: 76, skillTag: 'passing', rosterOrder: 109, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 2 },
+    { _id: 'pp10', playerId: 'p10', name: '癸', number: 22, position: 'GK', group: 'GK', ovr: 72, skillTag: 'saving', rosterOrder: 110, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 1 },
+    /* 本赛事报名但本赛事没有任何比赛记录：不进签约池/卡池/对手池 */
+    { _id: 'pp12', playerId: 'p12', name: '无比赛', number: 5, position: 'DF', group: 'DF', ovr: 74, skillTag: 'aerial', rosterOrder: 111, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 0 },
+    /* 跨赛事球员：同城也不得进入 e1 的任何池 */
+    { _id: 'pp11', playerId: 'p11', name: '外城', number: 10, position: 'FW', group: 'FW', ovr: 80, skillTag: 'finishing', rosterOrder: 201, cityCode: '330100', eventId: 'e2', eventName: '甬超联赛', divisionLabel: 'U11 竞赛组别', appearances: 4 },
+    /* 同一认领球员同时在两个赛事：不静默取第一条，转人工核对 */
+    { _id: 'pp20a', playerId: 'p20', name: '多赛', number: 7, position: 'MF', group: 'MF', ovr: 76, skillTag: 'passing', rosterOrder: 301, cityCode: '330100', eventId: 'e1', eventName: '杭青联赛', divisionLabel: 'U10 竞赛组别', appearances: 2 },
+    { _id: 'pp20b', playerId: 'p20', name: '多赛', number: 7, position: 'MF', group: 'MF', ovr: 76, skillTag: 'passing', rosterOrder: 302, cityCode: '330100', eventId: 'e2', eventName: '甬超联赛', divisionLabel: 'U11 竞赛组别', appearances: 2 }
   ],
   card_world_profiles: [],
   card_world_cards: []
@@ -43,11 +59,37 @@ function readPath(doc, key) {
   }, doc)
 }
 
-function matches(doc, cond) {
-  for (const key of Object.keys(cond || {})) {
-    if (readPath(doc, key) !== cond[key]) return false
+function contains(list, value) {
+  return (list || []).some(item => String(item) === String(value))
+}
+
+function matchesCond(doc, cond) {
+  if (!cond || typeof cond !== 'object') return true
+  if (Array.isArray(cond)) return cond.every(item => matchesCond(doc, item))
+  for (const key of Object.keys(cond)) {
+    const expected = cond[key]
+    if (key === '$or') {
+      if (!expected.some(item => matchesCond(doc, item))) return false
+      continue
+    }
+    if (key === '$and') {
+      if (!expected.every(item => matchesCond(doc, item))) return false
+      continue
+    }
+    const actual = readPath(doc, key)
+    if (expected && typeof expected === 'object' && !Array.isArray(expected)) {
+      if ('$gt' in expected && !(String(actual || '') > String(expected.$gt))) return false
+      if ('$in' in expected && !contains(expected.$in, actual)) return false
+      if ('$neq' in expected && String(actual) === String(expected.$neq)) return false
+      continue
+    }
+    if (actual !== expected) return false
   }
   return true
+}
+
+function matches(doc, cond) {
+  return matchesCond(doc, cond)
 }
 
 function collection(name) {
@@ -105,12 +147,22 @@ function collection(name) {
 const db = {
   collection,
   async createCollection() { return true },
-  serverDate() { return new Date().toISOString() }
+  serverDate() { return new Date().toISOString() },
+  command: {
+    or: (list) => ({ $or: list }),
+    and: (list) => ({ $and: list }),
+    gt: (value) => ({ $gt: value }),
+    in: (list) => ({ $in: list }),
+    neq: (value) => ({ $neq: value })
+  }
 }
 
 const service = createCardWorld({
   cloud: { database: () => db },
-  authenticateWebSession: async () => ({ success: true, userId: 'u1' }),
+  authenticateWebSession: async (options) => {
+    const token = String((options && options.authToken) || '')
+    return { success: true, userId: token === 't' ? 'u1' : token }
+  },
   httpsGet: async () => ({ access_token: 'x', expires_in: 7200 }),
   httpsPost: async () => ({ errcode: 0, phone_info: { phoneNumber: '13800000000' } })
 })
@@ -215,6 +267,40 @@ async function main() {
   /* 14. 分页读取完整性：卡片数量与档案一致 */
   res = await service.handle('cardWorldAlbum', { authToken: 't' }, ctx)
   expect('album 与卡册数量一致', res.success === true && res.tiles.length === docs.card_world_cards.length, res)
+
+  /* 15. 玩法开放范围（2026-11-02 用户确认）：已认领 + 本赛事 + 本赛事有比赛记录 */
+  res = await service.handle('cardWorldAccess', { authToken: 't' }, ctx)
+  expect('access 已认领本赛事开放', res.success === true && res.allowed === true && res.eventId === 'e1', res)
+
+  res = await service.handle('cardWorldAccess', { authToken: 'u_noclaim' }, ctx)
+  expect('access 未认领不开放', res.success === true && res.allowed === false && res.code === 'CLAIM_REQUIRED', res)
+
+  res = await service.handle('cardWorldSignSameCity', { authToken: 'u_noclaim', mode: 'free_daily' }, ctx)
+  expect('未认领不能签约', res.success === false && res.code === 'CLAIM_REQUIRED', res)
+
+  res = await service.handle('cardWorldAlbum', { authToken: 'u_noclaim' }, ctx)
+  expect('未认领不能看卡册', res.success === false && res.code === 'CLAIM_REQUIRED', res)
+
+  res = await service.handle('cardWorldAccess', { authToken: 'u_multi' }, ctx)
+  expect('access 多赛事转人工核对', res.success === true && res.allowed === false && res.code === 'EVENT_MISMATCH'
+    && /多个赛事/.test(String(res.reasonText || '')), res)
+
+  res = await service.handle('cardWorldAccess', { authToken: 'u_cross' }, ctx)
+  expect('access 跨赛事只认本赛事', res.success === true && res.allowed === true && res.eventId === 'e2', res)
+
+  const e1Pool = worldEngine.playablePool(docs.card_world_players, 'e1')
+  const e2Pool = worldEngine.playablePool(docs.card_world_players, 'e2')
+  expect('无比赛记录球员不进池', e1Pool.every(row => row.playerId !== 'p12') && e1Pool.length === 11, e1Pool.length)
+  expect('跨赛事球员不进本赛事池', e1Pool.every(row => row.eventId === 'e1'), e1Pool.map(row => row.eventId))
+  expect('另一赛事池只含本赛事球员', e2Pool.length === 2 && e2Pool.every(row => row.eventId === 'e2'), e2Pool)
+  expect('准入规则未认领拦截', worldEngine.worldAccess({
+    claim: { claimed: false }, event: { eventId: 'e1' }
+  }).code === 'CLAIM_REQUIRED', worldEngine.worldAccess({ claim: { claimed: false }, event: { eventId: 'e1' } }))
+  expect('准入规则赛事不符拦截', worldEngine.worldAccess({
+    claim: { claimed: true, playerId: 'p1', eventId: 'e2' }, event: { eventId: 'e1' }
+  }).code === 'EVENT_MISMATCH', worldEngine.worldAccess({
+    claim: { claimed: true, playerId: 'p1', eventId: 'e2' }, event: { eventId: 'e1' }
+  }))
 
   console.log(failures === 0 ? 'ALL PASS' : ('FAILED ' + failures))
   process.exit(failures === 0 ? 0 : 1)

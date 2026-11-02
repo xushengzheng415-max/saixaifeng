@@ -27,7 +27,9 @@ var CODES = {
   ROSTER_LOCKED: 'ROSTER_LOCKED',
   LINEUP_INVALID: 'LINEUP_INVALID',
   MINOR_NO_AUTORENEW: 'MINOR_NO_AUTORENEW',
-  MODE_INVALID: 'MODE_INVALID'
+  MODE_INVALID: 'MODE_INVALID',
+  CLAIM_REQUIRED: 'CLAIM_REQUIRED',
+  EVENT_MISMATCH: 'EVENT_MISMATCH'
 }
 
 var DEFAULT_QUOTA = {
@@ -86,13 +88,69 @@ function includes(list, value) {
 function codeMessage(code) {
   var map = {}
   map[CODES.QUOTA_EXCEEDED] = '今日签约次数已用完'
-  map[CODES.NOT_SAME_CITY] = '只能签约同城球员'
-  map[CODES.NO_ELIGIBLE_CARD] = '同城已无可签球员'
+  map[CODES.NOT_SAME_CITY] = '本赛事内没有可签约球员'
+  map[CODES.NO_ELIGIBLE_CARD] = '本赛事已无可签球员'
   map[CODES.ROSTER_LOCKED] = '该编制尚未解锁'
   map[CODES.LINEUP_INVALID] = '阵容不完整或不合规'
   map[CODES.MINOR_NO_AUTORENEW] = '未成年账号不能开启自动续费'
   map[CODES.MODE_INVALID] = '签约方式无效'
+  map[CODES.CLAIM_REQUIRED] = '球员卡玩法只对已认领球员卡的用户开放'
+  map[CODES.EVENT_MISMATCH] = '已认领的球员卡不属于本赛事，暂不可参与'
   return map[code] || code || ''
+}
+
+/**
+ * 玩法准入（2026-11-02 用户确认，与 miniprogram-world/utils/engine.js 同源）：
+ * 只有「已认领球员卡」且认领赛事与当前赛事一致的用户才能进入球员卡玩法。
+ * 未认领、认领赛事缺失或跨赛事时一律不开放；页面不得自行判断或兜底放行。
+ * @param {{claim:object,event:object}} opts
+ * @returns {{allowed:boolean, code:string, titleText:string, reasonText:string}}
+ */
+function worldAccess(opts) {
+  var options = opts || {}
+  var claim = options.claim
+  var event = options.event || {}
+  var claimRequired = {
+    allowed: false,
+    code: CODES.CLAIM_REQUIRED,
+    titleText: '暂未开放',
+    reasonText: '球员卡玩法只对已认领球员卡的用户开放'
+  }
+  if (!claim || !claim.claimed || !claim.playerId) return claimRequired
+  if (!event.eventId) {
+    return {
+      allowed: false,
+      code: CODES.EVENT_MISMATCH,
+      titleText: '暂无赛事',
+      reasonText: '当前账号还没有正在进行的赛事'
+    }
+  }
+  if (String(claim.eventId || '') !== String(event.eventId)) {
+    return {
+      allowed: false,
+      code: CODES.EVENT_MISMATCH,
+      titleText: '赛事不符',
+      reasonText: '已认领的球员卡不属于本赛事，暂不可参与本赛事玩法'
+    }
+  }
+  return {
+    allowed: true,
+    code: CODES.ROLE_OK,
+    titleText: String(claim.statusText || '已认领'),
+    reasonText: event.shortName
+      ? ('本赛事 · ' + event.shortName + ' ' + (event.divisionLabel || '') + ' · 只玩本赛事球员')
+      : '只玩本赛事球员'
+  }
+}
+
+/** 可玩球员池：本赛事 + 本赛事已有比赛记录（appearances > 0）。签约池、卡池与对手池统一走这里。 */
+function playablePool(players, eventId) {
+  var pool = players || []
+  if (!eventId) return []
+  return pool.filter(function (player) {
+    if (!player || String(player.eventId || '') !== String(eventId)) return false
+    return typeof player.appearances === 'number' && player.appearances > 0
+  })
 }
 
 /* ---------------- 签约配额 ---------------- */
@@ -216,8 +274,9 @@ function signSameCity(opts) {
   }
 
   var sameCity = []
-  for (var i = 0; i < pool.length; i++) {
-    if (pool[i] && pool[i].cityCode === cityCode) sameCity.push(pool[i])
+  var eligible = options.eventId ? playablePool(pool, options.eventId) : pool
+  for (var i = 0; i < eligible.length; i++) {
+    if (eligible[i] && eligible[i].cityCode === cityCode) sameCity.push(eligible[i])
   }
   if (!sameCity.length) {
     return { ok: false, code: CODES.NOT_SAME_CITY, message: codeMessage(CODES.NOT_SAME_CITY), quota: quota }
@@ -583,6 +642,8 @@ module.exports = {
   normalizeQuota: normalizeQuota,
   dailyFreeLeft: dailyFreeLeft,
   consumeQuota: consumeQuota,
+  worldAccess: worldAccess,
+  playablePool: playablePool,
   signSameCity: signSameCity,
   SLOT_TEMPLATES: SLOT_TEMPLATES,
   PITCH_ROWS: PITCH_ROWS,

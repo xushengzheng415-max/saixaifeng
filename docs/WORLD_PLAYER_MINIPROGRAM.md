@@ -60,13 +60,14 @@ miniprogram-world/
 | 会员 | 未成年开启自动续费返回 `MINOR_NO_AUTORENEW` |
 
 错误码枚举：`QUOTA_EXCEEDED` / `NOT_SAME_CITY` / `NO_ELIGIBLE_CARD` / `ROSTER_LOCKED` /
-`LINEUP_INVALID` / `MINOR_NO_AUTORENEW` / `MODE_INVALID`。
+`LINEUP_INVALID` / `MINOR_NO_AUTORENEW` / `MODE_INVALID` / `CLAIM_REQUIRED` / `EVENT_MISMATCH`。
 
-## 四、接口映射（前端方法 → 待接 action）
+## 四、接口映射（前端方法 → action）
 
 | 前端（`utils/api.js`） | action | 说明 |
 |---|---|---|
-| `login` | `cardWorldLogin` | 微信授权 + 手机号命中自然人账号 |
+| `login` | `cardWorldLogin` | 微信授权 + 手机号命中自然人账号；返回体含 `access` |
+| `getAccess` | `cardWorldAccess` | 玩法准入：`allowed` / `code` / `reasonText` / `eventId`，页面只展示 |
 | `getMainCard` | `cardWorldMainCard` | 主卡、四项能力、成长印记 |
 | `getAlbum` | `cardWorldAlbum` | 卡册网格、配额文本、会员与编制状态 |
 | `getOwnedCards` | `cardWorldOwnedCards` | 可选球员 chips |
@@ -78,20 +79,21 @@ miniprogram-world/
 | `getBattleLog` | `cardWorldBattleLog` | 只读本人战报 |
 | `getMembership` | `cardWorldMembership` | 资格以服务端订阅为准 |
 | `setAutoRenew` | `cardWorldSetAutoRenew` | 未成年返回 `MINOR_NO_AUTORENEW` |
-| `signSameCity` | `cardWorldSignSameCity` | 扣配额、写卡册，返回 `deterministicKey` |
+| `signSameCity` | `cardWorldSignSameCity` | 本赛事范围内扣配额、写卡册，返回 `deterministicKey` |
 
 返回契约：成功时字段与本地视图同名同结构；失败时 `{ success:false, code, error }`，前端按 `code` 抛错，页面不改。
 `cardWorldOwnedCards` 例外：服务端返回 `{ success, chips }`，`utils/api.js` 在 cloud 分支解包为数组，页面消费不变。
+`cardWorldAccess` 例外：准入不通过不是请求失败，返回 `{ success:true, allowed:false, code, reasonText }`；玩法类 action 被拦时才是 `{ success:false, code, error }`。
 
 接入要求：页面不改；服务端返回确定性结果；前端不得自判资格、卡级或胜负。
 
-## 四之二、服务端实现（2026-10-31 已写源码）
+## 四之二、服务端实现（2026-10-31 已写源码；2026-11-02 同步玩法开放范围）
 
 文件：
 
 | 文件 | 作用 |
 |---|---|
-| `cloudfunctions/webLoginApi/cardWorld.cjs` | 13 个 `cardWorld*` action：身份、档案、签约、编制、阵容、对战、战报、会员视图 |
+| `cloudfunctions/webLoginApi/cardWorld.cjs` | 14 个 `cardWorld*` action：身份、准入、档案、签约、编制、阵容、对战、战报、会员视图 |
 | `cloudfunctions/webLoginApi/cardWorldEngine.cjs` | 确定性玩法引擎（服务端唯一实现，与 `miniprogram-world/utils/engine.js` 同源） |
 | `cloudfunctions/webLoginApi/index.js` | 仅在 `switch` 的 `default` 分支新增 6 行：以 `cardWorld` 开头的 action 交给 `cardWorldService()` |
 
@@ -99,9 +101,18 @@ miniprogram-world/
 
 | 集合 | 内容 |
 |---|---|
-| `card_world_players` | 同城名册（运营维护，只读）。必填 `playerId` / `name` / `group`（GK/DF/MF/FW）/ `ovr` / `cityCode` / `rosterOrder`，缺字段的行会被跳过并打印告警 |
-| `card_world_profiles` | 玩家档案：`cityCode`、`cursor`、`quota`、`rosterSize`、`slots`、`battleLog`（最近 20 条）、`membership` |
-| `card_world_cards` | 已签约卡册：`playerId` + 签约时的 `snapshot`，用于名册调整后仍能展示旧卡 |
+| `card_world_players` | 本赛事名册（运营维护，只读）。必填 `playerId` / `name` / `group`（GK/DF/MF/FW）/ `ovr` / `rosterOrder` / `eventId`，缺字段的行会被跳过并打印告警；`appearances`（本赛事出场数，数值）与 `eventName` / `divisionLabel` / `cityCode` 用于准入与展示，`appearances` 非正数的球员不进任何池 |
+| `card_world_profiles` | 玩家档案：`cityCode`、`claim`（服务端解析的认领球员与所属赛事）、`cursor`、`quota`、`rosterSize`、`slots`、`battleLog`（最近 20 条）、`membership` |
+| `card_world_cards` | 已签约卡册：`playerId` + `eventId` + 签约时的 `snapshot`，用于名册调整后仍能展示旧卡 |
+
+玩法准入（2026-11-02 用户确认，规则只在 `cardWorldEngine.worldAccess` / `playablePool`）：
+
+1. 认领来自本人/监护球员档案：`players` 中 `linkedUserId` / `playerUserId` / `guardianUserId` 指向当前账号；没有归属档案一律 `CLAIM_REQUIRED`。
+2. 赛事来自该档案在本赛事名册中的 `eventId`；名册无该球员记录时给出「不在本赛事名册中」的具体原因，不回落为其他赛事。
+3. 同一认领球员同时出现在多个赛事名册时返回 `EVENT_MISMATCH` 并转人工核对，不静默取第一条。
+4. 卡池、签约池、对手池统一按 `eventId` + `appearances > 0` 过滤；跨赛事球员与无比赛记录球员不进池。
+5. 准入结果写入 `card_world_profiles.claim` 供后续请求复用；客户端不得自报 `playerId` / `eventId` / `appearances`。
+6. 除 `cardWorldLogin` 与 `cardWorldAccess` 外，全部玩法 action 前置 `requireAccess`，被拦返回 `{ success:false, code, error }`。
 
 身份规则：
 
@@ -129,7 +140,8 @@ miniprogram-world/
 
 ```powershell
 node tools/test-world-player-miniprogram.cjs   # 25 项：引擎规则 + 工程红线 + 签约→组阵→对战→战报闭环
-node tools/test-world-card-backend.cjs         # 25 项：服务端 action 离线回归（内存假库，不连云端）
+node tools/verify-world-scope.cjs               # 22 项：开放范围（已认领 + 本赛事 + 有比赛记录）
+node tools/test-world-card-backend.cjs         # 36 项：服务端 action 离线回归（内存假库，不连云端；含准入与赛事池）
 node --check cloudfunctions/webLoginApi/cardWorld.cjs
 node --check cloudfunctions/webLoginApi/cardWorldEngine.cjs
 node --check cloudfunctions/webLoginApi/index.js
@@ -155,9 +167,12 @@ wx.cloud.callFunction({ name: 'cardWorldProbeNotExist' })
 ## 六、当前状态与遗留
 
 已完成：5 个页面 + 4 个组件 + 引擎/状态/适配层、共享 SVG 图标与 manifest、演示资源、
-`config/env.js` 环境与模式开关、`utils/api.js` 的 `cloud` 分支（13 个 `cardWorld*` action 映射）、
-自检脚本（25/25 通过）；服务端 `cardWorld.cjs` + `cardWorldEngine.cjs` + `index.js` 接线、
-离线回归 `tools/test-world-card-backend.cjs`（25/25 通过）、`check-referee-backend-package` 通过。
+`config/env.js` 环境与模式开关、`utils/api.js` 的 `cloud` 分支（14 个 `cardWorld*` action 映射）、
+自检脚本（25/25 通过）、开放范围回归 `tools/verify-world-scope.cjs`（22/22 通过）；
+服务端 `cardWorld.cjs` + `cardWorldEngine.cjs` + `index.js` 接线、2026-11-02 已在源码层同步玩法准入
+（`cardWorldAccess`、`claim` 解析、`eventId` + `appearances` 池过滤），
+离线回归 `tools/test-world-card-backend.cjs`（36/36 通过）、`check-referee-backend-package` 通过。
+部署状态仍为「未部署」，上线前必须按下方基线风险要求差量合入。
 
 未完成 / 需另行授权：
 

@@ -152,7 +152,7 @@ node tools/verify-world-scope.cjs              # 玩法开放范围 22 项（认
 | 集合 | `card_world_players`（本赛事名册，需运营导入且只含本赛事有比赛记录球员）、`card_world_profiles`、`card_world_cards` |
 | 环境变量 | `WORLD_MINI_PROGRAM_APP_ID`、`WORLD_MINI_PROGRAM_APP_SECRET`（保留现有变量） |
 | 发布校验 | `node --check` 三文件 + `node tools/check-referee-backend-package.cjs <实际包目录>` + `node tools/test-world-card-backend.cjs` |
-| 规则前置（2026-11-02） | 部署前必须把本条开放范围同步进 `cardWorld.cjs`：准入校验已认领球员卡且与当前赛事一致，`readPlayerPool` 改按 `eventId` 取池并要求 `appearances > 0`，`card_world_players` 增补 `eventId`、`appearances` 字段并在运营导入时过滤；未同步不得部署。（当前源码仍是同城池口径，未改未部署） |
+| 规则前置（2026-11-02） | 开放范围已同步进源码：`cardWorldAccess` 准入（已认领球员卡 + 与当前赛事一致）、`readPlayerPool` 按 `eventId` 取池并要求 `appearances > 0`、`card_world_players` 新增 `eventId` 必填字段（`appearances` / `eventName` / `divisionLabel` 供准入与展示）、玩法 action 统一 `requireAccess`。同一认领球员命中多个赛事时返回 `EVENT_MISMATCH` 转人工核对，不静默取第一条。上述代码仍未部署，部署前须按基线要求差量合入并重跑离线回归。 |
 | 基线 | 必须以最新线上包为基线做差量合入；本 worktree 基于旧 `main`，不能直接打包覆盖线上函数 |
 
 ## 不发版说明
