@@ -427,3 +427,6 @@ getMiniWorkspace 16:11:53、webLoginApi 16:12:49 Active，原运行配置保持�
 
 平台版本20261023144403-835841e7，27个文件HTTP/SHA一致；dataCenter、webLoginApi、getMiniWorkspace、onboardingWorkspace、tournamentRegistrationFlow均Active/Available，22个入口/协议/依赖锁文件回下载SHA一致，五个函数的依赖版本与完整性均与原包相符。首次建队的安装策略调整为随包依赖；其他运行配置未改。规则与存量补号见[发布记录](../releases/numbering-standard-20261023.md)。317份球员、3份球队补号回读成功，17份球员/84份球队地区待补，测试0条；内部ID与原归属不变。省市为正式发号必填，分队必须选择同机构已发号主体。未修改或发布小程序/H5前端；负责人真实会话补发未独立验收，隔离流程通过。无独立已登记平台测试站，共享后端已统一更新。
 
+## 2026-10-24 赛事数据对齐：本地候选
+
+PC与小程序榜单/成绩册改为共用正式service及球队排序，手机增加进球最多、失球最少及成绩册入口。数据中心、共享授权专项及跨端夹具通过；8文件小程序官方编译、PC构建通过，原生390宽布局已核验。尚未部署dataCenter/getMiniWorkspace/resultCenter，未发布PC或上传小程序；共用后端的测试包同步不能代替生产验收。发布必须从最新线上包差量合入，保留配置，回下载及授权对账。详见[记录](../releases/tournament-data-parity-20261024.md)。

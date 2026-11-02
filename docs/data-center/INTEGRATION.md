@@ -1,8 +1,30 @@
 # 数据入口登记
 
+## 2026-10-28 注册 AI 透明成片直入库（已差量发布并回读）
+
+`serviceEntryAiPortraitPrepare` → 已验证手机号及邀请范围的独立生成凭证 → `aiPortraitDemo.registrationGenerate` → 本登记会话的受控 `generatedPortraitId` → `serviceEntryAiPortraitApply` 校验后确认使用 → 既有 `playerRegistrationPortraits/portraitId` → 原球员登记草稿及统一球员卡套件。透明 PNG 字节和文件 ID 复用，不在页面重画卡片、不重复分割；既有服务端金额及钱包幂等/退款口径保持。凭证、生成记录与正式参赛资格不混用；隔离测试未写正式数据。用户授权后的两函数/三文件发布与读回已完成，真实微信业务验收待用户测试，详见 [记录](../releases/registration-transparent-portrait-20261028.md)。
+
 ## 2026-10-28 平台0:0空事件补录交互修复
 
 `PlayerCardMatchRepair.vue` → 既有 `savePlayerCardTemplate.auditRepairInspect/auditRepairSave`；保持平台负责人、原始来源、阵容、比分、锁定和版本校验。0:0空事件列表允许操作人核对完整，来源缺失就地提示，不凭比分自动确认、不添加虚假事件。隔离UI及实际后端处理器零事件/首发60分钟回归通过，不修改统计模块或真实业务数据。发布状态见 [记录](../releases/platform-zero-event-repair-20261028.md)。
+
+## 2026-10-28 发现公开球员池与分页（本地候选，未发布）
+
+`dataCenter.transferShowcase`候选`transfer-showcase/5` → `transfer/showcase.cjs`、`public-roster-pool.cjs`：使用统一reader/roster与statistics.synthetic合并公开赛事已审名单，稳定playerId去重，未测算保留展示而不进货币榜，测试/私有/删除来源在人数和分页前排除；游标绑定赛事/组别与有序池版本。新增playerCursor、playerHasMore/nextPlayerCursor/playerPoolVersion/playerPageOffset；失败不冒充空，预算超限明确缩小范围。小程序支持追加/重试/池变更刷新，资料与金额隐私不扩权；旧v4兼容。隔离322人11页测试通过，线上仍为v4，不代表v5已部署。详见[本轮交接](../handoffs/DISCOVER_PUBLIC_PLAYER_POOL_2026-10-28.md)。
+
+## 2026-10-25 自助登记后球队查询与入队申请（本地候选）
+
+`selfRegisterTeams/SearchTeams/RequestTeamJoin` 经既有登记会话 → `serviceSelfPlayerOnboard` → `selfPlayerTeamDirectory.cjs`。本人管理球队复用 `loadAccountOwnedOrManagedTeams`，不拿 creatorId 预建占位当长期管理权；搜索只投影稳定ID、队名、地区、组别、本人管理标记，复用统一 synthetic 排除，字面关键词与显式分页不授权私有队员/账号资料。选队只对本人或监护档案事务写 pendingJoin 字段，不写 teamId、历史归属、名单、积分；原负责人审核才确立入队关系。新建沿既有小程序入口，搜索不是全局唯一性锁。仅隔离测试通过，未上线。见 [实施记录](../releases/self-register-team-next-20261025.md)。
+
+## 2026-10-24 身价自测与自由球员登记
+
+公众号 H5 的匿名 `marketingSelfTestEvent` 只写 `marketing_selftest_events`：幂等记录打开、答题、分享及入口点击。平台负责人通过 `marketingSelfTestSummary` 读取按日汇总；本人自报赛事类型、正式比赛与约球几人制仅作为营销问卷分布，不参与正式五维、球员卡积分、转会估值或榜单。`marketingSelfTestWxConfig` 只给官网精确自测地址签名，支持微信开放标签跳球队小程序；公开请求不能上报服务端专用 `register_success`。
+
+`getMiniWorkspace.selfPlayerJoinTeam`（2026-10-24 续接）在本人明确操作下，把 `linkedUserId` 等于当前账号（或明确 `playerId` 的监护档案）的自由球员档案加入当前账号管理的球队：需球队管理权限且球队属于当前工作空间，已属其他球队的档案拒绝自动迁移，重复提交幂等返回已入队；只写 `teamId/orgId/currentHistoryId`、`player_team_history`（`joinSource=self_created_team`）与球队登记版本号，不改资料核验、卡片等级、参赛资格或历史统计。
+
+`getMiniWorkspace.selfPlayerProfile/registerSelfPlayer` 复用小程序唯一手机号主账号，服务端按 `linkedUserId` 或 `guardianUserId` 核验本人/监护关系。成人或监护人自助建立 `source=self_registered_free_agent` 的长期 `players` 档案，`teamId/orgId` 保持空、身份和卡片等级不预设、资料先待核验；不写报名、赛事名单或比赛成绩。档案文档 ID 由账号（未成年人按监护人＋姓名＋生日）稳定派生，不同 requestId 的并发提交落在同一份档案上，不再重复建档；候选档案查询完整分页，超读取上限显式报错而非静默截断。已绑定档案返回原稳定 ID，疑似历史同人记录、已关联其他账号的同手机号同人记录停在人工核对，不按姓名自动合并。建档提交后按统一编号模块 `afterWrite` 尝试发号，缺籍贯地区保留待补齐，不把已成功建档误报为失败。注册成功的营销事件由该已鉴权服务端写入。后续加入球队仍按原邀请和负责人确认流程，小程序新页面尚待微信版本上传验收。发布与缺口见 [身价自测发布记录](../releases/marketing-selftest-20261024.md)。
+
+`getMiniWorkspace.claimSelfPlayer`（2026-10-24 续接）承接历史档案认领：`selfPlayerProfile` 额外返回与本机已验证手机号一致的 `claimable` 候选，姓名脱敏，只含完全无归属的档案；已绑定其他账号的档案既不列入也不自动换绑。本人或监护人明确选择后只补 `linkedUserId/linkedOpenId` 或 `guardianUserId/guardianPhone`，并在事务内复核无归属；保留原 `playerId`、球队、`currentHistoryId`、比赛历史、资料核验与卡片等级，不新建档案、不按姓名或手机号合并。档案登记手机号与当前验证手机号不一致时拒绝认领。小程序登记页同时展示本人与已监护档案，建队前必须明确选择哪一份入队，选择随 `pages/onboarding` 的 `joinPlayerId` 传给 `selfPlayerJoinTeam`。
 
 ## 2026-10-23 永久编码
 
@@ -638,3 +660,70 @@ KnockoutDrawTree由操作台及DrawScreenProjection共用。投屏协议增加fo
 ## 2026-10-18 赛制对应的共用投屏
 
 DrawScreenProjection依据显式format分流：league为联赛签位顺序，不显示A/B组，也不冒充积分排名；hybrid为联赛签位与基于名次来源的晋级淘汰树，不提前填入未产生的球队；cup为淘汰签位树；tournament/group才显示分组。未收到赛制时不猜A组。QuickHybridConsole、通用及专业投屏均声明赛制，排满顺序与最终确认分开，QuickDrawResult确认后同步相同协议。该逻辑用于演示、真实及正式/预览环境，无新增数据权限。
+
+## 2026-10-24 赛事数据跨端对齐（本地候选）
+
+PC resultCenter.dashboard在原认证/机构/子账号赛事权限后读取共享service的official积分及awards；小程序tournamentData沿工作空间校验，新增boards=tournament-boards/1。共享赛事sharedTournamentData重新核验用户的有效event.results/event.dashboard授权，只返回指定赛事榜单与成绩册，不扩大比赛管理权限。各竞赛组别分别投影，稳定球队/球员ID不由姓名或teamId唯一反推组别；PC/手机球队进失球榜排序复用共享纯模块。成绩册只计正式归档，不将待复核当完成；读失败不装空，手动奖项沿原override。未部署、上传或迁移；验证与发布目标见[实施记录](../releases/tournament-data-parity-20261024.md)。
+
+## 2026-10-26 赛事转会中心入口（本地候选，未部署）
+
+统一入口 `cloudfunctions/dataCenter`；PC／小程序／服务号经 `webLoginApi` 的 `callFunction` relay 调用（`SESSION_REQUIRED_RELAY_FUNCTIONS` 已含 `dataCenter`）。所有动作统一 `transfer` 前缀，避免与既有 `playerDetail`、`query`、`requestTransfer` 冲突；旧 `requestTransfer/acceptTransfer/listTransfers` 保持兼容，不并入新流程。
+
+球队端：`transferMarket`、`transferPlayerDetail`、`transferMyRequests`、`transferRequestDetail`、`transferInitiate`、`transferSubmitOffer`、`transferAcceptOffer`、`transferRejectOffer`、`transferCounterOffer`、`transferWithdraw`、`transferSignFreeAgent`、`transferContracts`、`transferTeamRenewals`、`transferCreateRenewal`。
+
+球员端：`transferPlayerRenewals`、`transferRespondRenewal`（只认 `linkedUserId`／`playerUserId`；代管人按 Q07 拦截）。
+
+主办端：`transferWindowGet`、`transferWindowSave`、`transferAdminRequests`、`transferAdminRecord`、`transferReview`。
+
+平台端：`transferExpireDue`（租借激活／到期、待核对任务、合同到期释放）、`transferConfirmContractTerm`（Q08 合同期限核定）。
+
+以上入口是本地候选：未部署云函数、未创建生产集合、未接入页面，也未迁移旧合同；`event.transfer` 赛事权限码已加入 `dataCenter`、`webLoginApi` 中转、`tournamentStaffAccess` 授权校验与 PC 授权选项源码（PC 未发布），2026-10-26 已确认开放赛事子账号审核并禁止自审（`TRANSFER_REVIEW_CONFLICT`），自由签约仅限赛事外球员（`TRANSFER_FREE_AGENT_IN_EVENT`）。验证入口 `node tools/test-transfer-center.cjs`。
+
+接线细节（2026-10-26 R2 续接）：所有 `transfer*` 成功响应带 `schemaVersion=1` 与 `serverNow`；报价、接受／拒绝／还价、撤回、审核、续约回应与窗口保存必须显式传版本（缺版本 `TRANSFER_VERSION_REQUIRED`，旧版本 `TRANSFER_VERSION_CONFLICT`／窗口 `TRANSFER_WINDOW_STALE`）；列表读取已按 `playerId／teamId／tournamentId／fromTeamId／toTeamId／status` 收敛，市场球员列表仍为整集合读取（上限 20,000）。测试覆盖版本必填、查询范围与响应信封。
+
+## 2026-10-26 发现页身价展示接入（本地候选，未部署）
+
+用户确认「发现只做身价展示」：`pages/discover` 赛事卡片删去转会市场入口与窗口倒计时，第二个按钮改为「球员身价」，跳 `pages/tournament/valuation/valuation?id=<赛事ID>&name=<赛事名>`。转会市场、报价、收件箱、谈判与主办审核全部留在赛事转会中心（赛事三级页面），发现侧不再读取 `transferWindowGet`。
+
+后端新增唯一只读入口 `getMiniWorkspace` 的 `action:'tournamentPlayerValuations'`（`eventValuations.cjs`），服务端先经 `findWorkspaceForAction` 解析工作空间，再要求该赛事出现在 `loadTournaments` 结果中，并需 `team.view/team.manage/event.view/event.manage/tournament.view/tournament.manage` 之一。范围只取本赛事已审核名单；金额取 `player_valuations` 最新快照；青少年只返回「不公开」；无快照或 coverage 未完成返回「待评估」；单页 20 条，支持组别／球队／关键词，页码越界收敛到末页；名单读取失败上抛，缺集合标注 `not_recorded`。响应不含手机号、证件、报价、审核或机构经营数据。
+
+共享实现：名单读取上移到 `cloudfunctions/dataCenter/shared/roster.cjs`，身价展示投影上移到 `cloudfunctions/dataCenter/shared/valuation-view.cjs`，转会中心 `transfer/service.cjs` 改为引用同一实现（删除本地重复版本）；两者已登记 `tools/sync-data-center.mjs` 白名单并同步到 9 个消费函数的 `data-center/` 副本，`--check` 通过。验证入口 `node tools/test-mini-event-valuations.cjs`（另回归 `tools/test-transfer-center.cjs`、`tools/test-data-center.mjs`）。未部署云函数、未创建生产集合、未上传小程序包。
+
+## 2026-10-26 追加：转会中心小程序入口与首批页面（本地候选，未部署）
+
+用户确认入口放在赛事详情：球队管理 → 具体赛事 → 转会中心，不再新增“本地赛事”二级页。`miniprogram/pages/tournament/detail/detail` 球队视角动作区新增“转会中心”，携带当前 `tournamentId`、`teamId`、赛事名与组别跳转。
+
+首批页面（本地源码）直接调用 `dataCenter` 云函数的 `transfer` action（OPENID 认证，不新增 relay）：
+
+| action | 页面 | 说明 |
+| --- | --- | --- |
+| `transferWindowGet` | `pages/tournament/transfer/market/market` | 窗口四态（open／scheduled／closed／not_configured）；读不到时显示“窗口状态暂不可读”，不伪造开放 |
+| `transferMarket` | 同上 | 服务端分页（每页 20）、关键词、`state`=contracted／free；列表只展示资料与身价状态，不含报价或审核字段 |
+| `transferPlayerDetail` | `pages/tournament/transfer/player/player` | 只读资料：球队、效力、合同（期限未核定提示不推断自由身）、身价、谈判与冷却 |
+
+展示口径固定在页面同目录的 `market-model.js` 与 `player-model.js`：自由球员徽标只认服务端 `contractState`／`contract.state`；青少年“不公开”、未测算“待评估”，与发现页身价同口径；页面不计算合同、身价或可报价能力。转会写入动作（发起、报价、还价、接受、审核、签约、续约）本轮没有页面入口，待后续任务交付。
+
+验证：`node tools/test-mini-transfer-center-pages.cjs`、`tools/test-transfer-center.cjs`、`tools/test-data-center.mjs`、`tools/test-mini-event-valuations.cjs`、`sync-data-center --check`、`check-data-governance.mjs` 全部通过。本轮未部署 `dataCenter`、未建生产集合、未上传小程序包。
+
+### 2026-10-26 部署登记：`dataCenter` 转会模块已上线
+
+- 变更范围（相对线上基线差量 8 个文件）：新增 `transfer/index.cjs`、`transfer/rules.cjs`、`transfer/service.cjs`、`shared/roster.cjs`、`shared/valuation-view.cjs`；修改 `index.js`（转会路由与集合登记）、`identity.cjs`／`staffPolicy.cjs`（`event.transfer` 权限码）。
+- 未随本次发布：`durationVerification.cjs`、`shared/membership.cjs`、`shared/statistics.mjs`、`shared/write-policy.cjs`、`shared/tournament-boards.cjs`／`.mjs` 等属于其他任务的未提交改动。
+- 读回：回下载与发布包逐文件 SHA-256 一致（缺失 0／差异 0）；`fn detail` 为 `Active`、Nodejs18.15、512MB、150s、`InstallDependency=TRUE`、`ModTime=2026-10-26 22:48:45`；`transferWindowGet` 无身份探针返回 `AUTH_REQUIRED`。
+- 集合：12 个转会相关集合生产环境均已存在（`transfer_*` 与 `player_contracts`／`player_loans`／`contract_renewals`／`transfer_free_signings` 为空，`player_team_memberships` 4、`player_team_history` 4、`player_valuations` 1），本轮未建集合、未建索引、未改集合权限。
+- 小程序页面同批上线路径不变；仍需上传开发／体验版并真机验收；本赛事尚无真实转会窗口配置。详见 `docs/releases/transfer-center-backend-20261026.md`。
+
+
+## 2026-10-28 Word报名表保护号码预览
+
+teamRegistrationDocx.js仅从受保护号码的连续可见前段读取生日/地区；不完整号不作为自然人唯一键、不去重、不补尾号或性别。上传沿既有tournamentRegistrationFlow的空identityNumber+显式birthDate草稿分流，保持pending/not_verified与正式参赛资格边界；前缀不持久化或做身份摘要。发布证据见../releases/registration-protected-identity-20261028.md。
+
+
+## 2026-10-28 Word工作人员缺失展示资料补齐
+
+registrationPhotoReuse.js在同一Word唯一同名且已知资料无冲突时，补缺失生日/性别/籍贯及保护展示前缀，照片单独按缺失状态复用。既有完整身份证、职务、号码、账号关系、审核/资格不复制或合并；后端仍接收空完整身份证+显式生日，保持待核验。不修改真实数据或历史快照。见../releases/registration-staff-details-20261028.md。
+
+
+## 2026-10-28 共享赛事报名源Word上传
+
+webLoginApi/uploadFile的staffUploadRights对football/team-registration-imports/{当前赛事}限定.docx初始化及临时读取，复用event.registration；分片会话继续绑定账号/机构/赛事，撤权拒绝。共享后端已上线，uploadFile按用户追加授权关闭云端自动安装，原依赖随包发布。见../releases/registration-upload-scope-20261028.md。

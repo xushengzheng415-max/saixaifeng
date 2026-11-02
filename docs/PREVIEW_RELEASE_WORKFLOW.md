@@ -132,11 +132,11 @@ E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run hosting deploy web-
 
 ## 九 合并 main 后清理功能分支
 
-功能分支是短期分支。功能确认完整进入 `main` 后，应删除本地和 Gitee 远端分支，避免旧分支继续被误用或再次部署。
+功能分支是短期分支。功能确认完整进入 `main` 后，应删除本地和 GitHub 远端分支（Gitee 镜像同步删除），避免旧分支继续被误用或再次部署。
 
 删除前必须同时满足：
 
-1. `main` 已拉取到最新 Gitee 状态。
+1. `main` 已拉取到最新 GitHub 状态（`github` 远端；Gitee `origin` 仅可选镜像）。
 2. 分支内容已完整进入 `main`；普通合并应通过 `git merge-base --is-ancestor`，若使用 cherry-pick、squash 或手工解冲突，必须另外核对功能代码和测试已在 `main`。
 3. `git rev-list --count origin/main..origin/分支名` 为 0，或独有提交已明确被 `main` 中的等价提交替代。
 4. `git worktree list` 中没有 worktree 正在使用该分支。
@@ -164,3 +164,17 @@ git fetch origin --prune
 ## 平台后台正式发布授权（2026-10-01）
 
 用户已明确要求：平台运营中心及平台后台后续界面设计与部署直接发布正式 `/admin/`，无需预览验收或测试阶段。实施后执行必要的生产构建、语法检查、权限边界核对及线上 HTTP/资源摘要回读；保留同期代码与用户改动。此授权适用于平台后台界面发布，数据库迁移、模板激活及跨端功能按各自请求范围执行。其他端口继续遵循原发布流程。
+
+## 桌面客户端匹配检查（2026-10-31，用户已确认）
+
+PC 测试版（`/preview/admin/`）和正式版（`/admin/`）发布前后，必须验证 Windows 客户端两条通道都能正常显示登录页外壳。用户要求“网页和应用程序相匹配”，不能出现网页已更新、客户端缺失装饰的失配状态。
+
+```powershell
+cd E:\Documents\sxf-football\desktop-windows
+node scripts/smoke.cjs --preview
+node scripts/smoke.cjs
+```
+
+两通道各 8 项全部通过，并且登录页出现版本行与「检查更新」入口，才算网页与客户端匹配。任一通道失败时，先按外壳兼容问题修 `src/login-page.js` 并发布新版安装包，不得只报告网页已发布。
+
+网页登录页新增或替换容器时，同步核对 `.login-overlay`、`.login-card`、`.qr-shell`、`.retry`、`.login-tabs` 与品牌栏；装饰标记 `data-desktop-login` 只由外壳写入，网页模板不得写死。已安装旧版外壳的用户需通过「检查更新 → 立即更新」升级后才会获得新兼容，只改网页不能修复已安装客户端。

@@ -59,7 +59,7 @@
 | 文件 | 作用 | 是否可改（见第八节） |
 |---|---|---|
 | `cloudfunctions/webLoginApi/honeyWallet.cjs` | **扣费/退回唯一入口**：`readHoney` / `spendHoney` / `refundHoney` | 只可加函数，语义不可改 |
-| `cloudfunctions/webLoginApi/fanCenter.cjs` | 注册赠 100 滴（`fan-registration-bonus`）、每日签到 +5、连续 7 天额外奖励、榜单应援 -1 | 谨慎 |
+| `cloudfunctions/webLoginApi/fanCenter.cjs` | 注册赠 10 滴（`fan-registration-bonus`，2026-10-30 起；旧为 100）、每日签到 +5、连续 7 天额外奖励、榜单应援 -1；补全资料奖励见 `honeyBonus.cjs`（50 滴） | 谨慎 |
 | `cloudfunctions/webLoginApi/fanSupportPlayer.cjs` | 应援扣 1 滴，文档 id 固定 `support-<supportId>` 天然幂等 | 谨慎 |
 | `cloudfunctions/webLoginApi/servicePersonalAccount.cjs` | 个人中心余额 + 收支明细；`rechargeAvailable` **固定 false** | 可改（充值态） |
 | `cloudfunctions/webLoginApi/serviceAiPortrait.cjs` | AI 定妆照扣费（`cost` 实售 100 / `listCost` 标价 150），失败原路退回 | 价格口径已定，勿改 |

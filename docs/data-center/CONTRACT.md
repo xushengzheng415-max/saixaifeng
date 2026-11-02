@@ -241,3 +241,74 @@ accountingPolicy=evidence-points/1、creditedMetrics、uncreditedFields、breakd
 servicePlayerRegistration.preview在既有服务号/手机号/本队邀请/显式选择鉴权后验证资料和照片，仅返回制卡必要事实与指纹，不返回身份证、联系手机号或虚假授权状态；不写players或正式卡库。既有球员仍用playerCardForAuthorizedPlayer；新档案的精确未来稳定ID由服务端按会话和选择nonce生成，只读内部方法playerCardForAuthorizedRegistrationDraft复用同一完整数据读取与buildPlayerCard。该ID已存在则拒绝草稿路径，已知完整零记录可按现行规则计算初始预览，读取失败/未知/测试来源不默认铜卡。结果registrationPreview=true不可作为正式积分或授予凭证。
 
 serviceEntryPlayerCard(draft=true)生成预览并将事实指纹、照片ID、构图、模板版本、私有预览令牌与15分钟期限写入service_entry_sessions；confirm=true只确认此临时构图。renderRequest防止迟到响应覆盖新预览，确认和正式提交均验证。最终serviceEntryJoinPlayer携带cardPreviewRequired及cardPreviewToken，资料/照片变化、未确认、过期、模板变化均拒绝；正确构图随正式登记事务写入。号码check_number只返回是否可用与中文提示，不返回其他球员姓名；提交仍以完整有效库及球队revision防并发占号。
+
+## 赛事榜单展示合同（2026-10-24，本地候选）
+
+boards.version=tournament-boards/1，scopes按divisionId包含空串总榜及各真实组别，字段standings/goals/attack/defense/red/yellow；玩家按共享presentation重建各范围榜单，球队沿officialTeams及同一排序模块。scope中的真实0保留，未采集不补0；稳定key为组别/抽签小组/球队ID。手机只格式化，不聚合竞技数据。新增共享读取每次校验有效授权及赛事ID，不借手机工作空间或客户端传来的身份扩大权限。PC成绩中心使用同一service的正式积分/成绩册。awards.submittedMatches现指正式归档数量，pending_review/退回不满足ready；原手动调整保留。当前仅本地验证，详见releases/tournament-data-parity-20261024.md。
+
+## 赛事转会中心数据契约（2026-10-26，本地候选）
+
+代码入口：`cloudfunctions/dataCenter/transfer/rules.cjs`（纯规则）、`transfer/service.cjs`（事务编排）、`transfer/index.cjs`（action 路由，统一 `transfer` 前缀）。唯一写入入口是 `dataCenter` 云函数；PC／小程序／服务号只能经 `webLoginApi` 的 `callFunction` relay 调用，不得自写合同、轮次或到期算法。
+
+部署状态（2026-10-26 已部署）：线上 `dataCenter` 已按差量发布转会模块（`transfer/` 三个文件 + `shared/roster.cjs` + `shared/valuation-view.cjs` + `index.js` 路由与集合登记 + `identity.cjs`／`staffPolicy.cjs` 的 `event.transfer` 权限码），`ModTime=2026-10-26 22:48:45`，回下载与发布包逐文件一致，`transferWindowGet` 未带身份探针返回 `AUTH_REQUIRED`（路由已可达）。运行配置未改（Nodejs18.15／512MB／150s）。详见 `docs/releases/transfer-center-backend-20261026.md`。
+
+集合（2026-10-26 只读核对：下列 12 个集合在 `cloud1-7g8ckb3c7815a011` 均已存在，无需再建；`initializeCollections` 仍保留作一次性核对/补齐入口，仅平台负责人可执行）：
+
+- `transfer_windows`：每个赛事一个窗口，`_id=sha256('transfer-window:<tournamentId>')`；字段 tournamentId/orgId/seasonKey/openFrom/openTo/version/updatedBy。赛季起止与多窗口规则待 Q03。
+- `transfer_requests`：转会单，含 requestKey/playerId/fromTeamId/toTeamId/tournamentId/seasonKey/orgId/type/status/round/maxRounds/turn/currentOfferId/currentOfferVersion/buyerConfirmedAt/sellerConfirmedAt/agreedOfferVersion/offerTerms/valuationSnapshot/sourceLoanId/version/eventSeq/review/handover/contractId/loanId/brokenReason/brokenRound/cooldownUntil/cooldownRule。
+- `transfer_offers`：不可变条款版本，`_id=sha256('transfer-offer:<requestId>:<version>')`；version/by（`to` 买方、`from` 原球队）/terms/note/immutable=true。
+- `transfer_events`：事件流，`_id=sha256('transfer-event:<requestId>:<seq>')`（窗口为 `transfer-event:window:<tournamentId>:<seq>`）；fromStatus/toStatus/round/offerVersion/detail。
+- `transfer_cooldowns`：破裂冷却，`_id=sha256('transfer-cooldown:<teamId>:<playerId>')`；until/reason。
+- `player_contracts`：合同，status=scheduled/active/renewed/expired/ended；termStatus=`pending_confirmation`（Q08 未核定）或 `confirmed`（平台负责人核定或续约接受）；validFrom/validTo/termMonths、source、renewedByContractId、pendingRenewalId。
+- `player_loans`：租借，ownerTeamId（原合同队）与 borrowerTeamId（当前效力队）分字段；kind=season_full/single_match，expiryMode=date/match_end，status=scheduled/active/ended，expiryState=pending_review（Q06）。
+- `contract_renewals`：续约请求，`_id=sha256('renewal:<userId>:<requestKey>')`；proposedFrom/proposedTo/status/notifyStatus/version。
+- `transfer_free_signings`：自由签约记录，带 eventScopePolicy=`outside_event_only`（2026-10-26 已确认）、freeAgentWindowPolicy=`conservative_requires_open_window`、reviewPolicy=`pending_q02`。
+
+归属交接：审核通过与关系流转在同一事务内完成，失败整体回滚；membership/history/contract/loan 编号均由 requestId 确定性派生；租借只写 `player_loans`，不改 `players.teamId`、不迁移赛事名单与赛果；正式转会结束原合同并按一年期限建立新合同。球队关系变更同时刷新双方 `teams.rosterCountStatus`。
+
+已确认规则：三轮上限、破裂后该买方 24 小时冷却、一年合同、主办审核、转会不需球员同意；2026-10-26 追加确认审核独立性（禁止自审）与自由签约资格（仅赛事外球员）。待决 Q01—Q09 未确认前一律在服务端抛 `*_PENDING` 错误码（如 `Q09_PENDING`），不使用默认值；轮次计数、提前拒绝/撤回是否冷却、自由签约是否另需审核（Q02 剩余部分）、续约代管与未回复、单场取消到期、合同起算日、零元与金额公开范围集中登记在 `POLICY`／`PENDING_RULES`。
+
+自审拦截：`transferReview` 在幂等重放之后、状态校验之前校验审核人不得与 `fromTeamId`／`toTeamId` 任一方存在管理关系，命中抛 `TRANSFER_REVIEW_CONFLICT`，通过与拒绝同样拦截。判定口径为“非子账号的 `manageTeamIds` 命中该球队”或“`teams` 上的负责人字段（ownerId/creatorId/createdBy/managerUserId(s)/coachUserId 等）命中审核人”；赛事子账号的 `manageTeamIds` 来自赛事级 `event.teams` 授权，不代表某支球队的个人管理关系，因此只按球队负责人字段判定。
+
+自由签约资格：球员已被列入**本次签约所选赛事**的球队名单（`roster_snapshots.playerIds` 或旧名册 `rosters.players`，状态非 deleted）时抛 `TRANSFER_FREE_AGENT_IN_EVENT`，必须走赛事内两队转会与主办审核。其他赛事的历史名单不构成本赛事的赛事内身份，避免合同到期球员永久无法再被签约。
+
+权限：球队侧只认 `actor.manageTeamIds`；主办侧要求赛事属于当前机构且具备 `event.transfer` 或机构 `event.manage`；`transferExpireDue` 与 `transferConfirmContractTerm` 仅平台负责人。赛事子账号只能办理审核类 `transfer` 动作且必须显式持有 `event.transfer`，不能代球队发起、还价或签约。
+
+幂等：同一账号同一 `requestKey` 重复提交返回原单据；已完成的审核重复通过返回幂等结果；自由签约重放先按确定性编号回读，避免被“非自由球员”规则误挡。
+
+版本：报价（`transferSubmitOffer`）、接受／拒绝／还价（`transferAcceptOffer|RejectOffer|CounterOffer`）、撤回（`transferWithdraw`）、审核（`transferReview`）、续约回应（`transferRespondRenewal`）与窗口保存（`transferWindowSave`，首次允许 0）必须由调用方显式提交版本号；省略抛 `TRANSFER_VERSION_REQUIRED`，与当前版本不一致抛 `TRANSFER_VERSION_CONFLICT`（窗口为 `TRANSFER_WINDOW_STALE`）。服务端不接受“未传版本就用当前版本”的隐式重试。
+
+响应信封：每个成功的 `transfer*` 响应统一带 `schemaVersion`（当前 1）与 `serverNow`（ISO，服务端时间）；各端以 `serverNow` 判断冷却与窗口状态，不用本机时钟推断。详情类响应另带 `canAccept`／`canCounter`／`canReject`／`canWithdraw`／`canReview` 等服务端能力判定，窗口读取带 `canConfigure`。
+
+读取范围：转会读取必须带等值条件（`playerId`／`teamId`／`tournamentId`／`fromTeamId`／`toTeamId`／`status`），超预算抛 `DATA_SCOPE_TOO_LARGE`，读取失败上抛而不降级为空；仅市场球员列表仍为整集合读取（上限 20,000），球员档案超过预算时需另建检索投影。
+
+## 赛事转会中心小程序入口与页面映射（2026-10-26，本地候选）
+
+入口固定在赛事详情：球队管理 → 具体赛事 → 转会中心（不新增“本地赛事”二级页）。小程序直接调用 `dataCenter` 云函数，使用既有 OPENID 认证，只使用下列 `transfer` 前缀 action；页面不得另算合同、身价或可报价能力。
+
+| 页面 | action | 关键输入 | 页面约束 |
+| --- | --- | --- | --- |
+| `pages/tournament/transfer/market/market` | `transferWindowGet` | `tournamentId`、`teamId` | 只读窗口状态；`not_configured`／`scheduled`／`closed`／`open` 分别展示，读不到显示“窗口状态暂不可读” |
+| 同上 | `transferMarket` | `tournamentId`、`keyword`、`state`（contracted／free）、`page`、`pageSize` | 每页 20；只展示公开资料与身价状态；不含报价、审核、联系方式 |
+| `pages/tournament/transfer/player/player` | `transferPlayerDetail` | `tournamentId`、`teamId`、`playerId` | 只读；期限未核定必须提示不推断自由身；青少年身价不公开 |
+
+写入类 action（`transferInitiate`、`transferSubmitOffer`、`transferCounterOffer`、`transferAcceptOffer`、`transferRejectOffer`、`transferReview`、`transferSignFreeAgent` 等）本轮没有页面入口，后续任务交付。
+
+## 赛事球员身价只读投影（2026-10-26，本地候选）
+
+发现只做身价展示（用户 2026-10-26 确认），转会市场不进入发现页。身价读取使用 `getMiniWorkspace` 的 `action:'tournamentPlayerValuations'`，入参 `workspaceId, tournamentId, divisionId?, teamId?, keyword?, page, pageSize`；服务端先用 `findWorkspaceForAction` 解析工作空间，再以 `loadTournaments` 确认该赛事出现在当前工作空间，最后调用 `cloudfunctions/getMiniWorkspace/eventValuations.cjs`。无权限抛 `DATA_FORBIDDEN`，缺赛事抛“缺少赛事信息”。
+
+口径（唯一实现，禁止各端重写）：
+
+| 项目 | 规则 |
+| --- | --- |
+| 名单范围 | `cloudfunctions/dataCenter/shared/roster.cjs`：只取本赛事已审核名单（`roster_snapshots`，兼容旧 `rosters`；行 `status` 为空视为有效，`draft`/`deleted`/`isDeleted` 排除）；`playerIds` 与 `players` 双字段兼容 |
+| 球员资料 | `players` 按 `_id` 批量读取；`status` 为 `deleted`/`archived` 或来源为测试／虚拟（`synthetic`）的排除 |
+| 金额来源 | `cloudfunctions/dataCenter/shared/valuation-view.cjs`：`player_valuations` 按 `playerId` 批量读取并只取 `computedAt` 最新一条，页面不得自算 |
+| 青少年 | `minor=true` 只返回 `valuationState:'hidden'` 与 `valueText:'不公开'`，不返回 `money`/`tier` |
+| 待评估 | 无快照或 `coverage!=='complete'` 返回 `pending` 与 `valueText:'待评估'`，不以 0 冒充 |
+| 输出字段 | `playerId,name,playerCode,teamId,teamName,divisionId,divisionName,valuationState,valueText,tierText,computedAt,hasValue,isHidden`；不含手机号、证件、报价、审核或机构经营数据 |
+| 分页 | 单页上限 20，页码越界收敛到末页；`total`/`pageCount` 按筛选后的真实数量给出 |
+| 数据状态 | `rosterState` 为 `ready`/`partial`/`not_recorded`；名单读取失败上抛，不降级为空名单 |
+
+页面：`miniprogram/pages/tournament/valuation/`（只读，无报价／审核入口）。当前仅本地实现与本地验证，未部署、未创建生产集合、未上传小程序包。

@@ -31,8 +31,8 @@
 |---|---|
 | 项目名称 | 赛小蜂足球 |
 | 正式本地仓库 | `E:\Documents\sxf-football` |
-| Gitee | `https://gitee.com/saixiaofeng/football.git`（权威源，只此一端可推送） |
-| GitHub | `https://github.com/xushengzheng415-max/saixaifeng.git`（只读镜像，禁止推送） |
+| GitHub | `https://github.com/xushengzheng415-max/saixaifeng.git`（远端名 `github`，**主推送端**；产品侧派任务与联调以此为准） |
+| Gitee | `https://gitee.com/saixiaofeng/football.git`（远端名 `origin`，可选镜像，非唯一权威端） |
 | 正式域名 | `www.sxffootball.cn` |
 | CloudBase 环境 | `cloud1-7g8ckb3c7815a011` |
 | 权威主分支 | `main`（共享后端、主办方及其他端）；平台运营后台独立维护于 `codex/platform-ops`；`master` 为历史遗留 |
@@ -181,7 +181,7 @@
 
 PC 后台的预览、验收、合并和正式发布必须遵循 [`docs/PREVIEW_RELEASE_WORKFLOW.md`](docs/PREVIEW_RELEASE_WORKFLOW.md)。个人功能分支禁止直接部署 `/admin/`；必须先合并并部署 `preview` 到 `/preview/admin/`，产品负责人验收后再合并 `main`，且只有获得当前任务明确授权后才能部署正式 `/admin/`。
 
-功能分支在确认完整进入 `main` 且无 worktree 或其他会话占用后，应删除本地与 Gitee 远端引用；`main`、`preview`、平台长期分支 `codex/platform-ops` 和历史 `master` 固定保留。删除前必须按预览发布流程执行祖先、独有提交和 worktree 检查，禁止直接强删未核验分支。
+功能分支在确认完整进入 `main` 且无 worktree 或其他会话占用后，应删除本地与 GitHub 远端引用（Gitee 镜像同步删除）；`main`、`preview`、平台长期分支 `codex/platform-ops` 和历史 `master` 固定保留。删除前必须按预览发布流程执行祖先、独有提交和 worktree 检查，禁止直接强删未核验分支。
 
 两个网页部署目标：
 
@@ -218,7 +218,8 @@ API Key 位于仓库外的 `%LOCALAPPDATA%\SxfCloud\credentials\`，由 Windows 
 | Web base | `/admin/` |
 | 短信签名 | `河南麦步体育` |
 | 短信模板 ID | `2657871` |
-| 小程序 AppID | `wx57164cca8676f411` |
+| 小程序 AppID（球队端） | `wx57164cca8676f411` |
+| 小程序 AppID（球员端「赛小蜂足球世界」） | `wxa0ac7d45bcabd140` |
 | 网站应用 AppID | `wx5a42aae0e5d0669c` |
 | 微信授权回调域 | `www.sxffootball.cn` |
 | SMTP | `smtp.yeah.net:465`（SSL） |
@@ -278,3 +279,13 @@ webLoginApi 的 recognizeRefereeReport / confirmRefereeReport、分组换人及 
 今后赛小蜂足球的重要方案、数据基准、接口规范、研发交接、决策和发布记录统一归档至 `E:\Documents\LLM-Wiki-Knowledge-Base\01_Raw\01_赛小蜂足球\小程序与PC`，不再另建分散知识库。正式代码及其随代码维护的规范仍保留在 `E:\Documents\sxf-football`；知识库保存对应文档，不迁移代码仓库或业务数据库。
 
 每次重要资料交付时，按白名单执行 `node tools/sync-obsidian-data-center.mjs` 并执行 `--check` 回读摘要。新增重要资料须登记同步入口；人工改动有冲突时保留并报告，不覆盖。旧资料仅作追溯，当前规则与实际发布状态分别核对；不复制密钥、凭据、真实个人资料或数据库导出，不重建历史定时任务。知识库中的旧摘要与现行规范冲突时，优先核对正式仓库当前规则。
+
+
+## uploadFile依赖发布保护（2026-10-28，用户已确认）
+
+上传函数uploadFile必须保持InstallDependency=FALSE，代码更新从最新线上下载包差量修改，原node_modules随包发布。CloudBase CLI未提供函数配置时会默认在线安装并升级间接依赖，因此代码发布必须显式提供安装关闭的受控配置，不以CLI默认值覆盖线上状态。此构建设置已由用户明确授权；运行环境、内存、超时、环境变量和权限边界继续保留。发布后回下载核对业务与依赖SHA-256并验证Active/Available。webLoginApi保持各自已登记的配置，不因此一并切换。详见docs/releases/registration-upload-scope-20261028.md。
+
+
+## 报名上传权限发布防回退（2026-10-28）
+
+webLoginApi曾被旧staffUploadRights.cjs覆盖，导致共享赛事Word上传再次被拒。今后对实际拟发布的webLoginApi目录运行强制check-referee-backend-package时，必须同时通过其内置的check-registration-upload-backend-package检查：本赛事football/team-registration-imports/{赛事ID}下.docx初始化对应event.registration，跨赛事和非法文件类型拒绝。禁止只检查主仓或旧缓存；以最新线上包差量发布，并回下载再次执行检查。uploadFile保留已确认的原依赖随包和InstallDependency=FALSE。本规则仅保护现有已授权目录，不扩大子账号权限。
