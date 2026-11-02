@@ -144,6 +144,33 @@
       <template #footer><span class="auto-dialog-foot">容量不足时请先增加场地、比赛日或缩小组别范围</span><el-button :disabled="autoScheduling" @click="autoDialogVisible=false">取消</el-button><el-button type="success" :loading="autoScheduling" @click="runAutoSchedule">开始自动排程</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="autoIssueVisible" title="自动排程未完成 · 原因与建议" width="min(920px,94vw)" class="auto-issue-dialog" :close-on-click-modal="false">
+      <section class="auto-issue">
+        <p class="auto-issue-lead">{{ autoIssue.message }}</p>
+        <div class="auto-issue-metrics">
+          <div><dt>待排场次</dt><dd>{{ autoIssue.pendingCount }}场</dd></div>
+          <div><dt>可成功落位</dt><dd>{{ autoIssue.assignedCount }}场</dd></div>
+          <div><dt>可用比赛日</dt><dd>{{ autoIssue.days }}天</dd></div>
+          <div><dt>其他组别已占用</dt><dd>{{ autoIssue.occupiedMatchCount }}场</dd></div>
+        </div>
+        <div v-if="autoIssue.formats.length" class="auto-issue-formats"><article v-for="row in autoIssue.formats" :key="row.fieldFormat"><strong>{{ row.label }}</strong><span>{{ row.venues }} · 每日 {{ row.dailySlots }} 个资源格</span></article></div>
+        <div v-if="autoIssue.reasonSummary.length" class="auto-issue-block">
+          <header><strong>卡在哪几条约束</strong><span>按影响场次数排序</span></header>
+          <ul class="auto-issue-reasons"><li v-for="row in autoIssue.reasonSummary" :key="row.code"><b>{{ row.label }}</b><small>{{ row.count }}场 · {{ row.matches.join('、') }}</small></li></ul>
+        </div>
+        <div v-if="autoIssue.rows.length" class="auto-issue-block">
+          <header><strong>未排场次明细</strong><span>场序 / 对阵 / 阶段 / 具体原因</span></header>
+          <table class="auto-issue-table"><thead><tr><th>场序</th><th>组别</th><th>对阵</th><th>阶段</th><th>原因</th></tr></thead><tbody><tr v-for="row in autoIssue.rows" :key="row.matchId"><td>{{ row.matchNo || '—' }}</td><td>{{ row.divisionName || '—' }}</td><td>{{ row.teams }}</td><td>{{ row.stage || '—' }}</td><td>{{ row.reason }}</td></tr></tbody></table>
+          <p v-if="autoIssue.totalRows > autoIssue.rows.length" class="auto-issue-more">表格仅显示前 {{ autoIssue.rows.length }} 场，本次共 {{ autoIssue.totalRows }} 场未排。</p>
+        </div>
+        <div class="auto-issue-block">
+          <header><strong>建议怎么改</strong><span>按当前缺口与场地条件生成</span></header>
+          <ol class="auto-issue-suggestions"><li v-for="(text,index) in autoIssue.suggestions" :key="index">{{ text }}</li></ol>
+        </div>
+      </section>
+      <template #footer><el-button @click="autoIssueVisible=false">关闭</el-button><el-button @click="gotoScheduleSettings">去调整场地与开赛点</el-button><el-button type="success" @click="backToAutoDialog">调整比赛日再排</el-button></template>
+    </el-dialog>
+
     <el-dialog v-model="manualAddVisible" title="手动添加比赛" width="520px"><el-form label-position="top"><el-form-item label="组别" required><el-select v-model="manualForm.divisionId" style="width:100%" @change="loadManualTeams"><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="String(division.id)" /></el-select></el-form-item><el-form-item label="主队" required><el-select v-model="manualForm.homeTeamId" filterable style="width:100%"><el-option v-for="team in manualTeams" :key="team.teamId" :label="team.teamName" :value="team.teamId" /></el-select></el-form-item><el-form-item label="客队" required><el-select v-model="manualForm.awayTeamId" filterable style="width:100%"><el-option v-for="team in manualTeams" :key="team.teamId" :label="team.teamName" :value="team.teamId" /></el-select></el-form-item><el-form-item label="比赛日期"><el-date-picker v-model="manualForm.matchDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item><el-form-item label="开赛时间"><el-time-select v-model="manualForm.matchTime" start="06:00" step="00:15" end="23:00" format="HH:mm" style="width:100%" /></el-form-item><el-form-item label="比赛场地"><el-select v-model="manualForm.venue" filterable allow-create style="width:100%"><el-option v-for="venue in config.venueResources" :key="venue.name" :label="`${venue.name} · ${fieldFormatLabel(venue.fieldFormat)}`" :value="venue.name" /></el-select></el-form-item><el-form-item label="阶段名称"><el-input v-model="manualForm.roundName" placeholder="如：小组赛 A组、友谊交流赛；留空默认“手动添加”" /></el-form-item></el-form><template #footer><el-button @click="manualAddVisible=false">取消</el-button><el-button type="success" :loading="savingManualMatch" @click="saveManualMatch">保存</el-button></template></el-dialog>
 
     <el-dialog v-model="assignmentVisible" title="赛前安排" width="660px" :close-on-click-modal="false">
@@ -1011,6 +1038,8 @@ function buildPendingBreakdown(scope){
 const capacityAuditBreakdown = computed(() => buildPendingBreakdown(null))
 const autoScopeBreakdown = computed(() => buildPendingBreakdown(new Set(autoScopeDivisionIds.value.map(String))))
 const autoDialogVisible = ref(false)
+const autoIssueVisible = ref(false)
+const autoIssue = ref({ message:'', pendingCount:0, assignedCount:0, days:0, occupiedMatchCount:0, formats:[], reasonSummary:[], rows:[], totalRows:0, suggestions:[] })
 const autoScopeDivisionIds = ref([])
 const autoScopeDates = ref([])
 const autoPendingDivisions = computed(() => divisions.value.map(division => ({ id:String(division.id),name:division.name,formatLabel:fieldFormatLabel(matchFormat(division)),total:matchCountForDivision(division.id),pending:pendingCountForDivision(division.id) })).filter(row => row.total > 0))
@@ -1078,7 +1107,7 @@ async function runAutoSchedule() {
   if(!autoScopeDivisionIds.value.length)return ElMessage.warning('请至少勾选一个组别')
   if(!autoScopeDates.value.length)return ElMessage.warning('请至少勾选一个比赛日')
   if(!autoScopeAudit.value.rows.length)return ElMessage.warning('所选范围内没有可编排的比赛')
-  if(!autoScopeAudit.value.ready)return ElMessage.error('所选范围的赛制核定不通过：请按核定建议增加场地或比赛日，或缩小组别范围后再排程')
+  if(!autoScopeAudit.value.ready){ openScopeAuditIssue(autoScopeAudit.value); return }
   autoScheduling.value=true
   try {
     const base=payloadConfig()
@@ -1086,12 +1115,71 @@ async function runAutoSchedule() {
     // 只编排本次勾选的范围：组别由 divisionIds 限定，比赛日由 matchDates 限定（正式引擎按 matchDates 判定合法比赛日）。
     const scopedConfig={...base,matchDates:[...autoScopeDates.value],matchDays:[]}
     const result=await callFunction('generateSchedule',{action:'scheduleExistingPairings',tournamentId,divisionIds:[...autoScopeDivisionIds.value],scheduleConfig:scopedConfig,fullReflow:autoScopeFullReflow.value},120000)
-    if(!result?.success)throw new Error(result?.message || '自动排程失败')
+    if(!result?.success){ autoDialogVisible.value=false; openAutoIssue(result); return }
     autoDialogVisible.value=false
     ElMessage.success(result.message)
     await load()
   } catch(error) { ElMessage.error({message:error.message || '自动排程失败',duration:6500}) }
   finally { autoScheduling.value=false }
+}
+
+// 把后端排程失败的结构化结果整理成弹窗数据；后端未回传明细时仍给出通用建议，避免只看到一句“排不下”
+function normalizeAutoIssuePayload(result) {
+  const payload = result || {}
+  const details = Array.isArray(payload.unassignedMatches) ? payload.unassignedMatches : []
+  const resource = payload.resourceSummary || {}
+  const reasonSummary = (Array.isArray(payload.reasonSummary) ? payload.reasonSummary : []).map(item => ({ code:String(item.code || ''),label:String(item.label || '未满足排程条件'),count:Number(item.count || 0),matches:(Array.isArray(item.matches) ? item.matches : []).map(String) }))
+  const suggestions = (Array.isArray(payload.suggestions) ? payload.suggestions : []).map(String).filter(Boolean)
+  return {
+    message: String(payload.message || '当前日期、场地或阶段容量不足，排程未完成'),
+    pendingCount: Number(resource.pendingCount || payload.unassigned || details.length || 0),
+    assignedCount: Number(resource.assignedCount || 0),
+    days: Number(resource.days || 0),
+    occupiedMatchCount: Number(resource.occupiedMatchCount || 0),
+    formats: (Array.isArray(resource.formats) ? resource.formats : []).map(item => ({ fieldFormat:String(item.fieldFormat || ''),label:String(item.label || ''),venues:String(item.venues || ''),dailySlots:Number(item.dailySlots || 0) })),
+    reasonSummary,
+    rows: details.slice(0, 12).map(item => ({ matchId:String(item.matchId || ''),matchNo:Number(item.matchNo || 0),divisionName:String(item.divisionName || ''),teams:`${item.homeTeam || '待定'} vs ${item.awayTeam || '待定'}`,stage:String(item.stageName || ''),reason:String(item.reason || '未满足排程条件') })),
+    totalRows: details.length,
+    suggestions: suggestions.length ? suggestions : ['请先核对两块场地的开赛点数量、比赛日与组别策略，再重新自动排程；也可以先手动把部分场次放到空余时段，再用「自动排程」只补排剩余场次。']
+  }
+}
+function openAutoIssue(result) {
+  autoIssue.value = normalizeAutoIssuePayload(result)
+  autoIssueVisible.value = true
+}
+function openScopeAuditIssue(audit) {
+  // 前置核定不通过也必须给出阻断式原因与建议，而不是一条会消失的顶部提示
+  const scope = new Set(autoScopeDivisionIds.value.map(String))
+  const pendingRows = matches.value.filter(match => scope.has(String(match.divisionId || 'default')) && (!match.matchDate || !match.matchTime || !match.venue))
+  const failed = (audit.rows || []).filter(row => Number(row.shortage || 0) > 0)
+  const missingCalendar = audit.missingDates === true || audit.noEligibleDates === true
+  const reasonLabel = missingCalendar ? '比赛日尚未设置完整' : '赛期与场地时隙不足'
+  const suggestions = []
+  if(missingCalendar)suggestions.push('先在「赛程设置 → 公共日历」填写完整的比赛开始与结束日期，并勾选可用比赛日')
+  else for(const row of failed)suggestions.push(capacityRecommendation(row,audit))
+  suggestions.push('自动排程还要叠加赛段屏障、决赛阶段独占开赛点、同队每日上限与最短休息等约束：核定通过也不等于一定能排完，真实缺口会以同样格式逐场列出')
+  openAutoIssue({
+    message: missingCalendar ? '赛制核定不通过：比赛日尚未设置完整' : `所选范围的赛制核定不通过：${failed.map(row => `${row.label}缺${row.shortage}场`).join('、')}`,
+    unassigned: pendingRows.length,
+    unassignedMatches: pendingRows.slice(0,12).map(row => ({ matchId:String(row._id || ''), matchNo:Number(row.matchNo || 0), divisionName:String(row.divisionName || ''), stageName:String(row.roundName || ''), homeTeam:String(row.homeTeamName || '待定'), awayTeam:String(row.awayTeamName || '待定'), reason:reasonLabel })),
+    reasonSummary: failed.map(row => ({ code:`capacity-${row.fieldFormat}`, label:`${row.label}：需要 ${row.requiredMatches} 场，赛期理论容量 ${row.totalCapacity} 场（${row.fieldCount} 块场地 × 每天 ${row.dailySlots} 个资源格 × ${audit.availableDays} 天）`, count:row.shortage, matches:[] })),
+    suggestions,
+    resourceSummary: {
+      days: Number(audit.availableDays || 0),
+      pendingCount: pendingRows.length,
+      assignedCount: 0,
+      occupiedMatchCount: matches.value.filter(match => match.matchDate && match.matchTime && match.venue && !scope.has(String(match.divisionId || 'default'))).length,
+      formats: (audit.rows || []).map(row => ({ fieldFormat:row.fieldFormat, label:row.label, venues:`${row.fieldCount}块场地`, dailySlots:row.dailySlots }))
+    }
+  })
+}
+function gotoScheduleSettings() {
+  autoIssueVisible.value = false
+  setView('settings')
+}
+function backToAutoDialog() {
+  autoIssueVisible.value = false
+  openAutoSchedule()
 }
 
 const placingMatchId=ref('')
@@ -1386,6 +1474,29 @@ onBeforeUnmount(() => { mapResizeObserver?.disconnect(); endMapPan() })
 .auto-scope-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
 .auto-scope-tip{color:#8a94a3;font-size:12px}
 .auto-dialog-foot{margin-right:auto;color:#8a94a3;font-size:12px}
+.auto-issue{display:flex;flex-direction:column;gap:14px}
+.auto-issue-lead{margin:0;padding:12px 14px;border:1px solid #f0d3b0;border-radius:8px;background:#fffaf3;color:#a55a11;font-weight:600;line-height:1.5}
+.auto-issue-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.auto-issue-metrics>div{padding:10px 12px;border:1px solid #dce5df;border-radius:8px;background:#fff}
+.auto-issue-metrics dt{color:#748078;font-size:12px}
+.auto-issue-metrics dd{margin:4px 0 0;color:#087b43;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.auto-issue-formats{display:flex;flex-wrap:wrap;gap:10px}
+.auto-issue-formats article{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid #dce5df;border-radius:8px;background:#f7faf8}
+.auto-issue-formats article span{color:#748078;font-size:12px}
+.auto-issue-block{border:1px solid #dce5df;border-radius:8px;background:#fff;padding:12px 14px}
+.auto-issue-block>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.auto-issue-block>header span{color:#748078;font-size:12px}
+.auto-issue-reasons{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.auto-issue-reasons li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-radius:6px;background:#fff8ee;border-left:3px solid #e59b4c}
+.auto-issue-reasons li b{color:#8a4a10}
+.auto-issue-reasons li small{color:#748078;font-size:12px;text-align:right;word-break:break-all}
+.auto-issue-table{width:100%;border-collapse:collapse;font-size:13px}
+.auto-issue-table th{background:#f2f6f3;color:#4a564e;font-weight:600;text-align:left;padding:8px 10px;white-space:nowrap}
+.auto-issue-table td{padding:8px 10px;border-top:1px solid #eef2ef;vertical-align:top}
+.auto-issue-table td:last-child{color:#8a4a10;line-height:1.5}
+.auto-issue-more{margin:8px 0 0;color:#748078;font-size:12px}
+.auto-issue-suggestions{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;color:#33413a;line-height:1.6}
+.auto-issue-suggestions li::marker{color:#087b43;font-weight:600}
 </style>
 
 <style scoped>
