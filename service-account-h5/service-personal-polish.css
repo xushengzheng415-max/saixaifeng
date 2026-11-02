@@ -88,6 +88,16 @@
 .me-pp-entry-text small{font-size:11px;color:#84968a;line-height:1.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .me-pp-entry>i{font-style:normal;font-size:18px;color:#a6b2a9;line-height:1;flex-shrink:0}
 .me-pp-foot{margin:0;padding:0 19px 15px;font-size:10px;line-height:1.6;color:#9aa79d}
+/* ===== 我的参赛：站内待办「待补 N 项」（20261102） ===== */
+.me-pp-pending{padding:0 10px 6px}
+.me-pp-pending:empty{display:none;padding:0}
+.me-pp-pending .pp-sub{margin:6px 0 8px;padding:0 8px}
+.pp-pending-list{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.pp-pending-item>a{display:flex;align-items:center;gap:11px;padding:11px 12px;border:1px solid #e8f0e9;border-radius:11px;background:#f4faf5;text-decoration:none}
+.pp-pending-item>a>span{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.pp-pending-item strong{font-size:13px;font-weight:600;color:#23412f}
+.pp-pending-item small{font-size:11px;line-height:1.45;color:#84968a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-pending-item>a>i{flex-shrink:0;font-style:normal;font-size:18px;line-height:1;color:#a6b2a9}
 .me-body-participation{padding-bottom:26px}
 .pp-head{padding:4px 2px 2px}
 .pp-head h1{margin:0;font-size:23px;color:#173d2b;letter-spacing:.4px}

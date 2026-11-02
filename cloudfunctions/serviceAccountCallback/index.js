@@ -2,11 +2,50 @@
 
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const { createServiceAccountApi } = require('./serviceAccountApi.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
 const SPORT = 'football'
+
+// 关注/文本菜单：所有渠道进来的关注者都给出 1/2/3 功能入口（卡片经客服消息下发，失败自动降级文字）
+let serviceAccountApiInstance = null
+function api() {
+  if (!serviceAccountApiInstance) serviceAccountApiInstance = createServiceAccountApi({ db, env: process.env })
+  return serviceAccountApiInstance
+}
+const MENU_LINE = '回复数字直达更多服务：1 组建我的球队 · 2 创建我的赛事 · 3 咨询客服'
+function appendMenu(content) { return content + '\n\n——————\n' + MENU_LINE }
+function defaultMenuText() {
+  return [
+    '感谢您关注赛小蜂足球助手！',
+    '',
+    '请直接回复数字，选择您需要的服务：',
+    '1 我要组建自己的球队',
+    '2 我要创建赛事',
+    '3 我要咨询客服',
+    '',
+    '如需绑定赛小蜂足球账号，请返回赛小蜂足球小程序报名页，长按专属二维码重新进入并完成绑定。'
+  ].join('\n')
+}
+function matchMenuIntent(raw) {
+  const value = text(raw).replace(/\s+/g, '').toLowerCase()
+  if (!value) return null
+  if (/^(1|1[.、。:：)!）】]|①|壹|一)$/.test(value) || /组建|组队|建队|建球队|创建球队/.test(value)) return 'team'
+  if (/^(2|2[.、。:：)!）】]|②|贰|二)$/.test(value) || /创建赛事|办赛|办比赛|办赛事|创建比赛/.test(value)) return 'event'
+  if (/^(3|3[.、。:：)!）】]|③|叁|三)$/.test(value) || /咨询|客服|人工/.test(value)) return 'consult'
+  return null
+}
+const MENU_CARDS = {
+  team: { title: '组建我的球队', appId: 'wx57164cca8676f411', pagePath: 'pages/onboarding/onboarding?scene=team' },
+  event: { title: '创建我的赛事', appId: 'wx57164cca8676f411', pagePath: 'pages/onboarding/onboarding?scene=event' }
+}
+const MENU_FALLBACK_TEXT = {
+  team: '小程序卡片暂时发送失败。请打开微信，搜索小程序「赛小蜂足球」，进入后按引导创建球队；也可稍后回复 1 重试。',
+  event: '小程序卡片暂时发送失败。请打开微信，搜索小程序「赛小蜂足球」，进入后按引导创建赛事；也可稍后回复 2 重试。',
+  consult: '客服二维码暂时发送失败，请稍后回复 3 重试。'
+}
 
 function text(value) { return String(value == null ? '' : value).trim() }
 function response(statusCode, body, contentType) { return { statusCode, headers: { 'content-type': contentType || 'text/plain; charset=utf-8' }, body: text(body) } }
@@ -25,28 +64,88 @@ function cdata(value) { return text(value).replace(/]]>/g, ']]]]><![CDATA[>') }
 function textReply(toUser, fromUser, content) {
   return `<xml><ToUserName><![CDATA[${cdata(toUser)}]]></ToUserName><FromUserName><![CDATA[${cdata(fromUser)}]]></FromUserName><CreateTime>${Math.floor(Date.now() / 1000)}</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[${cdata(content)}]]></Content></xml>`
 }
+function linkReply(toUser, fromUser, title, description, url) {
+  return '<xml><ToUserName><![CDATA[' + cdata(toUser) + ']]></ToUserName>' +
+    '<FromUserName><![CDATA[' + cdata(fromUser) + ']]></FromUserName>' +
+    '<CreateTime>' + Math.floor(Date.now() / 1000) + '</CreateTime>' +
+    '<MsgType><![CDATA[news]]></MsgType><ArticleCount>1</ArticleCount><Articles><item>' +
+    '<Title><![CDATA[' + cdata(title) + ']]></Title>' +
+    '<Description><![CDATA[' + cdata(description) + ']]></Description>' +
+    '<PicUrl><![CDATA[]]></PicUrl><Url><![CDATA[' + cdata(url) + ']]></Url>' +
+    '</item></Articles></xml>'
+}
+function linkReplyDetails(result) {
+  if (result.purpose === 'player_invite_entry') return { title: '登记球员', description: '点击继续填写球员资料' }
+  if (result.purpose === 'team_claim_entry') return { title: '认领球队', description: '点击核对并认领球队' }
+  if (result.purpose === 'referee_invite' && result.claimMode === 'temporary_no_certificate') return { title: '认领临时裁判', description: '验证手机号并上传头像，提交后等待确认' }
+  if (result.purpose === 'referee_invite') return { title: '提交裁判资料', description: '上传裁判证和头像，提交资格审核' }
+  return null
+}
 function followReplyContent(result) {
   if (result.purpose === 'organizer_pc_bind') {
-    if (result.bound) return [
+    if (result.bound) return appendMenu([
       '绑定成功',
       result.organizationName ? `机构：${result.organizationName}` : '',
       result.organizationName && result.roleLabel ? `身份：${result.roleLabel}` : '',
       '请返回电脑继续。'
-    ].filter(Boolean).join('\n')
-    return '本次主办方账号绑定未完成。\n\n请返回电脑后台刷新二维码后重试；如仍失败，请联系赛小蜂客服核验账号。'
+    ].filter(Boolean).join('\n'))
+    return appendMenu('本次主办方账号绑定未完成。\n\n请返回电脑后台刷新二维码后重试；如仍失败，请联系赛小蜂客服核验账号。')
   }
-  if (result.purpose === 'referee_invite' && result.registerUrl) {
-    const heading = result.eventType === 'subscribe' ? '感谢您关注赛小蜂足球助手！' : '裁判登记入口已发送！'
-    if (result.claimMode === 'temporary_no_certificate') {
-      return `${heading}\n\n组委会已将您添加为本赛事临时裁判。请点击以下链接验证登记手机号并上传本人头像：\n${result.registerUrl}\n\n认领后仍需组委会确认，确认通过后仅可参与本届赛事排班。`
-    }
-    return `${heading}\n\n您已完成裁判服务号关注绑定。请点击以下链接提交裁判证、头像和执裁资料：\n${result.registerUrl}\n\n审核通过后，比赛指派、时间调整、临场变更和退回修正等事项将通过本服务号通知。`
-  }
+  if (result.purpose === 'team_claim_entry') return '球队认领邀请已失效，请联系赛事主办方。'
+  if (result.purpose === 'player_invite_entry') return '球员邀请已失效，请联系球队负责人。'
   if (result.bound) {
     const heading = result.eventType === 'subscribe' ? '感谢您关注赛小蜂足球助手！' : '赛小蜂足球账号绑定成功！'
-    return `${heading}\n\n已成功绑定您的赛小蜂足球账号。请返回赛小蜂足球小程序，点击“我已关注，刷新状态”，继续完成赛事报名。`
+    return appendMenu(`${heading}\n\n已成功绑定您的赛小蜂足球账号。请返回赛小蜂足球小程序，点击“我已关注，刷新状态”，继续完成赛事报名。`)
   }
-  return '感谢您关注赛小蜂足球助手！\n\n当前尚未绑定赛小蜂足球账号。如需完成赛事报名，请返回赛小蜂足球小程序报名页，长按专属二维码重新进入并完成绑定。'
+  return defaultMenuText()
+}
+
+// 48 小时客服消息窗口的唯一依据：家长最后一次与公众号互动的真实时间。
+// 只写既有集合 service_account_bindings（有 userId 时同步 users.lastServiceInteractAt），不新建集合。
+// 事件漏收时字段保持缺失，发送方按“未知”处理并落站内待办，绝不猜测可发。
+async function recordInteract(officialOpenId, type) {
+  const openId = text(officialOpenId)
+  if (!openId) return false
+  const at = db.serverDate()
+  const patch = { lastInteractAt: at, lastInteractType: text(type) || 'unknown', updateTime: at }
+  try {
+    const bindings = (await db.collection('service_account_bindings').where({ sport: SPORT, officialOpenId: openId }).limit(20).get()).data || []
+    await Promise.all(bindings.map(item => db.collection('service_account_bindings').doc(item._id).update({ data: patch })))
+    const userIds = [...new Set(bindings.map(item => text(item.userId)).filter(Boolean))]
+    await Promise.all(userIds.map(userId => db.collection('users').doc(userId).update({ data: { lastServiceInteractAt: at, lastServiceInteractType: patch.lastInteractType } })))
+    console.log('[serviceAccountCallback] interact recorded:', patch.lastInteractType, 'bindings:', bindings.length)
+  } catch (error) {
+    console.warn('[serviceAccountCallback] interact time record skipped:', error.message || error)
+    return false
+  }
+  return true
+}
+
+// 文本消息：1/2/3 及常见说法 → 客服消息下发小程序卡片/客服二维码；卡片失败降级文字；其他内容回复菜单
+async function handleTextMessage(xml) {
+  const toUser = xmlValue(xml, 'FromUserName')
+  const fromUser = xmlValue(xml, 'ToUserName')
+  await recordInteract(toUser, 'text')
+  const intent = matchMenuIntent(xmlValue(xml, 'Content'))
+  if (!intent) return response(200, textReply(toUser, fromUser, defaultMenuText()), 'application/xml; charset=utf-8')
+  try {
+    if (intent === 'team' || intent === 'event') {
+      const thumbMediaId = await api().getMaterialMediaId('mini_card_thumb')
+      if (!thumbMediaId) throw new Error('mini_card_thumb material missing')
+      const sent = await api().sendMiniProgramCard(toUser, { ...MENU_CARDS[intent], thumbMediaId })
+      if (sent.errcode) throw new Error('miniprogrampage send failed: ' + sent.errcode + ' ' + sent.errmsg)
+      return response(200, 'success')
+    }
+    const qrMediaId = await api().getMaterialMediaId('wecom_service_qr')
+    if (!qrMediaId) throw new Error('wecom_service_qr material missing')
+    const image = await api().sendCustomerImage(toUser, qrMediaId)
+    if (image.errcode) throw new Error('consult image send failed: ' + image.errcode + ' ' + image.errmsg)
+    await api().sendCustomerText(toUser, '长按识别二维码，添加赛小蜂企业微信客服，我们会尽快为您解答。')
+    return response(200, 'success')
+  } catch (error) {
+    console.warn('[serviceAccountCallback] menu reply fallback:', error.message || error)
+    return response(200, textReply(toUser, fromUser, MENU_FALLBACK_TEXT[intent] || defaultMenuText()), 'application/xml; charset=utf-8')
+  }
 }
 
 async function upsertBinding(miniOpenId, officialOpenId, subscribed) {
@@ -114,6 +213,36 @@ async function bindOrganizerPcAccount(gate, officialOpenId, eventType) {
   return { eventType, officialOpenId, bound: true, shouldReply: true, purpose: 'organizer_pc_bind', ...context }
 }
 
+async function recordServiceEntryScan(gate, officialOpenId, eventType) {
+  const purpose = text(gate.purpose)
+  const path = purpose === 'team_claim_entry' ? 'claim-team.html' : 'join-player.html'
+  const expiresAt = gate.expiresAt && new Date(gate.expiresAt.$date || gate.expiresAt._date || gate.expiresAt).getTime()
+  if (!['team_claim_entry', 'player_invite_entry'].includes(purpose) ||
+      gate.status === 'disabled' || (expiresAt && expiresAt <= Date.now())) {
+    return { eventType, officialOpenId, bound: false, shouldReply: true, purpose, registerUrl: '' }
+  }
+  const proof = crypto.randomBytes(24).toString('hex')
+  const id = crypto.createHash('sha256').update(`${text(gate._id)}:${officialOpenId}`).digest('hex')
+  const data = {
+    sport: SPORT, gateId: text(gate._id), purpose, officialOpenId,
+    proofHash: crypto.createHash('sha256').update(proof).digest('hex'),
+    subscribed: true, status: 'scanned', scannedAt: db.serverDate(),
+    expiresAt: new Date(Math.min(Date.now() + 30 * 60 * 1000, expiresAt || Infinity)),
+    updateTime: db.serverDate()
+  }
+  let row = null
+  try {
+    const old = await db.collection('service_entry_scans').doc(id).get()
+    row = Array.isArray(old.data) ? old.data[0] : old.data
+  } catch (error) {
+    if (!/document.*(not exist|getfail)|not found/i.test(text(error.message))) throw error
+  }
+  if (row) await db.collection('service_entry_scans').doc(id).update({ data })
+  else await db.collection('service_entry_scans').doc(id).set({ data: { ...data, createTime: db.serverDate() } })
+  const registerUrl = `https://www.sxffootball.cn/service-account-h5/${path}?v=20261003-3&entry=${encodeURIComponent(text(gate.entryKey))}&proof=${encodeURIComponent(proof)}`
+  return { eventType, officialOpenId, bound: true, shouldReply: true, purpose, registerUrl }
+}
+
 async function handleFollowEvent(xml) {
   const eventType = xmlValue(xml, 'Event').toLowerCase()
   const officialOpenId = xmlValue(xml, 'FromUserName')
@@ -123,15 +252,30 @@ async function handleFollowEvent(xml) {
     await Promise.all(bindings.map(item => db.collection('service_account_bindings').doc(item._id).update({ data: { subscribed: false, status: 'unsubscribed', updateTime: db.serverDate() } })))
     const gates = (await db.collection('service_follow_gates').where({ sport: SPORT, officialOpenId }).limit(100).get()).data || []
     await Promise.all(gates.map(item => db.collection('service_follow_gates').doc(item._id).update({ data: { subscribed: false, status: 'unsubscribed', updateTime: db.serverDate() } })))
+    const scans = (await db.collection('service_entry_scans').where({ sport: SPORT, officialOpenId }).limit(100).get()).data || []
+    await Promise.all(scans.map(item => db.collection('service_entry_scans').doc(item._id).update({ data: { subscribed: false, status: 'unsubscribed', updateTime: db.serverDate() } })))
     const refereeInvites = (await db.collection('referee_invitations').where({ officialOpenId, status: 'active' }).limit(100).get()).data || []
     await Promise.all(refereeInvites.map(item => db.collection('referee_invitations').doc(item._id).update({ data: { followStatus: 'unsubscribed', updateTime: db.serverDate() } })))
     return { eventType, officialOpenId, bound: false, shouldReply: false }
   }
   if (!['subscribe', 'scan'].includes(eventType) || !officialOpenId) return { eventType, officialOpenId, bound: false, shouldReply: false }
+  // 关注/扫码进入即构成 48 小时窗口起点；unsubscribe 不产生可发送窗口，由绑定状态另行阻断。
+  await recordInteract(officialOpenId, eventType)
   if (!scene) return { eventType, officialOpenId, bound: false, shouldReply: eventType === 'subscribe' }
   const gates = (await db.collection('service_follow_gates').where({ sport: SPORT, scene }).limit(2).get()).data || []
   const gate = gates[0]
   if (!gate) return { eventType, officialOpenId, bound: false, shouldReply: true }
+  if (['team_claim_entry','player_invite_entry'].includes(text(gate.purpose))) {
+    try { await require('./invitePosterShare.cjs').refreshSubscription(db,officialOpenId) }
+    catch(error) { console.warn('[serviceAccountCallback] subscription state refresh failed') }
+  }
+  if (require('./invitePosterShare.cjs').shouldSuppress(gate,officialOpenId,eventType,xmlValue(xml,'CreateTime'))) {
+    console.info('[serviceAccountCallback] ignored invite share detection',text(gate._id))
+    return {eventType,officialOpenId,bound:false,shouldReply:false}
+  }
+  if (['team_claim_entry', 'player_invite_entry'].includes(text(gate.purpose))) {
+    return recordServiceEntryScan(gate, officialOpenId, eventType)
+  }
   if (gate.purpose === 'organizer_pc_bind' && gate.userId) {
     return bindOrganizerPcAccount(gate, officialOpenId, eventType)
   }
@@ -151,6 +295,31 @@ async function handleFollowEvent(xml) {
   return { eventType, officialOpenId, bound: true, shouldReply: true }
 }
 
+// 微信授权撤回 / 注销 / 资料变更事件（2026-10 合规要求）：
+// 事件里 OpenID 在 <OpenID> 标签，FromUserName 是平台推送服务号，不能混用。
+const AUTHORIZATION_EVENTS = ['user_info_modified', 'user_authorization_revoke', 'user_authorization_cancellation']
+
+async function handleAuthorizationEvent(body) {
+  const eventType = xmlValue(body, 'Event')
+  const openid = xmlValue(body, 'OpenID')
+  const unionid = xmlValue(body, 'UnionID')
+  const appId = xmlValue(body, 'AppID')
+  const revokeInfo = xmlValue(body, 'RevokeInfo')
+  await cloud.callFunction({
+    name: 'authorizationRevocation',
+    data: {
+      action: 'processRevocation',
+      source: 'service_account_callback',
+      appType: 'service',
+      eventType,
+      openid,
+      unionid,
+      appId,
+      revokeInfo
+    }
+  })
+}
+
 exports.main = async event => {
   if (text(event && event.path) === '/health') return response(200, 'ok')
   const token = text(process.env.SXF_FOOTBALL_SERVICE_CALLBACK_TOKEN)
@@ -162,11 +331,26 @@ exports.main = async event => {
   try {
     const body = event.isBase64Encoded ? Buffer.from(text(event.body), 'base64').toString('utf8') : text(event.body)
     if (xmlValue(body, 'Encrypt')) return response(501, 'encrypted callback requires bridge decryption')
+    const msgType = xmlValue(body, 'MsgType').toLowerCase()
+    if (msgType === 'text') return await handleTextMessage(body)
+    // 自定义菜单点击（CLICK）也是可发送客服消息的互动；只记录时间，回复仍由菜单链接承担。
+    if (msgType === 'event' && xmlValue(body, 'Event').toLowerCase() === 'click') {
+      await recordInteract(xmlValue(body, 'FromUserName'), 'menu_click')
+      return response(200, 'success')
+    }
+    if (msgType === 'event' && AUTHORIZATION_EVENTS.includes(xmlValue(body, 'Event').toLowerCase())) {
+      await handleAuthorizationEvent(body)
+      return response(200, 'success')
+    }
     const result = await handleFollowEvent(body)
     if (result && result.shouldReply) {
       const toUser = xmlValue(body, 'FromUserName')
       const fromUser = xmlValue(body, 'ToUserName')
-      return response(200, textReply(toUser, fromUser, followReplyContent(result)), 'application/xml; charset=utf-8')
+      const link = result.registerUrl && linkReplyDetails(result)
+      const reply = link
+        ? linkReply(toUser, fromUser, link.title, link.description, result.registerUrl)
+        : textReply(toUser, fromUser, followReplyContent(result))
+      return response(200, reply, 'application/xml; charset=utf-8')
     }
     return response(200, 'success')
   } catch (error) {

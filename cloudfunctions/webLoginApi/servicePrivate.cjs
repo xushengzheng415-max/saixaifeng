@@ -72,6 +72,36 @@ module.exports = function createServicePrivate({ cloud, config, hashSessionToken
     if (['deleted','disabled','banned'].includes(text(user.status)) || user.disabled===true) return fail('SERVICE_PRIVATE_ACCOUNT_UNAVAILABLE','账号暂不可用，请联系管理员')
     return { user, session }
   }
+  // 站内待办：家长/监护人在「我的参赛资料」看到「待补 N 项」并可直接补交。
+  // 只读既有 player_review_tasks（本轮通知落库的任务），不新建集合、不改任务归属。
+  async function pendingReview(userId) {
+    const uid = text(userId)
+    if (!uid) return { count:0, items:[] }
+    let rows
+    try {
+      rows = await read('player_review_tasks',{ sport:'football', status:'open', recipientUserIds:uid },{ kind:true, title:true, reason:true, teamName:true, playerName:true, playerIds:true, tournamentName:true, createdAt:true, lastNotifiedAt:true })
+    } catch (error) {
+      console.warn('[servicePrivate] pending review read skipped:', error.message || error)
+      return { count:0, items:[], failed:true }
+    }
+    const labels = { claim:'球员认领提醒', materials:'球员资料补充', rejected:'驳回资料修改' }
+    const timeOf = value => { try { return dateValue(value) } catch (error) { return 0 } }
+    const items = rows.map(row => ({
+      taskId: text(row._id),
+      kind: text(row.kind),
+      kindLabel: labels[text(row.kind)] || '资料补充',
+      title: text(row.title),
+      teamName: text(row.teamName),
+      playerName: text(row.playerName),
+      reason: text(row.reason),
+      tournamentName: text(row.tournamentName),
+      pendingCount: text(row.kind)==='claim' ? (Number((row.playerIds||[]).length) || 1) : 1,
+      createdAt: row.createdAt || null,
+      lastNotifiedAt: row.lastNotifiedAt || null,
+      url: 'https://www.sxffootball.cn/service-account-h5/player-review.html?task=' + encodeURIComponent(text(row._id))
+    })).sort((a,b) => timeOf(b.createdAt) - timeOf(a.createdAt))
+    return { count: items.length, items: items.slice(0,20) }
+  }
   async function personal(action,event) {
     const context=await authenticate(event)
     if(!context.user)return context
@@ -90,6 +120,12 @@ module.exports = function createServicePrivate({ cloud, config, hashSessionToken
     }
     if(action==='serviceFeedbackSubmit')return feedback(event,context)
     if(action==='servicePrivateFeedbackList')return feedbackList(context)
+    if(action==='servicePrivateParticipation'){
+      const base=await require('./servicePersonalData.cjs')({cloud,db,user:context.user}).handle(action,event)
+      if(!base||base.success!==true||!base.data)return base
+      base.data.pending=await pendingReview(text(context.user._id))
+      return base
+    }
     return require('./servicePersonalData.cjs')({cloud,db,user:context.user}).handle(action,event)
   }
   // 客服反馈：仅记录，不承诺处理时效；微信号必填（客服通过企业微信添加用户沟通），账号手机号脱敏仅作内部核对
