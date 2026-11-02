@@ -1,0 +1,12 @@
+{
+  "name": "aiPortraitDemo",
+  "version": "0.1.0",
+  "description": "AI 形象照演示云函数 - 定妆照姿势试验（演示用，非正式计费入口）",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "~3.16.0",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
+  },
+  "license": "MIT"
+}

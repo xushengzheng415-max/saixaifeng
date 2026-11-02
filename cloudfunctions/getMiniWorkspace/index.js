@@ -12,7 +12,7 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
 // 球员入队审核（2026-10-19）：新登记先进入「待球队确认」，球队负责人确认后才正式入队。
-const playerJoinReview = require('./playerJoinReview.cjs')({ db, safeGet, safeGetTeamPlayers, loadTeams, findWorkspaceForAction, workspaceError, toTime, registrantTypeForPlayer })
+const playerJoinReview = require('./playerJoinReview.cjs')({ db, cloud, safeGet, safeGetTeamPlayers, loadTeams, findWorkspaceForAction, workspaceError, toTime, registrantTypeForPlayer })
 
 function unique(list) {
   return Array.from(new Set((list || []).filter(Boolean).map(String)))
@@ -434,8 +434,17 @@ async function activateAssignedStaffAccounts(user, openId) {
   }
 }
 
+// 主账号移交后，新负责人用该手机号首次登录即自动取得球队所有权（无需对方确认）。
+async function bindPendingTeamOwners(user, openId) {
+  return require('./teamOwnerTransfer.cjs').bindPending({ db, safeGet }, user, openId)
+}
+
 async function loadWorkspaceCatalog(user, openId, homeCatalog) {
   await activateAssignedStaffAccounts(user, openId)
+  await bindPendingTeamOwners(user, openId).catch(error => {
+    // 登录阶段的自动认领失败不能阻断工作空间加载，保留 pendingOwnerPhone 下次重试。
+    console.warn('[getMiniWorkspace] pending owner binding failed:', error && error.message)
+  })
   const membershipRows = await safeGet(
     'organization_memberships',
     _.or([{ userId: user._id }, { memberUserId: user._id }, { phone: user.phone || user.phoneNumber }, { phoneNumber: user.phone || user.phoneNumber }]),
@@ -1368,9 +1377,14 @@ function formatTeamPlayer(item, requirements) {
   const registrantType = registrantTypeForPlayer(item)
   const rejected = ['rejected', 'failed', 'exception', 'invalid'].indexOf(String(firstValue(item.profileStatus, item.verifyStatus, item.identityStatus, item.status)).toLowerCase()) >= 0
   const incomplete = item.manualPlaceholder === true || needsPortrait || needsInsurance || !hasBirth || !hasName || needsParentCompletion || needsIdentity
-  const profileStatus = rejected ? 'exception' : (incomplete ? 'pending' : 'complete')
+  // 主办方逐人驳回时，球队端要能看到“谁被驳回、为什么”，否则无法补齐资料。
+  const organizerReviewStatus = String(item.organizerReviewStatus || '').toLowerCase()
+  const organizerReviewReason = String(item.organizerReviewReason || '').trim().slice(0, 60)
+  const organizerRejected = organizerReviewStatus === 'rejected'
+  const profileStatus = organizerRejected ? 'exception' : (rejected ? 'exception' : (incomplete ? 'pending' : 'complete'))
   let statusText = '资料完整'
-  if (profileStatus === 'exception') statusText = '资料异常'
+  if (organizerRejected) statusText = '主办方驳回' + (organizerReviewReason ? '：' + organizerReviewReason : '')
+  else if (profileStatus === 'exception') statusText = '资料异常'
   else if (needsIdentity) statusText = '待人证核验'
   else if (needsInsurance) statusText = '待投保资料'
   else if (needsPortrait) statusText = '待形象照'
@@ -1387,6 +1401,8 @@ function formatTeamPlayer(item, requirements) {
     position: item.position || '',
     profileStatus,
     statusText,
+    organizerReviewStatus,
+    organizerReviewReason,
     claimStatus: playerClaimState(item),
     isUnclaimed: playerClaimState(item) === 'unclaimed',
     claimStatusText: playerClaimState(item) === 'unclaimed' ? '未认领' : '已认领',
@@ -1844,16 +1860,43 @@ async function dataCenterForWorkspace(event, identity) {
   return operation==='catalog'?service.catalog(actor):service.query(actor,scope)
 }
 
+// 发现页身价展示（用户 2026-10-26 确认：发现只做身价展示，转会集中在赛事转会中心）。
+// 只对当前工作空间已出现的赛事开放（主办或参与的赛事），其他赛事的名单不通过本入口读取；
+// 只返回公开资料与身价，不返回联系方式、证件、报价、审核或机构经营数据。
+async function tournamentPlayerValuationsForWorkspace(event, identity) {
+  const tournamentId = String(event.tournamentId || '')
+  if (!tournamentId) throw new Error('缺少赛事信息')
+  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const permissions = result.workspace.permissions || []
+  if (!permissions.some(permission => ['team.view','team.manage','event.view','event.manage','tournament.view','tournament.manage'].includes(permission))) {
+    throw workspaceError('DATA_FORBIDDEN','当前身份无权查看赛事球员资料')
+  }
+  const teams = await loadTeams(result.workspace, identity.user, identity.openId)
+  const loaded = await loadTournaments(result.workspace, identity.user, identity.openId, teams)
+  if (!loaded.tournaments.some(item => String(item._id) === tournamentId)) {
+    throw workspaceError('DATA_FORBIDDEN','当前工作空间没有该赛事的访问权限')
+  }
+  return await require('./eventValuations.cjs').load(db, {
+    tournamentId,
+    divisionId: event.divisionId,
+    teamId: event.teamId,
+    keyword: event.keyword,
+    page: event.page,
+    pageSize: event.pageSize
+  })
+}
+
 async function tournamentDataForWorkspace(event, identity) {
   const tournamentId = String(event.tournamentId || '')
   if (!tournamentId) throw new Error('缺少赛事信息')
-  const dataCenter = await dataCenterForWorkspace(Object.assign({},event,{scope:{tournamentId}}),identity)
+  const dataCenter = await dataCenterForWorkspace(Object.assign({},event,{scope:{tournamentId,mode:'official',...(event.divisionId?{divisionId:String(event.divisionId)}:{})}}),identity)
   const tournament = (await readDataRows(db,'tournaments',{_id:tournamentId}))[0]
   const divisions = await readDataRows(db,'divisions',{tournamentId})
   const teamMap = Object.fromEntries(dataCenter.teams.map(row => [row.teamId,row]))
   const standings = dataCenter.standings.flatMap(group => group.officialTeams.map(row => ({...row,divisionId:group.divisionId,divisionName:group.divisionName,groupName:group.groupName,wins:row.win,draws:row.draw,losses:row.loss,goalDiff:row.goalDifference})))
   const ranking=field=>dataCenter.rankings.players[field].rows.filter(row=>row.value>0).map(row=>({playerId:row.id,playerName:row.name,teamId:row.teamIds[0],teamName:teamMap[row.teamIds[0]]?.teamName||row.teamIds[0],count:row.value,observedCount:row.value,statisticsCoverage:'complete'}))
-  return {success:true,tournament:{id:tournamentId,name:String(tournament?.name || '')},divisions:divisions.map(row => ({id:String(row._id),name:String(row.name || '')})),divisionGroups:[],standings,goalsRanking:ranking('goals'),yellowCards:ranking('yellowCards'),redCards:ranking('redCards'),dataCenter}
+  const boards = await require('./data-center/tournament-boards.cjs').tournamentBoards(dataCenter,divisions)
+  return {success:true,tournament:{id:tournamentId,name:String(tournament?.name || '')},divisions:divisions.map(row => ({id:String(row._id),name:String(row.name || '')})),divisionGroups:[],standings,goalsRanking:ranking('goals'),yellowCards:ranking('yellowCards'),redCards:ranking('redCards'),awards:dataCenter.awards||null,boards,dataCenter}
 }
 
 async function officialRosterForWorkspace(event, identity) {
@@ -2277,6 +2320,8 @@ async function claimableTeamsForWorkspace(event, identity) {
   if (!tournament) throw workspaceError('CLAIM_CODE_INVALID', '认领码对应的赛事不存在或已下线')
   const phone = verifiedUserPhone(identity.user)
   if (!phone) return { success: true, needsPhone: true, tournamentId, teams: [] }
+  // 与首页登录恢复共用授权激活流程，扫码不能漏掉主办方已分配的工作人员账号。
+  const catalog = await loadWorkspaceCatalog(identity.user, identity.openId)
   const invites = await listClaimableInvites(tournamentId)
   const teams = []
   for (const invite of invites) {
@@ -2337,6 +2382,33 @@ async function claimableTeamsForWorkspace(event, identity) {
       workspaceId,
       requiresReview: !claimedByMe && (claimStatus !== 'unclaimed' || hasOwnership),
       statusText: alreadyClaimed ? '已由你认领' : (claimedByMe ? '已认领' : ((claimStatus !== 'unclaimed' || hasOwnership) ? '需人工核验' : '待认领'))
+    })
+  }
+  // 认领白名单只用于首次取得主账号；已授权管理员通过现有成员关系直接进入，
+  // 不把主教练手机号加入主账号认领白名单，也不修改球队所有权。
+  const managedTeams = await loadAccountOwnedOrManagedTeams(identity.user, identity.openId)
+  const viewTeamIds = catalog.filter(row => row.type === 'team' && (row.permissions || []).includes('team.view')).map(row => String(row.teamId))
+  const viewTeams = viewTeamIds.length ? await readDataByIds(db, 'teams', '_id', viewTeamIds) : []
+  const managed = Array.from(new Map(managedTeams.concat(viewTeams).map(team => [String(team._id), team])).values())
+  const scopedRelations = []
+  for (let start = 0; start < managed.length; start += 20) {
+    const ids = managed.slice(start, start + 20).map(team => String(team._id))
+    scopedRelations.push(...await readDataRows(db, 'tournament_teams', { tournamentId, teamId:_.in(ids) }))
+  }
+  const inactive = new Set(['cancelled', 'canceled', 'withdrawn', 'rejected', 'replaced', 'deleted', 'archived'])
+  for (const team of managed) {
+    const teamId = String(team._id)
+    if (teams.some(row => row.teamId === teamId)) continue
+    const relation = scopedRelations.find(row => String(row.teamId) === teamId && !inactive.has(String(row.status || '').toLowerCase()))
+    if (!relation) continue
+    const scope = catalog.find(row => row.type === 'team' && String(row.teamId) === teamId)
+      || catalog.find(row => row.type === 'organization' && String(row.orgId) === String(team.orgId || '') && (row.permissions || []).includes('team.manage'))
+    if (!scope || !(scope.permissions || []).includes('team.view')) continue
+    teams.push({
+      inviteId:'managed:' + teamId, teamId, teamName:String(team.name || team.teamName || '未命名球队'),
+      divisionName:String(relation.divisionName || ''), managerPhoneMasked:maskPhone(phone),
+      claimedByMe:[team.ownerId, team.ownerUserId, team.claimedByUserId].some(id => String(id || '') === String(identity.user._id)),
+      alreadyClaimed:true, authorizedManager:true, workspaceId:scope.id, requiresReview:false, statusText:'已授权管理'
     })
   }
   return { success: true, needsPhone: false, phoneMasked: maskPhone(phone), tournamentId, teams }
@@ -3125,7 +3197,12 @@ async function loadServiceEntryRegistration(event, expectedPurpose) {
   const officialOpenId = String(session.officialOpenId || '')
   const scanId = crypto.createHash('sha256').update(String(gate._id) + ':' + officialOpenId).digest('hex')
   const scan = (await safeGet('service_entry_scans', { _id: scanId }, 1))[0]
-  if (!scan || scan.subscribed !== true || toTime(scan.expiresAt) <= Date.now()) throw workspaceError('ENTRY_SUBSCRIPTION_REQUIRED', '请先扫描邀请二维码并关注服务号，再继续登记')
+  // 这里只认「当前仍在关注服务号」这一业务事实。service_entry_scans.expiresAt 是扫码链接
+  // 自身的新鲜度（30 分钟），本轮操作凭的是 12 小时有效的登记会话；继续登记恢复
+  // （serviceRegistrationRecovery.scope）与 webLoginApi 的 sessionFor 都只校验 subscribed。
+  // 若在此再卡 30 分钟，用户扫过一次码后超过半小时再恢复草稿、提交或点「立即生成」，
+  // 都会被判成未关注而整条登记链路不可用。
+  if (!scan || scan.subscribed !== true) throw workspaceError('ENTRY_SUBSCRIPTION_REQUIRED', '请先扫描邀请二维码并关注服务号，再继续登记')
   const phone = String(session.phone || '').replace(/\D/g, '')
   const phoneUsers = (await safeGet('users', _.or([{ phone }, { phoneNumber: phone }]), 3)).filter((item, index, rows) => rows.findIndex(other => String(other._id) === String(item._id)) === index)
   if (!phoneUsers.length) throw workspaceError('ENTRY_SESSION_STALE', '登记账号不存在，请重新验证手机号')
@@ -3474,15 +3551,20 @@ exports.main = async function(event) {
     // 服务号 H5 登记动作由 webLoginApi 转发，没有小程序 OPENID 上下文，
     // 先于 findCurrentUser 按服务端会话令牌处理（P0-1 接口断点修复）。
     if (event.action === 'servicePlayerRegistration') return await require('./playerRegistration.cjs').run({db,cloud,readPlayers:id=>safeGetTeamPlayers(id,500),loadServiceEntryRegistration},event)
+    // 服务号 H5 自助登记：没有小程序 OPENID，身份来自 webLoginApi 建立的服务端会话（P0 衔接补齐）。
+    if (event.action === 'serviceSelfPlayerOnboard') return await require('./selfPlayerH5.cjs')({ db, event, loadManagedTeams: loadAccountOwnedOrManagedTeams })
     if (event.action === 'acceptServiceTeamPlayer') return await acceptServiceTeamPlayer(event)
     if (event.action === 'acceptServiceTeamClaim') return await acceptServiceTeamClaim(event)
     if (event.action === 'acceptTeamPlayerInvite') throw workspaceError('SERVICE_PLAYER_REGISTRATION_REQUIRED', '请扫描球队专属服务号二维码，查找后认领或新建球员')
     const identity = await findCurrentUser()
+    if (event.action === 'selfPlayerProfile' || event.action === 'registerSelfPlayer') return await require('./selfPlayerOnboard.cjs').run(db,identity,event)
+    if (event.action === 'selfPlayerJoinTeam') return await require('./selfPlayerTeam.cjs')({db,findWorkspaceForAction,loadTeams,workspaceError}).run(identity,event)
     if (['beginInvitePosterShare','endInvitePosterShare'].includes(event.action)) return await require('./invitePosterShare.cjs').manage({db,findWorkspaceForAction,loadTeams,readDataRows},event,identity)
     if(['playerCardRead','playerCardBatchRead','playerCardExport'].includes(event.action))return await readWorkspaceCards(event,identity)
     if (event.action === 'sharedEventOperation') return await require('./sharedOperations.cjs').run(db, cloud, identity, event, formatTeamPlayer)
     if (event.action === 'sharedTournaments') return { success: true, tournaments: await sharedEvents.list(db, identity.user._id) }
     if (event.action === 'sharedTournamentOverview') return await require('./sharedOverview.cjs').overview(db,cloud,identity,event)
+    if (event.action === 'sharedTournamentData') return await require('./sharedOverview.cjs').tournamentData(db,identity,event)
     if (event.action === 'sharedTournamentDetail') {
       const rows = await sharedEvents.list(db, identity.user._id)
       const tournament = rows.find(item => item.id === String(event.tournamentId || ''))
@@ -3497,6 +3579,7 @@ exports.main = async function(event) {
     if (event.action === 'dismissWorkspaceTask') return await dismissWorkspaceTask(event, identity)
     if (event.action === 'setHomeIdentity') return await saveHomeIdentity(event, identity)
     if (event.action === 'tournamentData') return await tournamentDataForWorkspace(event,identity)
+    if (event.action === 'tournamentPlayerValuations') return await tournamentPlayerValuationsForWorkspace(event, identity)
     if (event.action === 'dataCenter') return await dataCenterForWorkspace(event, identity)
     if (event.action === 'teamPlayers') return await loadTeamPlayersForWorkspace(event, identity)
     if (event.action === 'importedPlayerDrafts') return await importedPlayerDraftsForWorkspace(event, identity)
@@ -3533,6 +3616,10 @@ exports.main = async function(event) {
       const scoped=await findWorkspaceForAction(identity.user,identity.openId,event.workspaceId)
       const deletion=require('./teamDeletion.cjs')
       return event.action === 'teamDeletionInfo' ? await deletion.info(db,identity,scoped.workspace,event) : await deletion.remove(db,identity,scoped.workspace,event)
+    }
+    if (event.action === 'transferTeamOwnerDirect') {
+      const scoped=await findWorkspaceForAction(identity.user,identity.openId,event.workspaceId)
+      return await require('./teamOwnerTransfer.cjs').transferDirect({ db, safeGet, maskPhone }, identity, scoped.workspace, event)
     }
     if (event.action === 'saveTeamProfile') return await saveTeamProfileForWorkspace(event, identity)
     if (event.action === 'teamMembers') return await teamMembersForWorkspace(event, identity)

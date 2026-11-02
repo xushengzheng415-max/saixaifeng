@@ -5,7 +5,7 @@ const text=value=>typeof value==='string'?value.trim():''
 const ids=values=>[...new Set(values.map(text).filter(Boolean))]
 const fail=(code,error)=>({success:false,code,error})
 const originFields={synthetic:true,isTest:true,syntheticDatasetId:true,syntheticKey:true,source:true,originType:true,dataKind:true}
-const playerFields={...originFields,status:true,isDeleted:true,name:true,gender:true,birthDate:true,birthday:true,idCard:true,identityMasked:true,position:true,profileStatus:true,registrantType:true,participantType:true,teamId:true,teamCode:true,jerseyNumber:true,guardianUserId:true,playerUserId:true,linkedUserId:true,photoUrl:true,photoFileID:true,photoFileId:true,avatar:true,organizerReviewStatus:true,organizerReviewReason:true}
+const playerFields={...originFields,status:true,isDeleted:true,name:true,gender:true,birthDate:true,birthday:true,idCard:true,identityMasked:true,position:true,profileStatus:true,registrantType:true,participantType:true,teamId:true,teamCode:true,jerseyNumber:true,jerseyName:true,guardianUserId:true,playerUserId:true,linkedUserId:true,photoUrl:true,photoFileID:true,photoFileId:true,avatar:true,organizerReviewStatus:true,organizerReviewReason:true}
 const refFields={...originFields,status:true,isDeleted:true,name:true,realName:true,level:true,avatarUrl:true,avatarFileId:true}
 const ended=new Set(['finished','completed','ended'])
 const removed=new Set(['archived','deleted','removed','replaced','cancelled','canceled','withdrawn','invite_cancelled'])
@@ -25,7 +25,7 @@ module.exports=function createPersonalData({cloud,db,user,dataService}){
   const teams=await live(await byIds('teams',ids(rows.map(row=>row.teamId||row.teamCode)),{...originFields,name:true,teamName:true,status:true,isDeleted:true}))
   const names=new Map(teams.map(row=>[row._id,text(row.name||row.teamName)]))
   const knownTeams=new Set(teams.map(row=>row._id))
-  const result=rows.filter(row=>!text(row.teamId)||knownTeams.has(text(row.teamId))).map(row=>({id:row._id,name:text(row.name),teamName:names.get(text(row.teamId||row.teamCode))||'',jerseyNumber:row.jerseyNumber==null?'':String(row.jerseyNumber),avatar:text(row.photoFileID||row.photoFileId||row.photoUrl||row.avatar),relation:row.playerUserId===uid||row.linkedUserId===uid?'self':'guardian'}))
+  const result=rows.filter(row=>!text(row.teamId)||knownTeams.has(text(row.teamId))).map(row=>({id:row._id,name:text(row.name),jerseyName:text(row.jerseyName).slice(0,40),teamName:names.get(text(row.teamId||row.teamCode))||'',jerseyNumber:row.jerseyNumber==null?'':String(row.jerseyNumber),avatar:text(row.photoFileID||row.photoFileId||row.photoUrl||row.avatar),relation:row.playerUserId===uid||row.linkedUserId===uid?'self':'guardian'}))
   await assets(result);return result
  }
  async function overview(){
@@ -225,9 +225,11 @@ module.exports=function createPersonalData({cloud,db,user,dataService}){
     const youth=registrantType==='guardian'||lower(profile.participantType)==='youth'||(age!=null&&age<18)
     const mode=age==null&&registrantType!=='guardian'?'unknown':(youth?'youth':'adult')
     const certificate=certificateMap.get(playerId)||null
-    const passEligible=stateValue==='approved'&&(!identityRequired||identityVerified)
+    // 组别要求保险时：已确认提交保单即可出证（含待人工）；未上传则不出证。
+    const insurancePassOk=!requirements.insuranceRequired||insuranceSubmitted
+    const passEligible=stateValue==='approved'&&(!identityRequired||identityVerified)&&insurancePassOk
     const stateText=stateMeta[stateValue]?stateMeta[stateValue][0]:'状态待确认'
-    let passText=passEligible?'可出示':stateValue==='approved'?'需先完成本赛事人证核验':stateValue==='rejected'?'资料被驳回，暂不可用':stateValue==='not_listed'?'未进入正式名单':'正式名单通过后可出示'
+    let passText=passEligible?'可出示':stateValue==='approved'?(requirements.insuranceRequired&&!insuranceSubmitted?'需先提交本赛事保险资料':identityRequired&&!identityVerified?'需先完成本赛事人证核验':'暂不可出示'):stateValue==='rejected'?'资料被驳回，暂不可用':stateValue==='not_listed'?'未进入正式名单':'正式名单通过后可出示'
     if(passEligible&&mode==='youth')passText='可出示 · 现场按照片核验'
     if(passEligible&&mode==='unknown')passText='可出示 · 出生日期待补'
     const reason=review==='rejected'?reviewReason:(stateValue==='returned'?text(snapshot&&snapshot.returnReason).slice(0,60):'')
@@ -296,7 +298,7 @@ module.exports=function createPersonalData({cloud,db,user,dataService}){
   const rosterIds=[]
   if(snapshot){for(const field of['playerIds','players']){const list=snapshot[field];if(!Array.isArray(list))continue;for(const item of list)rosterIds.push(text(item&&typeof item==='object'?item.playerId||item.id||item._id:item))}}
   if(!(snapshot&&['approved','locked'].includes(lower(snapshot.status))&&rosterIds.includes(playerId)))return fail('ROSTER_REQUIRED','请先进入本赛事正式名单后再出示动态码')
-  const qualificationRows=(await read('tournament_player_qualifications',{tournamentId:text(match.tournamentId),divisionId,playerId},{status:true,identityVerificationId:true,updateTime:true,createTime:true}))
+  const qualificationRows=(await read('tournament_player_qualifications',{tournamentId:text(match.tournamentId),divisionId,playerId},{status:true,identityVerificationId:true,insurance:true,updateTime:true,createTime:true}))
     .sort((a,b)=>stamp(b.updateTime||b.createTime)-stamp(a.updateTime||a.createTime))
   const qualification=qualificationRows[0]
   const identityRequired=requirements.identityVerificationRequired||requirements.electronicPassVerificationRequired
@@ -305,6 +307,12 @@ module.exports=function createPersonalData({cloud,db,user,dataService}){
     if(!verificationId)return fail('PLAYER_IDENTITY_REQUIRED','请先完成本赛事的人证核验')
     const ver=(await optionalRead('parent_identity_verifications',{_id:verificationId},{status:true}))[0]
     if(!['approved','verified','complete','passed'].includes(lower(ver&&ver.status)))return fail('PLAYER_IDENTITY_REQUIRED','请先完成本赛事的人证核验')
+  }
+  if(requirements.insuranceRequired){
+    const insurancePayload=qualification&&qualification.insurance&&typeof qualification.insurance==='object'?qualification.insurance:null
+    if(!(qualification&&lower(qualification.status)==='submitted'&&insurancePayload)){
+      return fail('PLAYER_INSURANCE_REQUIRED','本赛事要求保险，请先在「赛事保险资料」提交保单后再出示')
+    }
   }
   for(const name of ['player_electronic_passes','adult_match_passes']){try{await db.createCollection(name)}catch(error){}}
   let certificate=(await optionalRead('player_electronic_passes',{playerId,status:'active'},{certificateNumber:true,status:true}))[0]

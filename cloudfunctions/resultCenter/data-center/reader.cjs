@@ -1,10 +1,11 @@
 'use strict'
 
 class DataReadError extends Error {
-  constructor(code, collection, message) {
+  constructor(code, collection, message, cause) {
     super(message)
     this.code = code
     this.collection = collection
+    if (cause) this.cause = cause
   }
 }
 
@@ -22,7 +23,7 @@ async function readAll(db, collection, where = {}, options = {}) {
       if (options.fields) query = query.field({ ...options.fields, _id: true })
       page = (await query.orderBy('_id', 'asc').limit(Math.min(pageSize, maxRows - rows.length + 1)).get()).data || []
     } catch (error) {
-      throw new DataReadError('DATA_READ_FAILED', collection, '数据读取失败，请重试或检查索引')
+      throw new DataReadError('DATA_READ_FAILED', collection, '数据读取失败，请重试或检查索引', error)
     }
     for (const row of page) {
       const id = String(row._id || '')
@@ -48,4 +49,12 @@ async function readByIds(db, collection, field, ids, options = {}) {
   return [...rows.values()]
 }
 
-module.exports = { readAll, readByIds, DataReadError }
+function missingCollection(failure) {
+  const cause = failure?.cause || failure
+  return ['DATABASE_COLLECTION_NOT_EXIST','COLLECTION_NOT_EXIST'].includes(String(cause?.code || cause?.errCode || '')) || /collection[^\n]*(?:not exist|not found|does not exist)|集合不存在/i.test(String(cause?.errMsg || cause?.message || ''))
+}
+async function readOptionalAll(db, collection, where = {}, options = {}) {
+  try { return {status:'ready',rows:await readAll(db,collection,where,options)} }
+  catch (failure) { if (missingCollection(failure)) return {status:'not_recorded',rows:[]}; throw failure }
+}
+module.exports = { readAll, readByIds, readOptionalAll, missingCollection, DataReadError }

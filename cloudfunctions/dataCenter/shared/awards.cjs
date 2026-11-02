@@ -23,12 +23,22 @@ const BEST_XI_SLOTS = [
 const GOAL_TYPES = new Set(['goal', 'penalty_scored'])
 const CARD_TYPES = { yellow_card: 'yellow', red_card: 'red', second_yellow_red: 'red' }
 
+// 生涯荣誉归档：只取已归档正式赛事的系统评定结果，成就分与转会评估成就口径同刻度。
+const HONOR_POINTS = Object.freeze({ mvp: 50, topScorer: 40, goalkeeper: 40, bestXI: 40 })
+const HONOR_TITLES = { mvp: 'MVP·最有价值球员', topScorer: '金靴奖·最佳射手', goalkeeper: '金手套奖·最佳守门员', bestXI: '最佳阵容' }
+
 function bucketOf(role) {
   return POSITION_BUCKET[str(role).toUpperCase()] || ''
 }
 
 function officialMatch(match) {
-  return match && match.scoreReady && match.resultStatus !== 'warning' && match.resultStatus !== 'not_submitted' && match.resultStatus !== 'draft'
+  return match && match.scoreReady && ['approved','official','archived'].includes(match.resultStatus)
+}
+
+// 已取消或轮空占位场次不会产生赛果，不能计入归档完备性；否则整届赛事永远无法评定荣誉。
+const NOT_PLAYED_STATUS = new Set(['cancelled','canceled','void','abandoned'])
+function expectedMatch(match) {
+  return Boolean(match) && match.isBye !== true && !NOT_PLAYED_STATUS.has(str(match.status).toLowerCase())
 }
 
 // 首发来源优先级：比赛阵容（含槽位角色） → 阵容快照（starters 可能是球员 ID 列表）。
@@ -244,25 +254,60 @@ function pickBestXI(pool) {
     .sort((a, b) => BEST_XI_SLOTS.findIndex(x => x.key === a.bucket) - BEST_XI_SLOTS.findIndex(x => x.key === b.bucket))
 }
 
+const scoreOf = value => {
+  if (value == null || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+// 名次排位赛（7-8 名决赛、5-6 名决赛、三四名决赛等）不是冠军决赛，不能用来判定冠军。
+const PLACEMENT_FINAL = /半决赛|三四名|季军|名次|排位|交叉|名决赛|\d+\s*[-－—~至]\s*\d+\s*名/
+
+function championshipFinals(divisionId, matches) {
+  return (matches || []).filter(match => {
+    if (!officialMatch(match) || str(match.divisionId) !== str(divisionId)) return false
+    const label = [match.phase, match.phaseLabel, match.stageLabel, match.name, match.matchName].map(str).join(' ')
+    if (!/final|决赛/i.test(label)) return false
+    return !PLACEMENT_FINAL.test(label)
+  }).sort((a, b) => num(b.round) - num(a.round) || num(b.matchNo) - num(a.matchNo) ||
+    str(b.matchDate).localeCompare(str(a.matchDate)) || str(b.matchTime).localeCompare(str(a.matchTime)))
+}
+
+// 决赛胜方：先看比分，其次点球决胜，最后回退到已归档的晋级球队字段。
+function decisiveWinnerSide(match) {
+  const home = scoreOf(match.homeScore), away = scoreOf(match.awayScore)
+  if (home == null || away == null) return ''
+  if (home !== away) return home > away ? 'home' : 'away'
+  const homePenalty = scoreOf(match.homePenaltyScore), awayPenalty = scoreOf(match.awayPenaltyScore)
+  if (homePenalty != null && awayPenalty != null && homePenalty !== awayPenalty) return homePenalty > awayPenalty ? 'home' : 'away'
+  const winnerTeamId = str(match.winnerTeamId), homeTeamId = str(match.homeTeamId), awayTeamId = str(match.awayTeamId)
+  if (winnerTeamId && winnerTeamId === homeTeamId && winnerTeamId !== awayTeamId) return 'home'
+  if (winnerTeamId && winnerTeamId === awayTeamId && winnerTeamId !== homeTeamId) return 'away'
+  return ''
+}
+
 function divisionChampion(divisionId, matches, standings) {
-  const finals = (matches || []).filter(match => officialMatch(match) && str(match.divisionId) === str(divisionId) &&
-    (/final|决赛/i.test(str(match.phase)) || /决赛/.test(str(match.phaseLabel))) && !/半决赛|三四名/.test(str(match.phaseLabel)))
-  const finalMatch = finals.sort((a, b) => num(b.round) - num(a.round))[0]
-  if (finalMatch && finalMatch.homeScore != null && finalMatch.awayScore != null && finalMatch.homeScore !== finalMatch.awayScore) {
-    const homeWon = num(finalMatch.homeScore) > num(finalMatch.awayScore)
+  for (const finalMatch of championshipFinals(divisionId, matches)) {
+    const winnerSide = decisiveWinnerSide(finalMatch)
+    if (!winnerSide) continue
+    const wonHome = winnerSide === 'home'
     return {
-      champion: { teamId: homeWon ? finalMatch.homeTeamId : finalMatch.awayTeamId, teamName: homeWon ? finalMatch.homeTeamName : finalMatch.awayTeamName },
-      runnerUp: { teamId: homeWon ? finalMatch.awayTeamId : finalMatch.homeTeamId, teamName: homeWon ? finalMatch.awayTeamName : finalMatch.homeTeamName },
+      champion: { teamId: wonHome ? finalMatch.homeTeamId : finalMatch.awayTeamId, teamName: wonHome ? finalMatch.homeTeamName : finalMatch.awayTeamName },
+      runnerUp: { teamId: wonHome ? finalMatch.awayTeamId : finalMatch.homeTeamId, teamName: wonHome ? finalMatch.awayTeamName : finalMatch.homeTeamName },
+      championBasis: '决赛胜者',
+      runnerUpBasis: '决赛负者',
       basis: '决赛胜者'
     }
   }
   const group = (standings || []).filter(item => str(item.divisionId) === str(divisionId))
   const table = group.flatMap(item => (item.officialTeams || []).map(team => ({ ...team, groupName: item.groupName })))
     .sort((a, b) => num(a.rank) - num(b.rank))
-  if (!table.length) return { champion: null, runnerUp: null, basis: '' }
+  if (!table.length) return { champion: null, runnerUp: null, championBasis: '', runnerUpBasis: '', basis: '' }
   return {
     champion: { teamId: table[0].teamId, teamName: table[0].teamName },
     runnerUp: table[1] ? { teamId: table[1].teamId, teamName: table[1].teamName } : null,
+    championBasis: '积分榜首位',
+    runnerUpBasis: table[1] ? '积分榜第二位' : '',
     basis: '积分榜首位'
   }
 }
@@ -271,8 +316,8 @@ function compute(input) {
   const { matches = [], eventsByMatchId = {}, standings = [], divisions = [], overrides = [] } = input || {}
   const divisionRows = (divisions || []).map(item => ({ id: str(item.id || item._id), name: str(item.name) }))
   const officialMatches = matches.filter(officialMatch)
-  const totalMatches = matches.length
-  const submittedMatches = matches.filter(match => match.resultStatus !== 'not_submitted').length
+  const totalMatches = matches.filter(expectedMatch).length
+  const submittedMatches = officialMatches.length
   const { players, teams } = collectMetrics({ matches, eventsByMatchId, divisionRows })
   const ranked = withTeamRank(players, standings)
 
@@ -314,7 +359,8 @@ function compute(input) {
       teamCount: teamTable.length,
       champion: outcome.champion,
       runnerUp: outcome.runnerUp,
-      championBasis: outcome.basis,
+      championBasis: outcome.championBasis || outcome.basis,
+      runnerUpBasis: outcome.runnerUpBasis || '',
       topScorer: applyOverride(divisionId, 'topScorer', scorers[0] ? playerView(scorers[0], { goals: scorers[0].goals, assists: scorers[0].assists }) : null),
       goalkeeper: applyOverride(divisionId, 'goalkeeper', keepers[0] ? playerView(keepers[0], {
         cleanSheets: keepers[0].gkCleanSheets, gkAppearances: keepers[0].gkAppearances, gkConceded: keepers[0].gkConceded,
@@ -335,15 +381,15 @@ function compute(input) {
         contribution: row.contribution, positionLabel: POSITION_LABEL[row.positionBucket] || '未记录位置'
       })),
       teamAwards: [
-        { key: 'champion', title: '冠军', teamName: outcome.champion ? outcome.champion.teamName : '', note: outcome.basis },
-        { key: 'runnerUp', title: '亚军', teamName: outcome.runnerUp ? outcome.runnerUp.teamName : '', note: outcome.basis },
+        { key: 'champion', title: '冠军', teamName: outcome.champion ? outcome.champion.teamName : '', note: outcome.championBasis || outcome.basis || '' },
+        { key: 'runnerUp', title: '亚军', teamName: outcome.runnerUp ? outcome.runnerUp.teamName : '', note: outcome.runnerUpBasis || '' },
         { key: 'bestAttack', title: '最佳进攻球队', teamName: bestAttack ? bestAttack.teamName : '', note: bestAttack ? `进球 ${num(bestAttack.scored)}` : '' },
         { key: 'bestDefense', title: '失球最少球队', teamName: bestDefense ? bestDefense.teamName : '', note: bestDefense ? `失球 ${num(bestDefense.conceded)}` : '' },
         { key: 'fairPlay', title: '公平竞赛奖', teamName: fairPlay ? fairPlay.teamName : '', note: '红黄牌记分最少' }
       ].filter(item => item.teamName),
       standings: (standings || []).filter(item => str(item.divisionId) === divisionId).map(item => ({
         groupName: str(item.groupName) || '联赛',
-        rows: (item.officialTeams || []).map(team => ({ rank: num(team.rank), teamName: team.teamName, played: num(team.played), wins: num(team.wins), draws: num(team.draws), losses: num(team.losses), goalsFor: num(team.goalsFor), goalsAgainst: num(team.goalsAgainst), goalDifference: num(team.goalDifference), points: num(team.points) }))
+        rows: (item.officialTeams || []).map(team => ({ rank: num(team.rank), teamName: team.teamName, played: num(team.played), wins: num(team.wins == null ? team.win : team.wins), draws: num(team.draws == null ? team.draw : team.draws), losses: num(team.losses == null ? team.loss : team.losses), goalsFor: num(team.goalsFor), goalsAgainst: num(team.goalsAgainst), goalDifference: num(team.goalDifference), points: num(team.points) }))
       }))
     }
   }).sort((a, b) => a.divisionName.localeCompare(b.divisionName, 'zh-CN', { numeric: true }))
@@ -353,6 +399,7 @@ function compute(input) {
   const overallMvp = divisionMvps.sort(byMvp)[0] || null
 
   return {
+    awardsVersion: 'football-tournament-awards/2',
     ready: officialMatches.length > 0 && submittedMatches === totalMatches,
     totalMatches, submittedMatches,
     overall: {
@@ -369,10 +416,41 @@ function compute(input) {
       'MVP（最有价值球员）：球员贡献分 = 进球×5 + 助攻×3 + 首发场次×1 + 首发胜场×1 − 红牌×3 − 黄牌×1；同分依次比进球、助攻、出场更少、球队排名。各组 MVP 取组内最高分，总 MVP 取各组 MVP 中最高分。',
       '金手套奖（最佳守门员）：零封场次最多；相同比场均失球更低，再比出场次数更多，最后比球队排名。仅统计以门将位置首发的比赛。',
       '最佳阵容（每组，8 人制基准 1-3-3-1）：门将 1 名取金手套排名最高者；后卫、中场、前锋各按贡献分从高到低选取；本位置人数不足时按贡献分补位并标注。',
-      '球队奖项：冠军取决赛胜者（无淘汰赛决赛时取积分榜首位），最佳进攻取进球最多，失球最少取失球最少，公平竞赛奖按红黄牌记分（红牌×3＋黄牌）最少。',
+      '球队奖项：冠军取冠军决赛胜者（平局按点球决胜或晋级球队判定，名次排位赛不计入；无冠军决赛时取积分榜首位），最佳进攻取进球最多，失球最少取失球最少，公平竞赛奖按红黄牌记分（红牌×3＋黄牌）最少。',
       '统计口径：只计入已归档且无异常的正式赛果；奖项在全部比赛录入完成后生成，主办方可在成绩册中手动调整并留痕。'
     ]
   }
 }
 
-module.exports = { compute, bucketOf, BEST_XI_SLOTS }
+// 从单届赛事奖项结果中汇总某球员的生涯荣誉；赛事未全部归档时不产生荣誉记录。
+function playerHonors(awards, meta = {}) {
+  const playerId = str(meta.playerId)
+  if (!playerId || !awards || awards.ready !== true) return []
+  // 历史数据里同一个人可能同时以档案 _id 与球员编号出现在阵容中，按别名集合匹配，避免漏记荣誉。
+  const aliasIds = new Set([playerId, ...(meta.aliasIds || []).map(str)].filter(Boolean))
+  const base = { tournamentId: str(meta.tournamentId), tournamentName: str(meta.tournamentName), playerId }
+  const rows = []
+  const add = (key, division, row, extra) => {
+    if (!row || !aliasIds.has(str(row.playerId))) return
+    const slot = str(extra && extra.slot)
+    rows.push({
+      id: [base.tournamentId, str(division.divisionId), key, slot].join(':'),
+      ...base,
+      divisionId: str(division.divisionId), divisionName: str(division.divisionName),
+      key, title: key === 'bestXI' ? `${HONOR_TITLES.bestXI}·${slot || '入选'}` : HONOR_TITLES[key],
+      points: HONOR_POINTS[key],
+      goals: num(row.goals), assists: num(row.assists), contribution: num(row.contribution),
+      cleanSheets: row.cleanSheets == null ? null : num(row.cleanSheets),
+      slot, filled: Boolean(extra && extra.filled), manual: row.manual === true
+    })
+  }
+  for (const division of awards.divisions || []) {
+    add('mvp', division, division.mvp)
+    add('topScorer', division, division.topScorer)
+    add('goalkeeper', division, division.goalkeeper)
+    for (const slot of division.bestXI || []) add('bestXI', division, slot, { slot: slot.slot, filled: slot.filled })
+  }
+  return rows
+}
+
+module.exports = { compute, playerHonors, bucketOf, BEST_XI_SLOTS, HONOR_POINTS }

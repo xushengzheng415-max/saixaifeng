@@ -13,10 +13,9 @@ async function readCards(cloud, db, players, options = {}) {
   if(!players.length)return []
   const states = new Map()
   const dynamic=require('./playerCardDynamic.cjs')
-  const scores=options.legacyOnly?new Map():await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id||p.id)))
-  const rows = await Promise.all(players.map(async player => {
+  const scores=options.legacyOnly?new Map():(options.scores||await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id||p.id))))
+  const rows = await require('./playerCardPreviewAssets.cjs').mapLimit(players,options.dynamic===false?2:4,async player => {
     const playerId = String(player._id || player.id || '')
-    try {
     if(!options.baseOnly&&!options.legacyOnly)player=await require('./playerCardSeriesReader.cjs').resolveSeriesPlayer(db,player,scores.get(playerId),document)
     let live=options.legacyOnly?null:await dynamic.read(cloud,db,player,{...options,score:scores.get(playerId)})
     if(live?.cardScene&&options.restrictedAssets)live=await dynamic.restrictAssets(cloud,db,player,live)
@@ -61,25 +60,15 @@ async function readCards(cloud, db, players, options = {}) {
     if (!render || render.renderVersion!==RENDER_VERSION || Number(render.cardDataVersion) !== base.cardDataVersion) return await visualCard() || {...base,status:'pending'}
     if (render.status !== 'ready' || !render.fileId) return await visualCard() || {...base,status:render.status === 'failed' ? 'failed' : 'pending'}
     return {...base,status:'ready',cardId:String(render.cardId||render._id||`${playerId}_${base.templateId}_${base.publishedVersion}`),fileId:render.fileId,renderVersion:render.renderVersion || ''}
-    } catch {
-      return {playerId,status:'failed',cardUrl:'',reasonCode:'CARD_READ_FAILED',reason:'球员卡暂不可读，请重试'}
-    }
-  }))
-  // Static export already resolves its URL and verifies the current template.
-  // It has no fileId; passing that missing ID to the SDK rejects the whole list.
+  })
+  // Legacy clients receive an on-demand export with an already resolved URL.
+  // That result has no fileId and may be an awarded event card, not a base card.
   const staticExport = row => row.displayMode==='static-export' && typeof row.cardUrl==='string' && /^https:\/\//.test(row.cardUrl)
-  const permanentFile = require('./playerCardSource.cjs').permanentFile
-  for(const row of rows)if(row.status==='ready'&&!row.cardScene&&!staticExport(row)) {
-    row.fileId=typeof row.fileId==='string'?permanentFile(row.fileId):''
-    if(!row.fileId)Object.assign(row,{status:'failed',cardUrl:'',reasonCode:'CARD_FILE_INVALID',reason:'球员卡文件无效，请重试'})
-  }
   const ids = [...new Set(rows.filter(row=>row.status==='ready'&&!row.cardScene&&!staticExport(row)).map(row=>row.fileId))]
   const urls = new Map()
   for (let start=0;start<ids.length;start+=50) {
-    try {
-      const result = await cloud.getTempFileURL({fileList:ids.slice(start,start+50)})
-      for (const file of result.fileList || []) if (file.tempFileURL) urls.set(file.fileID,file.tempFileURL)
-    } catch { /* Keep the roster readable; affected cards return failed below. */ }
+    const result = await cloud.getTempFileURL({fileList:ids.slice(start,start+50)})
+    for (const file of result.fileList || []) if (file.tempFileURL) urls.set(file.fileID,file.tempFileURL)
   }
   const latestStates = new Map()
   for(const type of new Set(rows.filter(row=>row.status==='ready'&&!row.cardScene&&!staticExport(row)&&!row.visualOnly&&!row.selectedDisplay&&!row.legacyStatic).map(row=>row.cardTypeId)))latestStates.set(type,await document(db,'player_card_template_states',type))

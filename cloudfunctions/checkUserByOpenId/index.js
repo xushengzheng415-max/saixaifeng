@@ -1,8 +1,12 @@
 // 小程序手机号主账号登录。
 // 手机号是自然人账号唯一凭证；OpenID / UnionID 只作为登录渠道标识。
 var cloud = require('wx-server-sdk')
+var https = require('https')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
+
+var MINIPROGRAM_APPID = 'wx57164cca8676f411'
+var miniAccessTokenCache = null
 
 function firstValue() {
   for (var i = 0; i < arguments.length; i += 1) {
@@ -50,6 +54,111 @@ function duplicateMessage(label) {
   return label + '存在重复账号，请联系管理员处理'
 }
 
+function httpsJson(url, options) {
+  var settings = options || {}
+  var body = settings.body || ''
+  return new Promise(function(resolve, reject) {
+    var headers = { 'content-type': 'application/json' }
+    if (body) headers['content-length'] = Buffer.byteLength(body)
+    var request = https.request(url, { method: settings.method || 'GET', headers: headers }, function(response) {
+      var chunks = []
+      response.on('data', function(chunk) { chunks.push(chunk) })
+      response.on('end', function() {
+        var data = null
+        try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch (parseError) { data = null }
+        if (!data) {
+          var parseFailure = new Error('微信接口返回非 JSON 响应')
+          parseFailure.wechatCode = response.statusCode
+          reject(parseFailure)
+          return
+        }
+        resolve({ status: response.statusCode, data: data })
+      })
+    })
+    request.on('error', reject)
+    if (body) request.write(body)
+    request.end()
+  })
+}
+
+async function miniAccessToken() {
+  if (miniAccessTokenCache && miniAccessTokenCache.expiresAt > Date.now() + 120000) return miniAccessTokenCache.value
+  var appId = String(firstValue(process.env.SXF_FOOTBALL_MINIPROGRAM_APPID, MINIPROGRAM_APPID))
+  var appSecret = String(process.env.SXF_FOOTBALL_MINIPROGRAM_APPSECRET || '')
+  if (!appSecret) {
+    var missing = new Error('小程序 AppSecret 未配置')
+    missing.code = 'MINI_PROGRAM_CREDENTIALS_REQUIRED'
+    throw missing
+  }
+  var result = await httpsJson('https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=' + encodeURIComponent(appId) + '&secret=' + encodeURIComponent(appSecret))
+  var data = (result && result.data) || {}
+  if (!data.access_token) {
+    var tokenFailure = new Error('小程序 access_token 获取失败')
+    tokenFailure.wechatCode = Number(data.errcode) || Number(result && result.status)
+    tokenFailure.code = 'MINI_ACCESS_TOKEN_FAILED'
+    throw tokenFailure
+  }
+  miniAccessTokenCache = { value: data.access_token, expiresAt: Date.now() + Math.max(300, Number(data.expires_in || 7200) - 300) * 1000 }
+  return data.access_token
+}
+
+async function requestOfficialPhoneNumber(phoneCode, token) {
+  var result = await httpsJson('https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=' + encodeURIComponent(token), {
+    method: 'POST',
+    body: JSON.stringify({ code: phoneCode })
+  })
+  var data = (result && result.data) || {}
+  if (data.errcode) {
+    var apiFailure = new Error('小程序手机号接口返回错误')
+    apiFailure.wechatCode = Number(data.errcode)
+    throw apiFailure
+  }
+  return data
+}
+
+// 云调用权限不可用时，改用小程序官方接口解码一次性手机号凭证。
+async function decodePhoneNumberByOfficialApi(phoneCode) {
+  var data = null
+  try {
+    data = await requestOfficialPhoneNumber(phoneCode, await miniAccessToken())
+  } catch (error) {
+    var wechatCode = Number(error && error.wechatCode)
+    if (wechatCode === 40001 || wechatCode === 40014 || wechatCode === 42001) {
+      miniAccessTokenCache = null
+      data = await requestOfficialPhoneNumber(phoneCode, await miniAccessToken())
+    } else {
+      throw error
+    }
+  }
+  var phoneInfo = data.phone_info || data.phoneInfo
+  var phone = String((phoneInfo && (phoneInfo.purePhoneNumber || phoneInfo.phoneNumber)) || '')
+  if (!/^1[3-9]\d{9}$/.test(phone)) {
+    return { success: false, message: '未获取到有效手机号，请重试' }
+  }
+  return { success: true, phone: phone }
+}
+
+function officialApiFailure(error) {
+  var errorCode = String((error && error.code) || '')
+  var wechatCode = Number(error && error.wechatCode)
+  console.error('[miniPhoneLogin] 官方手机号接口解析失败:', wechatCode || errorCode || 'UNKNOWN')
+  if (errorCode === 'MINI_PROGRAM_CREDENTIALS_REQUIRED') {
+    return { success: false, code: 'PHONE_API_PERMISSION_DENIED', message: '手机号登录服务未配置，请联系管理员' }
+  }
+  if (wechatCode === 40029 || wechatCode === 40163) {
+    return { success: false, code: 'PHONE_CODE_INVALID', message: '手机号凭证失效，请重新点击登录' }
+  }
+  return { success: false, code: 'PHONE_API_UNAVAILABLE', message: '手机号验证暂不可用，请稍后重试' }
+}
+
+function isCloudCallPermissionDenied(error, code) {
+  var message = String((error && (error.errMsg || error.message)) || '')
+  return code === -604101 ||
+    message.indexOf('OPENAPI_NO_PERMISSION') >= 0 ||
+    message.toLowerCase().indexOf('no permission') >= 0 ||
+    message.indexOf('无权限') >= 0
+}
+
 async function decodePhoneNumber(phoneCode) {
   try {
     var result = await cloud.openapi.phonenumber.getPhoneNumber({ code: phoneCode })
@@ -60,8 +169,19 @@ async function decodePhoneNumber(phoneCode) {
     }
     return { success: true, phone: phone }
   } catch (error) {
-    console.error('[miniPhoneLogin] 手机号授权解析失败:', error && (error.errCode || error.code), error && (error.errMsg || error.message))
-    return { success: false, message: '手机号授权已失效，请重新授权' }
+    var code = Number(error && (error.errCode || error.code))
+    console.error('[miniPhoneLogin] 云调用手机号解析失败:', code || String((error && (error.errMsg || error.message)) || 'UNKNOWN'))
+    if (isCloudCallPermissionDenied(error, code)) {
+      console.warn('[miniPhoneLogin] 云调用无权限，切换小程序官方接口')
+      try {
+        return await decodePhoneNumberByOfficialApi(phoneCode)
+      } catch (officialError) {
+        return officialApiFailure(officialError)
+      }
+    }
+    if (code === -604102) return { success: false, code: 'PHONE_API_TIMEOUT', message: '手机号验证超时，请稍后重试' }
+    if (code === 40029 || code === 40163) return { success: false, code: 'PHONE_CODE_INVALID', message: '手机号凭证失效，请重新点击登录' }
+    return { success: false, code: 'PHONE_API_UNAVAILABLE', message: '手机号验证暂不可用，请稍后重试' }
   }
 }
 
@@ -105,7 +225,7 @@ async function validateExistingSession(db, _, openId) {
 
 async function loginByPhone(db, _, event, openId, unionId) {
   var decoded = await decodePhoneNumber(event.phoneCode)
-  if (!decoded.success) return { success: false, isRegistered: false, message: decoded.message }
+  if (!decoded.success) return { success: false, isRegistered: false, code: decoded.code, message: decoded.message }
   var phone = decoded.phone
 
   var results = await Promise.all([

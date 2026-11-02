@@ -1,5 +1,6 @@
 'use strict'
 // Pure insurance-policy text helpers. No cloud I/O — unit-tested offline.
+// Tuned for common Chinese e-policy layouts (e.g. 安诚「个人体育健身运动意外伤害保险」).
 
 const text = value => String(value == null ? '' : value).trim()
 
@@ -31,6 +32,8 @@ function parseLooseDate(raw) {
   return ''
 }
 
+const DATE_TOKEN = '(\\d{4}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日(?:\\s*\\d{1,2}\\s*时(?:\\s*\\d{1,2}\\s*分(?:\\s*\\d{1,2}\\s*秒)?)?)?|\\d{4}[./-]\\d{1,2}[./-]\\d{1,2}(?:\\s+\\d{1,2}:\\d{2}(?::\\d{2})?)?)'
+
 function extractDates(rawText) {
   const source = String(rawText || '')
   const found = []
@@ -51,23 +54,51 @@ function extractDates(rawText) {
 
 function extractPolicyNo(rawText) {
   const source = String(rawText || '')
-  const labeled = source.match(/保单(?:号码|号|编号)?[:：\s]*([A-Za-z0-9][A-Za-z0-9\-]{7,31})/)
+  const labeled = source.match(/保单(?:号码|号|编号)?[:：\s]*([A-Za-z0-9][A-Za-z0-9\-]{7,40})/)
   if (labeled) return labeled[1]
-  const policy = source.match(/(?:Policy\s*(?:No\.?|Number)|policyno)[:：\s]*([A-Za-z0-9][A-Za-z0-9\-]{7,31})/i)
+  const policy = source.match(/(?:Policy\s*(?:No\.?|Number)|policyno)[:：\s]*([A-Za-z0-9][A-Za-z0-9\-]{7,40})/i)
   if (policy) return policy[1]
+  // 安诚等：无标签时抓长数字+字母保单号
+  const compact = source.match(/\b(\d{15,28}[A-Za-z]?)\b/)
+  if (compact) return compact[1]
   return ''
+}
+
+function extractInsurer(rawText) {
+  const source = String(rawText || '')
+  const labeled = source.match(/(?:承保公司|保险公司)[:：\s]*([^\n\r，,；;]{4,40})/)
+  if (labeled) {
+    const value = text(labeled[1]).replace(/[（(].*$/, '').slice(0, 40)
+    if (value && !/姓名|期限|保单|意外/.test(value)) return value
+  }
+  const known = [
+    '安诚财产保险股份有限公司',
+    '中国人民财产保险股份有限公司',
+    '中国平安财产保险股份有限公司',
+    '中国太平洋财产保险股份有限公司',
+    '中国人寿财产保险股份有限公司',
+    '阳光财产保险股份有限公司',
+    '泰康在线财产保险股份有限公司'
+  ]
+  for (const name of known) if (source.includes(name)) return name
+  const loose = source.match(/([\u4e00-\u9fff]{2,12}(?:财产|人寿)?保险(?:股份有限)?公司)/)
+  return loose ? loose[1] : ''
 }
 
 function extractProductType(rawText) {
   const source = String(rawText || '')
+  // 标题常见：个人体育健身运动意外伤害保险（互联网专属电子保单）
+  const title = source.match(/(个人[\u4e00-\u9fff]{0,12}(?:体育|健身|运动)?[\u4e00-\u9fff]{0,8}意外伤害保险)/)
+  if (title) return text(title[1]).slice(0, 40)
   const labeled = source.match(/(?:险种|保险名称|产品名称|保险产品|保障项目)[:：\s]*([^\n\r，,；;]{2,40})/)
   if (labeled) {
     const value = text(labeled[1]).replace(/[（(].*$/, '').slice(0, 40)
-    if (value) return value
+    if (value && !/^名称$/.test(value)) return value
   }
   const catalog = [
-    ['运动意外伤害保险', /运动意外|体育意外|赛事意外/],
-    ['人身意外伤害保险', /人身意外|意外伤害保险|意外伤害险/],
+    ['个人体育健身运动意外伤害保险', /体育健身运动意外|个人体育健身/],
+    ['运动意外伤害保险', /运动意外|体育意外|赛事意外|健身运动意外/],
+    ['人身意外伤害保险', /人身意外|意外伤害保险|意外伤害险|个意/],
     ['团体意外伤害保险', /团体意外|团体人身意外/],
     ['旅行意外伤害保险', /旅行意外|旅游意外/],
     ['综合意外伤害保险', /综合意外/],
@@ -79,15 +110,47 @@ function extractProductType(rawText) {
 
 function extractCoverRange(rawText) {
   const source = String(rawText || '')
-  const labeled = source.match(/(?:保险期间|保障期间|保险期限|保障期限|保险起止|保险起讫)[^\d]{0,12}(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|\d{4}[./-]\d{1,2}[./-]\d{1,2}).{0,20}?至.{0,12}?(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|\d{4}[./-]\d{1,2}[./-]\d{1,2})/)
-  if (labeled) {
+  const rangePatterns = [
+    // 安诚：自2026年10月22日00时00分00秒起至2026年10月25日00时00分00秒止
+    new RegExp('自\\s*' + DATE_TOKEN + '[^至]{0,24}?起?\\s*至\\s*' + DATE_TOKEN + '[^\\n]{0,8}?止?', 'i'),
+    // 保险期限：…至…
+    new RegExp('(?:保险期间|保障期间|保险期限|保障期限|保险起止|保险起讫)[^\\d自]{0,24}(?:自\\s*)?' + DATE_TOKEN + '[^至]{0,24}?至\\s*' + DATE_TOKEN, 'i'),
+    // 宽松：date 至 date
+    new RegExp(DATE_TOKEN + '\\s*至\\s*' + DATE_TOKEN)
+  ]
+  for (const pattern of rangePatterns) {
+    const labeled = source.match(pattern)
+    if (!labeled) continue
     const start = parseLooseDate(labeled[1]), end = parseLooseDate(labeled[2])
     if (start && end) return { coverStart: start, coverEnd: end }
   }
-  const dates = extractDates(source)
-  if (dates.length >= 2) return { coverStart: dates[0], coverEnd: dates[dates.length - 1] }
-  if (dates.length === 1) return { coverStart: dates[0], coverEnd: dates[0] }
+  // 仅在「保险期限」段落后取日期，避免签单日/成立日干扰
+  const section = source.match(/保险期限[:：]?([\s\S]{0,180})/)
+  if (section) {
+    const dates = extractDates(section[1])
+    if (dates.length >= 2) return { coverStart: dates[0], coverEnd: dates[1] }
+    if (dates.length === 1) return { coverStart: dates[0], coverEnd: dates[0] }
+  }
   return { coverStart: '', coverEnd: '' }
+}
+
+function extractInsuredName(rawText) {
+  const source = String(rawText || '')
+  const patterns = [
+    /被保险人姓名[:：\s]+([^\n\r，,；;：:\s]{2,20})/,
+    /被保险人[:：\s]+([^\n\r，,；;：:\s]{2,20})/,
+    /被保险人信息[\s\S]{0,120}?姓名[:：\s]+([^\n\r，,；;：:\s]{2,20})/,
+    /(?:^|\n)\s*姓名[:：\s]+([^\n\r，,；;：:\s]{2,20})/
+  ]
+  for (const pattern of patterns) {
+    const match = source.match(pattern)
+    if (!match) continue
+    let name = text(match[1]).replace(/[（(].*$/, '')
+    if (/^(姓名|名称|投保人|被保险人|性别|证件|联系|信息)$/.test(name)) continue
+    if (/保险|公司|期限|保单|意外/.test(name)) continue
+    if (name.length >= 2 && name.length <= 20) return name.slice(0, 20)
+  }
+  return ''
 }
 
 function nameAppears(rawText, playerName) {
@@ -114,6 +177,8 @@ function analyzeInsuranceText(rawText, options = {}) {
   const cover = extractCoverRange(source)
   const policyNo = extractPolicyNo(source)
   const productType = extractProductType(source)
+  const insurer = extractInsurer(source)
+  const extractedName = extractInsuredName(source)
   const nameMatched = nameAppears(source, playerName)
   const hasCover = Boolean(cover.coverStart && cover.coverEnd)
   const covered = hasCover && coverageOk(cover.coverStart, cover.coverEnd, eventStart, eventEnd)
@@ -134,11 +199,12 @@ function analyzeInsuranceText(rawText, options = {}) {
   }
 
   return {
-    insuredName: nameMatched ? playerName : '',
+    insuredName: nameMatched ? playerName : extractedName,
     coverStart: cover.coverStart,
     coverEnd: cover.coverEnd,
     policyNo,
     productType: productType || '未识别险种',
+    insurer,
     matchResult,
     reviewFlag,
     message: messages[matchResult] || messages.unclear,
@@ -156,8 +222,10 @@ module.exports = {
   parseLooseDate,
   extractDates,
   extractPolicyNo,
+  extractInsurer,
   extractProductType,
   extractCoverRange,
+  extractInsuredName,
   nameAppears,
   coverageOk,
   analyzeInsuranceText,

@@ -116,6 +116,21 @@ function createPlayerCardLibrary({ cloud }) {
     })
     return {success:true,displayTemplateId:row?.templateId || ''}
   }
-  return {list,resolve,render,save,select}
+  async function remove(player, templateId, isStillOwned) {
+    const id = libraryId(player._id, templateId)
+    await db.runTransaction(async tx => {
+      const current = await suite.document(tx,'players',player._id)
+      if (!current || !isStillOwned(current)) throw Object.assign(new Error('球员绑定已变化，请重新进入'),{code:'PLAYER_CARD_FORBIDDEN'})
+      const grant = await suite.document(tx,LIBRARY,id)
+      if (grant && grant.status !== 'revoked') {
+        await tx.collection(LIBRARY).doc(id).update({data:{status:'revoked',revokedAt:db.serverDate(),revokedReason:'player_self_remove'}})
+      }
+      if (String(current.playerCardDisplayTemplateId || '') === String(templateId || '')) {
+        await tx.collection('players').doc(String(player._id)).update({data:{playerCardDisplayTemplateId:'',playerCardDisplayUpdatedAt:db.serverDate()}})
+      }
+    })
+    return {success:true}
+  }
+  return {list,resolve,render,save,select,remove}
 }
 module.exports = {createPlayerCardLibrary,libraryId,tierPermission,LIBRARY}

@@ -24,6 +24,7 @@ const RIGHTS = Object.freeze({
   squads: ['event.teams', 'event.matches'],
   standings: ['event.results'],
   schedule_info: ['event.matches'],
+  disciplinary_actions: ['event.matches', 'event.results'],
   team_tasks: ['event.registration', 'event.teams']
 })
 

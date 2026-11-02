@@ -1,0 +1,772 @@
+{
+  "entries": [
+    {
+      "code": "cn",
+      "zh": "中国",
+      "en": "China",
+      "aliases": [
+        "中国籍",
+        "中华人民共和国",
+        "CHN",
+        "CN",
+        "CHINA"
+      ]
+    },
+    {
+      "code": "hk",
+      "zh": "中国香港",
+      "en": "Hong Kong, China",
+      "aliases": [
+        "香港",
+        "HKG",
+        "HK"
+      ]
+    },
+    {
+      "code": "mo",
+      "zh": "中国澳门",
+      "en": "Macao, China",
+      "aliases": [
+        "澳门",
+        "MAC",
+        "MO"
+      ]
+    },
+    {
+      "code": "tw",
+      "zh": "中国台湾",
+      "en": "Chinese Taipei",
+      "aliases": [
+        "台湾",
+        "TPE",
+        "TW",
+        "TAIWAN"
+      ]
+    },
+    {
+      "code": "ir",
+      "zh": "伊朗",
+      "en": "Iran",
+      "aliases": [
+        "IRN",
+        "IR",
+        "IRAN"
+      ]
+    },
+    {
+      "code": "ma",
+      "zh": "摩洛哥",
+      "en": "Morocco",
+      "aliases": [
+        "MAR",
+        "MA",
+        "MOROCCO"
+      ]
+    },
+    {
+      "code": "jp",
+      "zh": "日本",
+      "en": "Japan",
+      "aliases": [
+        "JPN",
+        "JP",
+        "JAPAN"
+      ]
+    },
+    {
+      "code": "kr",
+      "zh": "韩国",
+      "en": "South Korea",
+      "aliases": [
+        "KOR",
+        "KR",
+        "KOREA",
+        "SOUTH KOREA"
+      ]
+    },
+    {
+      "code": "kp",
+      "zh": "朝鲜",
+      "en": "North Korea",
+      "aliases": [
+        "PRK",
+        "KP",
+        "DPRK"
+      ]
+    },
+    {
+      "code": "br",
+      "zh": "巴西",
+      "en": "Brazil",
+      "aliases": [
+        "BRA",
+        "BR",
+        "BRAZIL"
+      ]
+    },
+    {
+      "code": "al",
+      "zh": "阿尔巴尼亚",
+      "en": "Albania",
+      "aliases": [
+        "ALB",
+        "AL",
+        "ALBANIA"
+      ]
+    },
+    {
+      "code": "ar",
+      "zh": "阿根廷",
+      "en": "Argentina",
+      "aliases": [
+        "ARG",
+        "AR",
+        "ARGENTINA"
+      ]
+    },
+    {
+      "code": "uy",
+      "zh": "乌拉圭",
+      "en": "Uruguay",
+      "aliases": [
+        "URU",
+        "UY"
+      ]
+    },
+    {
+      "code": "cl",
+      "zh": "智利",
+      "en": "Chile",
+      "aliases": [
+        "CHI",
+        "CL"
+      ]
+    },
+    {
+      "code": "co",
+      "zh": "哥伦比亚",
+      "en": "Colombia",
+      "aliases": [
+        "COL",
+        "CO"
+      ]
+    },
+    {
+      "code": "pe",
+      "zh": "秘鲁",
+      "en": "Peru",
+      "aliases": [
+        "PER",
+        "PE"
+      ]
+    },
+    {
+      "code": "mx",
+      "zh": "墨西哥",
+      "en": "Mexico",
+      "aliases": [
+        "MEX",
+        "MX"
+      ]
+    },
+    {
+      "code": "us",
+      "zh": "美国",
+      "en": "United States",
+      "aliases": [
+        "USA",
+        "US",
+        "UNITED STATES"
+      ]
+    },
+    {
+      "code": "ca",
+      "zh": "加拿大",
+      "en": "Canada",
+      "aliases": [
+        "CAN",
+        "CA"
+      ]
+    },
+    {
+      "code": "gb-eng",
+      "zh": "英格兰",
+      "en": "England",
+      "aliases": [
+        "ENG",
+        "ENGLAND"
+      ]
+    },
+    {
+      "code": "gb-sct",
+      "zh": "苏格兰",
+      "en": "Scotland",
+      "aliases": [
+        "SCO",
+        "SCOTLAND"
+      ]
+    },
+    {
+      "code": "gb-wls",
+      "zh": "威尔士",
+      "en": "Wales",
+      "aliases": [
+        "WAL",
+        "WALES"
+      ]
+    },
+    {
+      "code": "ie",
+      "zh": "爱尔兰",
+      "en": "Ireland",
+      "aliases": [
+        "IRL",
+        "IE",
+        "IRELAND"
+      ]
+    },
+    {
+      "code": "fr",
+      "zh": "法国",
+      "en": "France",
+      "aliases": [
+        "FRA",
+        "FR",
+        "FRANCE"
+      ]
+    },
+    {
+      "code": "de",
+      "zh": "德国",
+      "en": "Germany",
+      "aliases": [
+        "GER",
+        "DE",
+        "GERMANY",
+        "DEU"
+      ]
+    },
+    {
+      "code": "it",
+      "zh": "意大利",
+      "en": "Italy",
+      "aliases": [
+        "ITA",
+        "IT",
+        "ITALY"
+      ]
+    },
+    {
+      "code": "es",
+      "zh": "西班牙",
+      "en": "Spain",
+      "aliases": [
+        "ESP",
+        "ES",
+        "SPAIN"
+      ]
+    },
+    {
+      "code": "pt",
+      "zh": "葡萄牙",
+      "en": "Portugal",
+      "aliases": [
+        "POR",
+        "PT",
+        "PORTUGAL"
+      ]
+    },
+    {
+      "code": "nl",
+      "zh": "荷兰",
+      "en": "Netherlands",
+      "aliases": [
+        "NED",
+        "NL",
+        "HOLLAND",
+        "NETHERLANDS"
+      ]
+    },
+    {
+      "code": "be",
+      "zh": "比利时",
+      "en": "Belgium",
+      "aliases": [
+        "BEL",
+        "BE"
+      ]
+    },
+    {
+      "code": "hr",
+      "zh": "克罗地亚",
+      "en": "Croatia",
+      "aliases": [
+        "CRO",
+        "HR"
+      ]
+    },
+    {
+      "code": "rs",
+      "zh": "塞尔维亚",
+      "en": "Serbia",
+      "aliases": [
+        "SRB",
+        "RS"
+      ]
+    },
+    {
+      "code": "ch",
+      "zh": "瑞士",
+      "en": "Switzerland",
+      "aliases": [
+        "SUI",
+        "CH",
+        "SWITZERLAND"
+      ]
+    },
+    {
+      "code": "at",
+      "zh": "奥地利",
+      "en": "Austria",
+      "aliases": [
+        "AUT",
+        "AT"
+      ]
+    },
+    {
+      "code": "pl",
+      "zh": "波兰",
+      "en": "Poland",
+      "aliases": [
+        "POL",
+        "PL"
+      ]
+    },
+    {
+      "code": "ua",
+      "zh": "乌克兰",
+      "en": "Ukraine",
+      "aliases": [
+        "UKR",
+        "UA"
+      ]
+    },
+    {
+      "code": "ru",
+      "zh": "俄罗斯",
+      "en": "Russia",
+      "aliases": [
+        "RUS",
+        "RU",
+        "RUSSIA"
+      ]
+    },
+    {
+      "code": "se",
+      "zh": "瑞典",
+      "en": "Sweden",
+      "aliases": [
+        "SWE",
+        "SE"
+      ]
+    },
+    {
+      "code": "no",
+      "zh": "挪威",
+      "en": "Norway",
+      "aliases": [
+        "NOR",
+        "NO"
+      ]
+    },
+    {
+      "code": "dk",
+      "zh": "丹麦",
+      "en": "Denmark",
+      "aliases": [
+        "DEN",
+        "DK"
+      ]
+    },
+    {
+      "code": "fi",
+      "zh": "芬兰",
+      "en": "Finland",
+      "aliases": [
+        "FIN",
+        "FI"
+      ]
+    },
+    {
+      "code": "gr",
+      "zh": "希腊",
+      "en": "Greece",
+      "aliases": [
+        "GRE",
+        "GR"
+      ]
+    },
+    {
+      "code": "tr",
+      "zh": "土耳其",
+      "en": "Turkey",
+      "aliases": [
+        "TUR",
+        "TR"
+      ]
+    },
+    {
+      "code": "au",
+      "zh": "澳大利亚",
+      "en": "Australia",
+      "aliases": [
+        "AUS",
+        "AU"
+      ]
+    },
+    {
+      "code": "nz",
+      "zh": "新西兰",
+      "en": "New Zealand",
+      "aliases": [
+        "NZL",
+        "NZ"
+      ]
+    },
+    {
+      "code": "sa",
+      "zh": "沙特阿拉伯",
+      "en": "Saudi Arabia",
+      "aliases": [
+        "KSA",
+        "SA",
+        "SAUDI"
+      ]
+    },
+    {
+      "code": "ae",
+      "zh": "阿联酋",
+      "en": "United Arab Emirates",
+      "aliases": [
+        "UAE",
+        "AE"
+      ]
+    },
+    {
+      "code": "qa",
+      "zh": "卡塔尔",
+      "en": "Qatar",
+      "aliases": [
+        "QAT",
+        "QA"
+      ]
+    },
+    {
+      "code": "kw",
+      "zh": "科威特",
+      "en": "Kuwait",
+      "aliases": [
+        "KUW",
+        "KW"
+      ]
+    },
+    {
+      "code": "bh",
+      "zh": "巴林",
+      "en": "Bahrain",
+      "aliases": [
+        "BHR",
+        "BH"
+      ]
+    },
+    {
+      "code": "om",
+      "zh": "阿曼",
+      "en": "Oman",
+      "aliases": [
+        "OMA",
+        "OM"
+      ]
+    },
+    {
+      "code": "iq",
+      "zh": "伊拉克",
+      "en": "Iraq",
+      "aliases": [
+        "IRQ",
+        "IQ"
+      ]
+    },
+    {
+      "code": "sy",
+      "zh": "叙利亚",
+      "en": "Syria",
+      "aliases": [
+        "SYR",
+        "SY"
+      ]
+    },
+    {
+      "code": "lb",
+      "zh": "黎巴嫩",
+      "en": "Lebanon",
+      "aliases": [
+        "LBN",
+        "LB"
+      ]
+    },
+    {
+      "code": "jo",
+      "zh": "约旦",
+      "en": "Jordan",
+      "aliases": [
+        "JOR",
+        "JO"
+      ]
+    },
+    {
+      "code": "ps",
+      "zh": "巴勒斯坦",
+      "en": "Palestine",
+      "aliases": [
+        "PLE",
+        "PS"
+      ]
+    },
+    {
+      "code": "ye",
+      "zh": "也门",
+      "en": "Yemen",
+      "aliases": [
+        "YEM",
+        "YE"
+      ]
+    },
+    {
+      "code": "eg",
+      "zh": "埃及",
+      "en": "Egypt",
+      "aliases": [
+        "EGY",
+        "EG"
+      ]
+    },
+    {
+      "code": "tn",
+      "zh": "突尼斯",
+      "en": "Tunisia",
+      "aliases": [
+        "TUN",
+        "TN"
+      ]
+    },
+    {
+      "code": "dz",
+      "zh": "阿尔及利亚",
+      "en": "Algeria",
+      "aliases": [
+        "ALG",
+        "DZ"
+      ]
+    },
+    {
+      "code": "ng",
+      "zh": "尼日利亚",
+      "en": "Nigeria",
+      "aliases": [
+        "NGA",
+        "NG"
+      ]
+    },
+    {
+      "code": "gh",
+      "zh": "加纳",
+      "en": "Ghana",
+      "aliases": [
+        "GHA",
+        "GH"
+      ]
+    },
+    {
+      "code": "sn",
+      "zh": "塞内加尔",
+      "en": "Senegal",
+      "aliases": [
+        "SEN",
+        "SN"
+      ]
+    },
+    {
+      "code": "ci",
+      "zh": "科特迪瓦",
+      "en": "Côte d’Ivoire",
+      "aliases": [
+        "CIV",
+        "CI",
+        "IVORY COAST"
+      ]
+    },
+    {
+      "code": "cm",
+      "zh": "喀麦隆",
+      "en": "Cameroon",
+      "aliases": [
+        "CMR",
+        "CM"
+      ]
+    },
+    {
+      "code": "za",
+      "zh": "南非",
+      "en": "South Africa",
+      "aliases": [
+        "RSA",
+        "ZA"
+      ]
+    },
+    {
+      "code": "th",
+      "zh": "泰国",
+      "en": "Thailand",
+      "aliases": [
+        "THA",
+        "TH"
+      ]
+    },
+    {
+      "code": "vn",
+      "zh": "越南",
+      "en": "Vietnam",
+      "aliases": [
+        "VIE",
+        "VN"
+      ]
+    },
+    {
+      "code": "my",
+      "zh": "马来西亚",
+      "en": "Malaysia",
+      "aliases": [
+        "MAS",
+        "MY"
+      ]
+    },
+    {
+      "code": "sg",
+      "zh": "新加坡",
+      "en": "Singapore",
+      "aliases": [
+        "SGP",
+        "SG"
+      ]
+    },
+    {
+      "code": "id",
+      "zh": "印度尼西亚",
+      "en": "Indonesia",
+      "aliases": [
+        "IDN",
+        "ID"
+      ]
+    },
+    {
+      "code": "ph",
+      "zh": "菲律宾",
+      "en": "Philippines",
+      "aliases": [
+        "PHI",
+        "PH"
+      ]
+    },
+    {
+      "code": "mm",
+      "zh": "缅甸",
+      "en": "Myanmar",
+      "aliases": [
+        "MYA",
+        "MM"
+      ]
+    },
+    {
+      "code": "kh",
+      "zh": "柬埔寨",
+      "en": "Cambodia",
+      "aliases": [
+        "CAM",
+        "KH"
+      ]
+    },
+    {
+      "code": "la",
+      "zh": "老挝",
+      "en": "Laos",
+      "aliases": [
+        "LAO",
+        "LA"
+      ]
+    },
+    {
+      "code": "mn",
+      "zh": "蒙古",
+      "en": "Mongolia",
+      "aliases": [
+        "MGL",
+        "MN"
+      ]
+    },
+    {
+      "code": "in",
+      "zh": "印度",
+      "en": "India",
+      "aliases": [
+        "IND",
+        "IN"
+      ]
+    },
+    {
+      "code": "pk",
+      "zh": "巴基斯坦",
+      "en": "Pakistan",
+      "aliases": [
+        "PAK",
+        "PK"
+      ]
+    },
+    {
+      "code": "uz",
+      "zh": "乌兹别克斯坦",
+      "en": "Uzbekistan",
+      "aliases": [
+        "UZB",
+        "UZ"
+      ]
+    },
+    {
+      "code": "kg",
+      "zh": "吉尔吉斯斯坦",
+      "en": "Kyrgyzstan",
+      "aliases": [
+        "KGZ",
+        "KG"
+      ]
+    },
+    {
+      "code": "tj",
+      "zh": "塔吉克斯坦",
+      "en": "Tajikistan",
+      "aliases": [
+        "TJK",
+        "TJ"
+      ]
+    },
+    {
+      "code": "kz",
+      "zh": "哈萨克斯坦",
+      "en": "Kazakhstan",
+      "aliases": [
+        "KAZ",
+        "KZ"
+      ]
+    }
+  ]
+}

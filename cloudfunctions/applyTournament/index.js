@@ -231,6 +231,25 @@ exports.main = async (event, context) => {
       return { success: false, message: '该赛事已停止报名' }
     }
 
+    // 自主报名由领队在报名页填写负责人与联系电话，写入本次参赛关系；
+    // 历史报名没有这两项时保持为空，由主办方在 PC 端补录，不用账号信息猜测填充。
+    const contactName = String(event.contactName || '').trim().slice(0, 40)
+    const contactPhone = String(event.contactPhone || '').replace(/\D/g, '').slice(0, 20)
+    if (contactPhone && !/^1[3-9]\d{9}$/.test(contactPhone)) {
+      return { success: false, code: 'CONTACT_PHONE_INVALID', message: '请填写有效的领队联系电话' }
+    }
+
+    // 主、备用比赛服颜色由报名页采集；只接受色板内的十六进制值，非法值不写库。
+    const readKitColor = (input) => {
+      const jersey = String(input && input.jersey || '').trim().toUpperCase()
+      return /^#([0-9A-F]{6})$/.test(jersey) ? jersey : ''
+    }
+    const readKitLabel = (input) => String(input && input.jersey || '').trim().slice(0, 20)
+    const kitPrimaryColor = readKitColor(event.kitColors && event.kitColors.primary)
+    const kitSecondaryColor = readKitColor(event.kitColors && event.kitColors.secondary)
+    const kitPrimaryLabel = readKitLabel(event.kitColorLabels && event.kitColorLabels.primary)
+    const kitSecondaryLabel = readKitLabel(event.kitColorLabels && event.kitColorLabels.secondary)
+
     // 3. 检查球队是否已报名
     if (actorResult.actor.channel === 'mini' && event.disclaimerAgreed !== true) {
       return { success: false, code: 'DISCLAIMER_REQUIRED', message: '请先阅读并同意参赛免责声明' }
@@ -305,7 +324,19 @@ exports.main = async (event, context) => {
       teamName: team.name,
       teamLogo: team.logoUrl || team.logo || '',
       coachId: team.coachId || '',
-      coachName: team.coachName || team.contactName || '',
+      coachName: team.coachName || team.contactName || contactName || '',
+      ...(contactName ? { contactName: contactName, managerName: contactName } : {}),
+      ...(contactPhone ? { contactPhone: contactPhone, managerPhone: contactPhone } : {}),
+      ...(kitPrimaryColor || kitSecondaryColor ? {
+        kitColors: {
+          ...(kitPrimaryColor ? { primary: { jersey: kitPrimaryColor } } : {}),
+          ...(kitSecondaryColor ? { secondary: { jersey: kitSecondaryColor } } : {})
+        },
+        kitColorLabels: {
+          ...(kitPrimaryColor ? { primary: { jersey: kitPrimaryLabel } } : {}),
+          ...(kitSecondaryColor ? { secondary: { jersey: kitSecondaryLabel } } : {})
+        }
+      } : {}),
       playerCount: 0,
       status: 'pending',
       type: 'signup',  // signup = 外部报名, invite = 内部邀请

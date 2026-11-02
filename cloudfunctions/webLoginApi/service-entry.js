@@ -155,6 +155,18 @@ async function verifySms(event) {
   await sessions.doc(session._id).update({ data:{ phoneVerified:true, phone, userId:text(user._id), phoneVerifiedAt:db.serverDate(), updateTime:db.serverDate() } })
   return { success:true, phoneMasked:phone.slice(0,3)+'****'+phone.slice(7) }
 }
+// 驳回后重开登记链接：驳回流程已清空回执，页面回到空白登记页；这里把驳回理由回显出来，
+// 让球员知道该改什么，而不是以为又要再提交一次。
+function registrationRejectNotice(session) {
+  const at = time(session && session.lastRegistrationRejectAt)
+  if (!at) return null
+  return {
+    at,
+    atText: new Date(at + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' '),
+    reason: text(session.lastRegistrationRejectReason),
+    playerName: text(session.lastRegistrationRejectPlayerName)
+  }
+}
 async function context(event) {
   const loaded = await sessionFor(event), gate = loaded.gate, session = loaded.session
   if (gate.purpose === 'team_claim_entry') {
@@ -209,7 +221,7 @@ async function context(event) {
   // AI 抱膀定妆照：价格与蜂蜜余额都由服务端给出（前端只展示），
   // 钱包读取失败不阻断登记页，如实回 reason 让页面说明原因。
   const aiPortrait=await require('./serviceAiPortrait.cjs').info(db,loaded)
-  return { success:true, purpose:gate.purpose, teamName:text(team.name||team.teamName), participantMode:text(invite.participantMode), targetedPlayer:Boolean(invite.playerId), registeredPlayerId:text(session.registeredPlayerId), cardContexts, registrationResume, registrationVersion:'player-registration/3', aiPortrait, phoneVerified:session.phoneVerified===true, phoneMasked:session.phoneVerified ? text(session.phone).slice(0,3)+'****'+text(session.phone).slice(7) : '' }
+  return { success:true, purpose:gate.purpose, teamName:text(team.name||team.teamName), participantMode:text(invite.participantMode), targetedPlayer:Boolean(invite.playerId), registeredPlayerId:text(session.registeredPlayerId), registrationResume, registrationReject:registrationRejectNotice(session), cardContexts, registrationVersion:'player-registration/3', aiPortrait, phoneVerified:session.phoneVerified===true, phoneMasked:session.phoneVerified ? text(session.phone).slice(0,3)+'****'+text(session.phone).slice(7) : '' }
 }
 async function claimTeam(event) {
   const current=await context(event)
@@ -233,6 +245,13 @@ async function playerRegistration(event,operation) {
   return result.success?result:fail(result.code||'PLAYER_REGISTRATION_FAILED',result.message||'球员资料处理失败，请重试')
 }
 async function joinPlayer(event) { return playerRegistration(event,'submit') }
+// 身份证前置核验：只读本队档案查重，不建 choice、不读赛事卡模板/草稿/钱包，
+// 因此不必走 context() 的重链；会话鉴权由 getMiniWorkspace 的 loadServiceEntryRegistration 完成。
+async function checkPlayerId(event) {
+  const invoked=await cloud.callFunction({name:'getMiniWorkspace',data:{...event,action:'servicePlayerRegistration',operation:'check_id'}})
+  const result=invoked&&invoked.result||{}
+  return result.success?result:fail(text(result.code)||'PLAYER_REGISTRATION_FAILED',text(result.message)||'身份证核验失败，请重试')
+}
 async function uploadPhoto(event) { const auth=await playerRegistration(event,'authorize_media'); if(!auth.success)return auth; return require('./serviceRegistrationMedia.cjs').upload(cloud,db,await sessionFor(event),event) }
 // AI 抱膀定妆照入库：确认成片后按同一 requestId 入库（先扣费模式下此处只去重，不再扣第二次）
 async function uploadAiPortrait(event) { const auth=await playerRegistration(event,'authorize_media'); if(!auth.success)return auth; return require('./serviceAiPortrait.cjs').apply(cloud,db,await sessionFor(event),event) }
@@ -271,6 +290,7 @@ module.exports = async function handleServiceEntry(action,event) {
     if (action==='serviceEntrySearchPlayers') return await withBusyRetry(action, e => playerRegistration(e,'search'), event)
     if (action==='serviceEntrySelectPlayer') return await withBusyRetry(action, e => playerRegistration(e,'select'), event)
     if (action==='serviceEntryCheckPlayerNumber') return await withBusyRetry(action, e => playerRegistration(e,'check_number'), event)
+    if (action==='serviceEntryCheckPlayerId') return await withBusyRetry(action, checkPlayerId, event)
     if (action==='serviceEntryConfirmRestore') return await withBusyRetry(action, e => playerRegistration(e,'confirm_restore'), event)
     if (action==='serviceEntrySavePlayerDraft') return await withBusyRetry(action, async e => require('./serviceRegistrationResume.cjs').save(db, await sessionFor(e), e), event)
     return fail('ENTRY_ACTION_INVALID','不支持的登记操作')

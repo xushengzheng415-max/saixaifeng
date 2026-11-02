@@ -10,7 +10,7 @@ const CONFIG = {
   appId: process.env.SERVICE_ACCOUNT_APP_ID || '',
   appSecret: process.env.SERVICE_ACCOUNT_APP_SECRET || '',
   templateId: process.env.SERVICE_ACCOUNT_REFEREE_TEMPLATE_ID || '',
-  replyTemplateId: process.env.SERVICE_FEEDBACK_REPLY_TEMPLATE_ID || 's8sdkaPN76LcAoNy2lwK6NV125-Eog7RQPiZt3ymAPc',
+  replyTemplateId: process.env.SERVICE_FEEDBACK_REPLY_TEMPLATE_ID || 's8sdkaPN76LcAoNy2lwK6NV125-Eog7RQPlZt3ymAPc',
   h5Url: process.env.SERVICE_ACCOUNT_H5_URL || 'https://www.sxffootball.cn/service-account-h5/',
   tournamentKey: process.env.SERVICE_TEMPLATE_TOURNAMENT_KEY || 'thing1',
   matchKey: process.env.SERVICE_TEMPLATE_MATCH_KEY || 'thing2',
@@ -233,15 +233,17 @@ exports.main = async event => {
     const openId = String(event.openId || '').trim()
     const reply = String(event.reply || '').trim()
     const type = String(event.type || 'other')
-    const typeLabels = { data_error: '数据问题', binding: '绑定问题', feature: '功能建议', other: '其他' }
+    // 意见类型枚举仅保留审核通过的三个值；「其他」类反馈省略该字段，避免枚举不匹配导致 47003 发送失败
+    const typeLabels = { data_error: '数据问题', binding: '绑定问题', feature: '功能建议' }
     if (!openId || !reply) return { success: false, error: '缺少 openId 或回复内容' }
     if (!CONFIG.replyTemplateId) return { success: false, error: '反馈回复模板未配置（SERVICE_FEEDBACK_REPLY_TEMPLATE_ID）' }
     const data = {}
-    data[CONFIG.replyTypeKey] = { value: typeLabels[type] || '其他' }
+    const typeValue = typeLabels[type] || ''
+    if (typeValue) data[CONFIG.replyTypeKey] = { value: typeValue }
     data[CONFIG.replyStatusKey] = { value: String(CONFIG.replyStatusValue || '已处理') }
     data[CONFIG.replyDeptKey] = { value: String(CONFIG.replyDeptValue || '') }
     data[CONFIG.replyPhoneKey] = { value: String(CONFIG.replyPhoneValue || '') }
-    const message = { touser: openId, template_id: CONFIG.replyTemplateId, data, url: 'https://www.sxffootball.cn/service-account-h5/me.html' }
+    const message = { touser: openId, template_id: CONFIG.replyTemplateId, data, url: 'https://www.sxffootball.cn/service-account-h5/me.html#myFeedback' }
     let result
     try {
       if (CONFIG.bridgeUrl && CONFIG.bridgeSecret) result = await bridgePost('template/send', { message })

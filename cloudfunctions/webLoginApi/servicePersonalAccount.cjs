@@ -28,7 +28,7 @@ module.exports=async function personalAccount({db,user,session}){
   // 标签必须覆盖服务端实际写入的 reason：注册奖励、签到、连续签到、应援扣滴、充值、平台加滴、AI 定妆照与退回。
   // 历史枚举（fan-check-in / fan-support / support-player / support-team）保留兼容旧流水；未登记的原因仍退回通用文案，
   // 不把内部原因码或运营备注直接展示给用户。
-  const reason={ 'fan-registration-bonus':'注册奖励', 'fan-daily-check-in':'签到奖励', 'fan-seven-day-check-in':'连续签到奖励', 'fan-ranking-support':'应援扣滴', 'honey-topup':'蜂蜜充值', 'honey-topup-refund':'充值退款冲销', 'honey-manual-grant':'平台加滴', 'ai-portrait-generation':'AI 定妆照', 'ai-portrait-failed':'定妆照失败退回', 'fan-check-in':'签到奖励', 'fan-check-in-streak':'连续签到奖励', 'fan-support':'应援扣滴', 'support-player':'应援球员', 'support-team':'应援球队' }
+  const reason={ 'fan-registration-bonus':'注册奖励', 'player-profile-complete-bonus':'补全资料奖励', 'fan-daily-check-in':'签到奖励', 'fan-seven-day-check-in':'连续签到奖励', 'fan-ranking-support':'应援扣滴', 'honey-topup':'蜂蜜充值', 'honey-topup-refund':'充值退款冲销', 'honey-manual-grant':'平台加滴', 'ai-portrait-generation':'AI 定妆照', 'ai-portrait-failed':'定妆照失败退回', 'player-card-photo-replace':'球员卡换照片', 'player-card-photo-replace-refund':'换照片失败退回', 'membership-grant':'会员赠滴', 'fan-check-in':'签到奖励', 'fan-check-in-streak':'连续签到奖励', 'fan-support':'应援扣滴', 'support-player':'应援球员', 'support-team':'应援球队' }
   const labelOf=row=>{const base=reason[text(row.reason)];if(!base)return row.delta>=0?'蜂蜜收入':'蜂蜜支出';if(text(row.reason)==='fan-ranking-support'){const target=text(row.targetType);return target==='team'?'应援球队':target==='player'?'应援球员':base}return base}
   await honeyRecharge.ensureSecrets(db)
   const recharge=rechargeState()
@@ -38,6 +38,10 @@ module.exports=async function personalAccount({db,user,session}){
   const rows=await read('messages',{userId:uid},{title:true,subject:true,subtitle:true,content:true,summary:true,createTime:true,createdAt:true,status:true})
   return{status:'ready',entries:rows.filter(row=>!['deleted','revoked'].includes(text(row.status))).map(row=>({id:row._id,title:text(row.title||row.subject)||'消息通知',content:text(row.subtitle||row.content||row.summary),time:time(row.createdAt||row.createTime)})).sort((a,b)=>b.time-a.time||b.id.localeCompare(a.id))}
  }catch(error){return{status:'unavailable',entries:[]}}}
- const [honey,notices]=await Promise.all([wallet(),messages()])
- return{success:true,data:{wallet:honey,messages:notices}}
+ // 会员卡摘要：档位、到期、首月资格统一由 membership.cjs 判定，页面不自行推断；
+ // 读取失败只降级会员卡展示，不影响蜂蜜余额与消息。
+ async function membershipCard(){try{return await require('./membership.cjs').homeCard(db,openId,uid)}
+ catch(error){return{status:'unavailable',subscription:null,isFirstMonthAvailable:true,purchaseEnabled:false,reason:'MEMBERSHIP_UNAVAILABLE',plans:[],lowestFirstPriceCents:0,lowestRenewPriceCents:0,balance:null}}}
+ const [honey,notices,membership]=await Promise.all([wallet(),messages(),membershipCard()])
+ return{success:true,data:{wallet:honey,messages:notices,membership}}
 }

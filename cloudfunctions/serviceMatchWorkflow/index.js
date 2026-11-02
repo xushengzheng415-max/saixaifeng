@@ -1852,10 +1852,13 @@ async function startRefereeMatch(openId, matchId) {
   if (!preMatchStateView(context.match).completed) return fail('请先完成赛前报到、到场和检查确认', 'PRE_MATCH_INCOMPLETE')
   if (!context.match.lineupsLocked) return fail('请先完成双方阵容与身份核验', 'LINEUP_NOT_VERIFIED')
 
-  const { freezePreMatchDuration } = await import('./data-center/playing-time.mjs')
+  const { freezePreMatchDuration, resolveMatchDurationEvidence } = await import('./data-center/playing-time.mjs')
   const division = context.match.divisionId && context.match.divisionId !== 'default' ? await getDoc('divisions',context.match.divisionId) : null
   const tournament = context.match.tournamentId ? await getDoc('tournaments',context.match.tournamentId) : null
   const durationRulesSnapshot = freezePreMatchDuration(context.match,division || {},tournament || {})
+  // 开赛即冻结时长依据；无法核验时长就不允许开赛，避免整条生涯数据后续被判「待评估」。
+  const durationEvidence = resolveMatchDurationEvidence({ ...context.match, durationRulesSnapshot: context.match.durationRulesSnapshot || durationRulesSnapshot })
+  if (durationEvidence.status !== 'ready') return fail('本场比赛时长依据未确认，请先锁定赛事规程或核实比赛时长后再开始', 'MATCH_DURATION_EVIDENCE_MISSING')
 
   const updateData = {
       status: 'ongoing',

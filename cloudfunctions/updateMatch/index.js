@@ -329,13 +329,56 @@ async function ensureNoRefereeScheduleConflicts(matchId, match, refereeCrew) {
   throw new Error(`${Array.from(names).join('、')}在${matchDate} ${matchTime}已有执法场次，请调整后再指派`)
 }
 
+let penaltyCollectionReady = false
+
+async function ensurePenaltyCollection() {
+  if (penaltyCollectionReady) return
+  try {
+    await db.createCollection('tournament_penalties')
+  } catch (error) {
+    const message = String(error && (error.message || error.errMsg) || '').toLowerCase()
+    if (!message.includes('exist') && !message.includes('duplicate') && !message.includes('已存在')) throw error
+  }
+  penaltyCollectionReady = true
+}
+
+// 弃赛判负比分与扣分只读取赛事/组别规程，不在代码里写死处罚力度。
+function forfeitRulesOf(tournament, divisionId) {
+  const divisions = Array.isArray(tournament && tournament.divisions) ? tournament.divisions : []
+  const matchDivision = String(divisionId || 'default')
+  const division = divisions.find(item => String(item && (item.divisionId || item.division || item.divisionKey) || 'default') === matchDivision) || {}
+  const sources = [division, division.rules, division.forfeitRules, tournament, tournament && tournament.rules, tournament && tournament.forfeitRules]
+  let score = { winner: 3, loser: 0 }
+  let pointsDeduction = 0
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue
+    if (score.winner === 3 && score.loser === 0) {
+      const configured = source.forfeitScore || source.forfeitResult || source.walkoverScore
+      const winner = Number(configured && (configured.winner ?? configured.win ?? configured.winGoals))
+      const loser = Number(configured && (configured.loser ?? configured.loss ?? configured.loseGoals))
+      if (Number.isInteger(winner) && Number.isInteger(loser) && winner > loser && loser >= 0) score = { winner, loser }
+      else {
+        const single = Number(source.forfeitWinScore)
+        if (Number.isInteger(single) && single > 0) score = { winner: single, loser: 0 }
+      }
+    }
+    const deduction = Number(source.forfeitPointsDeduction ?? source.penaltyPointsDeduction)
+    if (Number.isInteger(deduction) && deduction >= 0 && deduction <= 15) pointsDeduction = deduction
+  }
+  return { score, pointsDeduction, configured: score.winner !== 3 || score.loser !== 0, deductionConfigured: pointsDeduction > 0 }
+}
+
 async function forfeitMatch(event) {
   const matchId = String(event.matchId || '').trim()
   const data = event.data && typeof event.data === 'object' && !Array.isArray(event.data) ? event.data : {}
+  const allowedKeys = new Set(['forfeitTeamId', 'reason', 'evidenceFileIds', 'confirmOverwrite'])
   const forfeitingTeamId = String(data.forfeitTeamId || '').trim()
-  if (!matchId || !forfeitingTeamId || Object.keys(data).some(key => key !== 'forfeitTeamId')) {
+  if (!matchId || !forfeitingTeamId || Object.keys(data).some(key => !allowedKeys.has(key))) {
     return { success:false, code:'FORFEIT_DATA_INVALID', message:'请选择本场弃赛球队' }
   }
+  const reason = String(data.reason || '').trim().slice(0, 300)
+  const evidenceFileIds = (Array.isArray(data.evidenceFileIds) ? data.evidenceFileIds : []).map(id => String(id || '').trim()).filter(Boolean)
+  if (evidenceFileIds.length > 2) return { success:false, code:'FORFEIT_DATA_INVALID', message:'弃赛证据最多上传 2 份' }
 
   const actor = await authenticateActor(event)
   const matchResult = await db.collection('matches').doc(matchId).get()
@@ -354,8 +397,19 @@ async function forfeitMatch(event) {
     return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', message:'当前赛事没有比赛管理权限' }
   }
 
-  const canForfeitStatus = status => ['scheduled','ongoing','live','in_progress','playing'].includes(String(status || '').toLowerCase())
-  if (!canForfeitStatus(match.status)) return { success:false, code:'MATCH_FORFEIT_STATUS_INVALID', message:'只有未开始或进行中的比赛可以登记弃赛' }
+  const status = String(match.status || '').toLowerCase()
+  const canForfeitStatus = ['scheduled','ongoing','live','in_progress','playing'].includes(status)
+  // 已完赛但没有任何赛果/裁判记录的场次允许赛后补登弃赛，必须填写原因并二次确认。
+  const postMatch = ['finished','ended','completed'].includes(status)
+  if (!canForfeitStatus && !postMatch) return { success:false, code:'MATCH_FORFEIT_STATUS_INVALID', message:'当前比赛状态不能登记弃赛' }
+  if (postMatch) {
+    if (match.resultType === 'forfeit') return { success:false, code:'MATCH_FORFEIT_EXISTS', message:'本场已登记弃赛' }
+    if (data.confirmOverwrite !== true) return { success:false, code:'MATCH_FORFEIT_CONFIRM_REQUIRED', message:'赛后补登弃赛会覆盖本场原有赛果，请确认后再提交' }
+    if (reason.length < 4) return { success:false, code:'MATCH_FORFEIT_REASON_REQUIRED', message:'赛后补登弃赛须填写不少于 4 个字的原因' }
+    if (match.resultVersionId || match.resultSubmittedAt || ['approved','official','archived'].includes(String(match.resultReviewStatus || '').toLowerCase())) {
+      return { success:false, code:'MATCH_RESULT_ARCHIVED', message:'本场赛果已归档，请通过赛果异常纠错处理' }
+    }
+  }
   if (refereeHasTakenOverOrLocked(match)) return { success:false, code:'MATCH_RECORD_LOCKED', message:'裁判已接管或记录已锁定，请通过裁判记录流程处理' }
   if (Array.isArray(match.events) && match.events.length) return { success:false, code:'MATCH_HAS_EVENTS', message:'本场已有比赛事件，不能直接登记弃赛' }
   try {
@@ -374,23 +428,38 @@ async function forfeitMatch(event) {
     return { success:false, code:'FORFEIT_TEAM_INVALID', message:'弃赛方必须是本场参赛球队' }
   }
 
+  const rules = forfeitRulesOf(tournament, match.divisionId || match.division)
   const homeForfeited = forfeitingTeamId === homeTeamId
+  const forfeitingScore = rules.score.loser
+  const opposingScore = rules.score.winner
   const resultData = {
-    homeScore:homeForfeited ? 0 : 3,
-    awayScore:homeForfeited ? 3 : 0,
-    scoreHome:homeForfeited ? 0 : 3,
-    scoreAway:homeForfeited ? 3 : 0,
+    homeScore:homeForfeited ? forfeitingScore : opposingScore,
+    awayScore:homeForfeited ? opposingScore : forfeitingScore,
+    scoreHome:homeForfeited ? forfeitingScore : opposingScore,
+    scoreAway:homeForfeited ? opposingScore : forfeitingScore,
     status:'finished',
     resultType:'forfeit',
     resolution:'forfeit',
     forfeitingTeamId,
+    forfeitReason:reason,
+    forfeitEvidenceFileIds:evidenceFileIds,
+    forfeitScoreRule:rules.configured ? 'competition_rules' : 'default_0_3',
     winnerTeamId:homeForfeited ? awayTeamId : homeTeamId
   }
+  const divisionId = String(match.divisionId || match.division || 'default')
+  const teamName = homeForfeited
+    ? String(match.homeTeamName || match.homeTeam && match.homeTeam.name || '')
+    : String(match.awayTeamName || match.awayTeam && match.awayTeam.name || '')
+  await ensurePenaltyCollection()
+  let penaltyId = ''
   await db.runTransaction(async transaction => {
     const freshResult = await transaction.collection('matches').doc(matchId).get()
     const fresh = Array.isArray(freshResult.data) ? freshResult.data[0] : freshResult.data
+    const freshStatus = String(fresh && fresh.status || '').toLowerCase()
+    const freshForfeitable = ['scheduled','ongoing','live','in_progress','playing'].includes(freshStatus)
+    const freshPostMatch = ['finished','ended','completed'].includes(freshStatus)
     if (!fresh || String(fresh.homeTeamId || '') !== homeTeamId || String(fresh.awayTeamId || '') !== awayTeamId ||
-        !canForfeitStatus(fresh.status) || Number(fresh.matchEventRevision || 0) !== Number(event.expectedEventRevision) ||
+        (!freshForfeitable && !freshPostMatch) || Number(fresh.matchEventRevision || 0) !== Number(event.expectedEventRevision) ||
         JSON.stringify(fresh.events || []) !== JSON.stringify(match.events || [])) {
       throw Object.assign(new Error('比赛状态已变化，请刷新后重试'), { code:'MATCH_FORFEIT_CONFLICT' })
     }
@@ -401,9 +470,40 @@ async function forfeitMatch(event) {
       throw Object.assign(new Error('本场已有比赛事件，不能直接登记弃赛'), { code:'MATCH_HAS_EVENTS' })
     }
     await transaction.collection('matches').doc(matchId).update({ data:{ ...resultData, orgId:actor.orgId, updateTime:db.serverDate() } })
+    const created = await transaction.collection('tournament_penalties').add({ data:{
+      orgId:actor.orgId,
+      tournamentId:String(match.tournamentId || ''),
+      tournamentName:String(tournament && tournament.name || ''),
+      divisionId,
+      matchId,
+      matchNo:String(match.matchNo || match.matchSequence || match.sequence || ''),
+      kind:'forfeit',
+      subjectType:'team',
+      teamId:forfeitingTeamId,
+      teamName,
+      types:['forfeit'],
+      severity:'normal',
+      scope:'tournament',
+      status:'effective',
+      platformReview:'not_required',
+      pointsDeduction:rules.pointsDeduction,
+      pointsDeductionSource:rules.deductionConfigured ? 'competition_rules' : 'not_configured',
+      suspensionMatches:0,
+      banDuration:'',
+      permanent:false,
+      forfeitScores:{ winner:opposingScore, loser:forfeitingScore },
+      reason,
+      evidenceFileIds,
+      source:'organizer',
+      createdBy:String(actor.user._id || ''),
+      createdByName:String(actor.user.name || actor.user.realName || ''),
+      createdAt:db.serverDate(),
+      updateTime:db.serverDate()
+    } })
+    penaltyId = String(created._id || '')
     await transaction.collection('registration_audit_logs').add({ data:{
       sport:'football',
-      action:'match_forfeit_recorded',
+      action: postMatch ? 'match_forfeit_supplemented' : 'match_forfeit_recorded',
       tournamentId:String(match.tournamentId || ''),
       matchId,
       actorUserId:String(actor.user._id || ''),
@@ -412,6 +512,10 @@ async function forfeitMatch(event) {
       detail:{
         forfeitingTeamId,
         winnerTeamId:resultData.winnerTeamId,
+        penaltyId,
+        pointsDeduction:rules.pointsDeduction,
+        reason,
+        evidenceCount:evidenceFileIds.length,
         before:{ status:String(fresh.status || ''), homeScore:fresh.homeScore ?? null, awayScore:fresh.awayScore ?? null },
         after:{ status:resultData.status, homeScore:resultData.homeScore, awayScore:resultData.awayScore, resultType:resultData.resultType }
       },
@@ -420,7 +524,10 @@ async function forfeitMatch(event) {
   })
   try { await updateStandings(matchId, resultData, actor.orgId) }
   catch (error) { console.warn('弃赛赛果已保存，旧版积分缓存同步失败:', error.message || error) }
-  return { success:true, message:'弃赛结果已保存', data:resultData }
+  const deductionNote = rules.deductionConfigured
+    ? `并按规程扣联赛积分 ${rules.pointsDeduction} 分`
+    : '；规程未配置弃赛扣分，本次未扣积分'
+  return { success:true, message:`弃赛结果已保存${deductionNote}`, data:resultData, penalty: { id:penaltyId, pointsDeduction:rules.pointsDeduction, pointsDeductionSource: rules.deductionConfigured ? 'competition_rules' : 'not_configured' } }
 }
 
 exports.main = async (event, context) => {
@@ -597,14 +704,39 @@ exports.main = async (event, context) => {
       return { success: false, message: '裁判报告已提交，比赛记录已锁定' }
     }
 
-    if (!match.durationRulesSnapshot && ['ongoing','live'].includes(String(safeData.status || ''))) {
+    // 正式赛事开赛前置校验：双方首发名单必须已设置，且本场时长依据可核验。
+    // 缺任一项都会让出场分钟无法折算，进而整条生涯数据被判「待评估」，因此统一在服务端拦截。
+    const startedStatuses = ['ongoing','live','in_progress','playing']
+    const startingNow = startedStatuses.includes(String(safeData.status || '').toLowerCase()) && !startedStatuses.includes(currentStatus)
+    if (startingNow && match.tournamentId) {
       let division = null
       if (match.divisionId && match.divisionId !== 'default') {
         const record = await db.collection('divisions').doc(String(match.divisionId)).get()
         division = Array.isArray(record.data) ? record.data[0] : record.data
       }
-      const { freezePreMatchDuration } = await import('./data-center/playing-time.mjs')
-      const snapshot = freezePreMatchDuration(match,division || {},tournament || {})
+      division = division || (tournament?.divisions || []).find(row => String(row._id || row.id || '') === String(match.divisionId || '')) || {}
+      const formatText = String(match.matchFormat || division.matchFormat || division.playersPerSide || division.playerCount || tournament?.matchFormat || '')
+      const playersOnField = Number((formatText.match(/\d+/) || [])[0])
+      if (!Number.isInteger(playersOnField) || playersOnField < 3 || playersOnField > 11) {
+        return { success:false, code:'MATCH_PLAYERS_ON_FIELD_UNKNOWN', message:'比赛人数未确认，请先在 PC 核对组别规则后再开始比赛' }
+      }
+      const lineupIds = side => {
+        const source = match[side + 'Lineup'] || match.lineups?.[side]
+        const starters = Array.isArray(source) ? source : (source?.starters || source?.players || [])
+        return starters.map(row => String(typeof row === 'string' ? row : row?.playerId || row?._id || row?.id || '')).filter(Boolean)
+      }
+      for (const side of ['home','away']) {
+        const ids = lineupIds(side)
+        if (ids.length !== playersOnField || new Set(ids).size !== playersOnField) {
+          return { success:false, code:'MATCH_LINEUP_INCOMPLETE', message:`${side === 'home' ? '主队' : '客队'}首发名单未设置或不是 ${playersOnField} 人，不能开始比赛` }
+        }
+      }
+      const { freezePreMatchDuration, resolveMatchDurationEvidence } = await import('./data-center/playing-time.mjs')
+      const snapshot = match.durationRulesSnapshot ? null : freezePreMatchDuration(match, division, tournament || {})
+      const durationEvidence = resolveMatchDurationEvidence({ ...match, durationRulesSnapshot: match.durationRulesSnapshot || snapshot })
+      if (durationEvidence.status !== 'ready') {
+        return { success:false, code:'MATCH_DURATION_EVIDENCE_MISSING', message:'本场比赛时长依据未确认，请先在 PC 锁定赛事规程或核实时长后再开始比赛' }
+      }
       if (snapshot) safeData.durationRulesSnapshot = snapshot
     }
 

@@ -8,7 +8,7 @@ const EVENT_COLLECTIONS = new Set([
   'divisions', 'tournament_teams', 'tournament_groups', 'tournament_bracket',
   'tournament_league_tables', 'rosters', 'roster_change_requests', 'standings',
   'schedule_info', 'team_tasks', 'registration_player_drafts', 'referee_invitations',
-  'tournament_referees'
+  'tournament_referees', 'disciplinary_actions'
 ])
 
 function missingCollection(error) {

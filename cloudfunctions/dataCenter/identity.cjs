@@ -36,7 +36,7 @@ async function authenticate(cloud, db, event) {
   if (event.__actorOrgId && id(event.__actorOrgId) !== orgId) throw error('DATA_FORBIDDEN','机构身份校验失败')
   if (authSession && !platformOwner && await staffPolicy.isStaff(db, user._id, orgId) && !await staffPolicy.owner(db, user._id, orgId)) {
     const tournamentId = id(event.scope && event.scope.tournamentId || event.tournamentId || event.__staffTournamentId)
-    const rights = ['event.dashboard', 'event.teams', 'event.results']
+    const rights = ['event.dashboard', 'event.teams', 'event.results', 'event.transfer']
     const allowed = authSession && tournamentId && (await Promise.all(rights.map(right => staffPolicy.hasRight(db, user._id, orgId, tournamentId, right)))).some(Boolean)
     if (!allowed) throw error('DATA_FORBIDDEN','当前赛事没有数据读取权限')
     const relations = await readAll(db, 'tournament_teams', { tournamentId }, { maxRows:20000 })

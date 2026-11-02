@@ -33,7 +33,7 @@ async function run(context){
     const recognized=draft.recognition
     if((match.paperReportImports || []).some(row=>row.imageHash===recognized.evidence.imageHash))return {success:true,alreadyImported:true,message:'这张裁判表已录入'}
     if(text(draft.recordRevision)!==revision(match))throw new Error('比赛或阵容已变化，请重新识别核对')
-    const result=await relay(db,cloud,identity,grant,'webLoginApi',{action:'confirmRefereeReport',matchId:match._id,teams:event.teams,score:event.score,substitutions:event.substitutions,evidence:recognized.evidence,proof:recognized.proof,expectedEventRevision:draft.revision})
+    const result=await relay(db,cloud,identity,grant,'webLoginApi',{action:'confirmRefereeReport',matchId:match._id,teams:event.teams,score:event.score,substitutions:event.substitutions,formations:event.formations,evidence:recognized.evidence,proof:recognized.proof,expectedEventRevision:draft.revision})
     await db.collection('match_report_imports').doc(draft._id).update({data:{status:'confirmed',confirmedBy:identity.user._id,confirmedAt:db.serverDate()}})
     return {...result,message:result.alreadyImported?'这张裁判表已录入':'阵容、事件和赛果已保存'}
   }

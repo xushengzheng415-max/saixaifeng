@@ -13,7 +13,7 @@ async function readCards(cloud, db, players, options = {}) {
   if(!players.length)return []
   const states = new Map()
   const dynamic=require('./playerCardDynamic.cjs')
-  const scores=options.legacyOnly?new Map():await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id||p.id)))
+  const scores=options.legacyOnly?new Map():(options.scores||await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id||p.id))))
   const rows = await require('./playerCardPreviewAssets.cjs').mapLimit(players,options.dynamic===false?2:4,async player => {
     const playerId = String(player._id || player.id || '')
     if(!options.baseOnly&&!options.legacyOnly)player=await require('./playerCardSeriesReader.cjs').resolveSeriesPlayer(db,player,scores.get(playerId),document)

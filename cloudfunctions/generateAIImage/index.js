@@ -64,7 +64,8 @@ async function generateHunyuanImage(event) {
   try {
     console.log('========== 开始调用混元生图 ==========')
 
-    const app = tcb.init({ env: tcb.SYMBOL_CURRENT_ENV })
+    // 混元图生图常需 15–40 秒，SDK 默认 15 秒会 ESOCKETTIMEDOUT，直接判成“图片生成失败”
+    const app = tcb.init({ env: tcb.SYMBOL_CURRENT_ENV, timeout: 60000 })
     const ai = app.ai()
     const imageModel = ai.createImageModel(process.env.PROVIDER || "hunyuan-image");
 
@@ -366,10 +367,21 @@ exports.main = async (event, context) => {
 
       case 'generateCustomImage':
         // 自定义生图（用于海报背景等）
+        // AR 系列（HY-Image-*，含 I2I）不收 aspect_ratio，只收 size，避免 400
+        // 3.5 预览版模型名是 Hy-Image-3.5-preview（大小写混排），判断要忽略大小写
+        const isArModel = /^HY-Image-/i.test(String(event.model || ''))
         const customUrl = await generateHunyuanImage({
           prompt: event.prompt,
-          aspect_ratio: event.aspect_ratio || '1:1',
-          ...(event.model ? { model: event.model } : {})
+          ...(isArModel ? {} : { aspect_ratio: event.aspect_ratio || '1:1' }),
+          ...(isArModel && event.size ? { size: event.size } : {}),
+          ...(event.model ? { model: event.model } : {}),
+          ...(event.image ? { image: event.image } : {}),
+          ...(event.image_urls ? { image_urls: event.image_urls } : {}),
+          ...(event.images ? { images: event.images } : {}),
+          // 混元会在右下角烧「AI生成」水印，logo_add=0 可关闭（不支持的模型会忽略该参数）
+          ...(event.logo_add !== undefined ? { logo_add: event.logo_add } : {}),
+          ...(event.logo_param ? { logo_param: event.logo_param } : {}),
+          ...(event.revise ? { revise: event.revise } : {})
         })
         const customUploaded = await uploadGeneratedImage(customUrl, 'ai-generated')
         return {

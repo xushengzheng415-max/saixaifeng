@@ -11,12 +11,29 @@ const {RENDER_VERSION}=require('./playerCardReader.cjs')
 const TYPES = ['bronze', 'silver', 'gold']
 
 const dataOf = result => Array.isArray(result && result.data) ? result.data[0] : result && result.data
+// Template state/version docs are read many times per request (list sync,
+// base card, card versions across all bound players). Version snapshots are
+// immutable once published and states move rarely, so a short-lived cache
+// collapses dozens of serial doc reads into a handful per request.
+const DOC_CACHE_TTL_MS = 60 * 1000
+const docCache = new Map()
 async function document(db, collection, id) {
-  try { return dataOf(await db.collection(collection).doc(String(id)).get()) }
+  const key = collection === VERSIONS || collection === STATES ? collection + '#' + String(id) : ''
+  if (key) {
+    const hit = docCache.get(key)
+    if (hit && Date.now() - hit.at < DOC_CACHE_TTL_MS) return hit.value
+  }
+  let value
+  try { value = dataOf(await db.collection(collection).doc(String(id)).get()) }
   catch (error) {
-    if (/document.*(not exist|does not exist)|DOCUMENT_NOT_EXIST/i.test(String(error.message || error.errMsg || error.code || ''))) return null
+    if (/document.*(not exist|does not exist)|DOCUMENT_NOT_EXIST/i.test(String(error.message || error.errMsg || error.code || ''))) {
+      if (key) docCache.set(key, { value: null, at: Date.now() })
+      return null
+    }
     throw error
   }
+  if (key) docCache.set(key, { value, at: Date.now() })
+  return value
 }
 const versionId = (templateId, version) => `${templateId}_${version}`
 const renderId = (playerId, templateId, version) => `${playerId}_${templateId}_${version}`

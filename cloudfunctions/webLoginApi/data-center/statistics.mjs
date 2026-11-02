@@ -24,6 +24,10 @@ const score = value => value !== null && value !== undefined && value !== '' && 
 
 export const synthetic = row => row?.synthetic === true || row?.isTest === true || Boolean(text(row?.syntheticDatasetId || row?.syntheticKey)) || text(row?.source).toLowerCase() === 'ai_fixture' || ['test','virtual','synthetic','demo'].includes(text(row?.originType || row?.dataKind).toLowerCase())
 
+// 弃赛/弃权场次以弃权事实登记赛果，本身没有可核验的比赛过程。
+// 这类场次不计入事件与阵容覆盖问题，避免把弃赛误报成数据质量问题。
+export const forfeitMatch = match => Boolean(match) && (text(match.resultType).toLowerCase() === 'forfeit' || text(match.resolution).toLowerCase() === 'forfeit' || Boolean(text(match.forfeitingTeamId)))
+
 export function matchParticipantIds(match, externalEvents = []) {
   const ids = new Set()
   for (const side of ['home','away']) {
@@ -75,7 +79,11 @@ export function resultState(match, context = {}) {
   return state !== 'excluded' && matchOrigin(match,context) === 'real' ? state : 'excluded'
 }
 
-export function matchGroupName(match) { return text(match.groupName||match.drawGroup||match.pool||match.group||match.groupCode)||'联赛' }
+export function matchGroupName(match) {
+  const name = text(match.groupName||match.drawGroup||match.pool||match.group||match.groupCode)
+  // 早期单循环赛把抽签小组命名为「联赛积分榜」，会让榜单标题重复成「联赛积分榜 积分榜」，统一显示为「联赛」。
+  return (/^联赛积分榜$/.test(name) ? '联赛' : name) || '联赛'
+}
 
 export function inScope(match, scope = {}) {
   if(scope.groupName&&matchGroupName(match)!==text(scope.groupName))return false
@@ -167,16 +175,17 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
     matchBefore=new Map()
     const matchId = text(match._id || match.id)
     if (!matchId) { issues.push({ code:'MATCH_ID_MISSING' }); continue }
+    const forfeited = forfeitMatch(match)
     const durationEvidence = resolveMatchDurationEvidence(match)
-    if (durationEvidence.status !== 'ready') issues.push({ code:durationEvidence.reason, matchId })
+    if (durationEvidence.status !== 'ready' && !forfeited) issues.push({ code:durationEvidence.reason, matchId })
     let matchEvents = effectiveEvents(match, events)
     const eventsKnown = match.eventRecordingStatus === 'complete' || match.statisticsCoverage?.events === 'complete' || (Array.isArray(match.events) && match.eventRecordingStatus !== 'partial')
-    if (eventsKnown) coveredMatches++
+    if (eventsKnown || forfeited) coveredMatches++
     else issues.push({ code:'EVENT_COVERAGE_PARTIAL', matchId })
     const participants = new Map(), lineups = {}
     for (const side of ['home','away']) {
       const teamId = teamOf(match, side), lineup = lineupOf(match, side)
-      if (teamId && !lineup.known) { missingLineupSides++; issues.push({ code:'LINEUP_COVERAGE_MISSING', matchId, teamId }) }
+      if (teamId && !lineup.known) { if (!forfeited) { missingLineupSides++; issues.push({ code:'LINEUP_COVERAGE_MISSING', matchId, teamId }) } }
       lineups[teamId] = lineup
       for (const profile of [...lineup.starters, ...lineup.substitutes]) {
         const playerId = idOf(profile)
@@ -229,9 +238,10 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
       const own = score(match[side + 'Score'] ?? match[side === 'home' ? 'scoreHome' : 'scoreAway'])
       const against = score(match[(side === 'home' ? 'away' : 'home') + 'Score'] ?? match[side === 'home' ? 'scoreAway' : 'scoreHome'])
       const key = [teamId,text(match.tournamentId),text(match.divisionId || match.division || 'default')].join('|')
-      if (!teams.has(key)) teams.set(key, { teamId, tournamentId:text(match.tournamentId), divisionId:text(match.divisionId || match.division || 'default'), played:0, wins:0, draws:0, losses:0, goalsFor:0, goalsAgainst:0, scoreCoveredMatches:0, matchIds:[] })
+      if (!teams.has(key)) teams.set(key, { teamId, tournamentId:text(match.tournamentId), divisionId:text(match.divisionId || match.division || 'default'), played:0, wins:0, draws:0, losses:0, forfeits:0, goalsFor:0, goalsAgainst:0, scoreCoveredMatches:0, matchIds:[] })
       const row = teams.get(key)
       row.played++; row.matchIds.push(matchId)
+      if (forfeited && text(match.forfeitingTeamId) === teamId) row.forfeits++
       if (own !== null && against !== null) {
         row.scoreCoveredMatches++; row.goalsFor += own; row.goalsAgainst += against
         if (own > against) row.wins++

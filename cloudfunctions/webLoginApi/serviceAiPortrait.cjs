@@ -35,19 +35,38 @@ function portraitListCost() {
 const MAX_BASE64_CHARS = 96000
 
 function wallet() { return require('./honeyWallet.cjs') }
+const membership = require('./membership.cjs')
+
+// 会员折扣（2026-10-29 用户授权接入）：只作用在活动实售价 portraitCost() 上，
+// 绝不拿 150 滴标价去打折。有效期外、会员读取失败一律回落原价，不阻断定妆照主流程。
+async function currentPricing(db, serviceAccountOpenId) {
+  const baseCost = portraitCost()
+  const member = await membership.discountFor(db, text(serviceAccountOpenId))
+  return {
+    cost: membership.discountedCost(baseCost, member.discount),
+    baseCost,
+    discount: member.discount,
+    memberActive: member.active === true,
+    memberLevel: text(member.levelCode),
+    memberName: text(member.planName)
+  }
+}
 
 // 页面进入登记表单时读一次：价格、当前余额、能不能直接用。
 // 读不到（未开通/账本待核对）时如实返回原因，不把余额当成 0 显示成“余额不足”。
 async function info(db, loaded) {
   const { session } = loaded
-  const cost = portraitCost()
   const listCost = portraitListCost()
-  if (!session || session.phoneVerified !== true) return { cost, listCost, available: false, balance: 0, reason: 'PHONE_REQUIRED' }
+  const openId = text(session && session.officialOpenId)
+  const pricing = await currentPricing(db, openId)
+  const cost = pricing.cost
+  const priceView = { cost, listCost, discount: pricing.discount, memberActive: pricing.memberActive, memberLevel: pricing.memberLevel, memberName: pricing.memberName }
+  if (!session || session.phoneVerified !== true) return Object.assign({ available: false, balance: 0, reason: 'PHONE_REQUIRED' }, priceView)
   try {
-    const walletState = await wallet().readHoney(db, text(session.officialOpenId))
-    return { cost, listCost, available: walletState.balance >= cost, balance: walletState.balance, reason: '' }
+    const walletState = await wallet().readHoney(db, openId)
+    return Object.assign({ available: walletState.balance >= cost, balance: walletState.balance, reason: '' }, priceView)
   } catch (failure) {
-    return { cost, listCost, available: false, balance: 0, reason: text(failure.code) || 'HONEY_UNAVAILABLE' }
+    return Object.assign({ available: false, balance: 0, reason: text(failure.code) || 'HONEY_UNAVAILABLE' }, priceView)
   }
 }
 
@@ -72,9 +91,11 @@ async function apply(cloud, db, loaded, event) {
     if (base64.length > MAX_BASE64_CHARS) fail('PHOTO_TOO_LARGE', '照片数据过大，请重新生成')
   }
 
-  const cost = portraitCost()
   const listCost = portraitListCost()
   const openId = text(session.officialOpenId)
+  // 实际扣费一律按服务端当前会员价计算；refId 幂等保证「prepare 已扣费」时不会按新价再扣一次
+  const pricing = await currentPricing(db, openId)
+  const cost = pricing.cost
   const refId = 'ai-portrait:' + requestId
   const reserved = await db.runTransaction(async tx => {
     const current = await require('./playerCardSuite.cjs').document(tx, 'service_entry_sessions', session._id)
@@ -88,7 +109,7 @@ async function apply(cloud, db, loaded, event) {
   if (reserved.cached) {
     const cached = reserved.cached, raw = (await cloud.downloadFile({ fileID: cached.fileId })).fileContent
     const state = await wallet().readHoney(db, openId)
-    return { success: true, portraitId: cached.id, fileID: cached.fileId, processingStatus: 'ready', transparentPreview: 'data:image/png;base64,' + raw.toString('base64'), aiPortrait: { cost, listCost, balance: state.balance, requestId, deduped: true, source: 'ai_pose_portrait' } }
+    return { success: true, portraitId: cached.id, fileID: cached.fileId, processingStatus: 'ready', transparentPreview: 'data:image/png;base64,' + raw.toString('base64'), aiPortrait: { cost, listCost, discount: pricing.discount, balance: state.balance, requestId, deduped: true, source: 'ai_pose_portrait' } }
   }
   let spend = null
   try {
@@ -108,7 +129,7 @@ async function apply(cloud, db, loaded, event) {
       aiRequestId: requestId
     }, trustedAsset)
     return Object.assign({ success: true }, uploaded, {
-      aiPortrait: { cost, listCost, balance: spend.balance, requestId, deduped: spend.deduped, source: 'ai_pose_portrait' }
+      aiPortrait: { cost, listCost, discount: pricing.discount, balance: spend.balance, requestId, deduped: spend.deduped, source: 'ai_pose_portrait' }
     })
   } catch (failure) {
     if (!spend) throw failure
@@ -206,7 +227,9 @@ async function refund(db, loaded, event) {
   if (!REQUEST_ID_PATTERN.test(requestId)) fail('AI_PORTRAIT_REQUEST_INVALID', '请求编号无效，请刷新页面后重试')
   const current = await require('./playerCardSuite.cjs').document(db, 'service_entry_sessions', session._id)
   if (current && (current.playerRegistrationPortraits || []).some(item => text(item.aiRequestId) === requestId)) fail('AI_PORTRAIT_ALREADY_SAVED', '这张形象照已保存，不能退回蜂蜜')
-  const cost = portraitCost(), listCost = portraitListCost()
+  const listCost = portraitListCost()
+  // 退回金额始终以账本里那笔实际扣费为准；这里只按当前会员价取展示值
+  const cost = (await currentPricing(db, text(session.officialOpenId))).cost
   let amount = 0
   try {
     const result = await wallet().refundHoney(db, text(session.officialOpenId), {

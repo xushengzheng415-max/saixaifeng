@@ -55,7 +55,8 @@ const RIGHTS = [
   { code: 'grant', label: '每月赠滴', open: true },
   { code: 'badge', label: '会员徽章', open: true },
   { code: 'portrait', label: 'AI 定妆照折扣', open: true },
-  { code: 'backgrounds', label: '卡面背景库', open: false },
+  // 2026-10-31 用户确认：有效会员可不达 100 分更换卡面背景（换照片仍须满 100 分）
+  { code: 'backgrounds', label: '会员专属背景', open: true },
   { code: 'export', label: '数据长图导出', open: false },
   { code: 'cards', label: '多套卡面保存', open: false },
   { code: 'report', label: '赛季报告', open: false }
@@ -222,10 +223,27 @@ function rightsView(subscriptionViewValue, planMap) {
         ? '定妆照享 ' + (Math.round(plan.portraitDiscount * 100) / 10) + ' 折'
         : '会员生效后享定妆照折扣'
     }
+    if (right.code === 'backgrounds') {
+      item.detail = plan
+        ? '已开通：可不达 100 分更换卡面背景'
+        : '开通后可不达 100 分更换卡面背景'
+    }
     return item
   })
 }
 
+// 球员卡换背景用：只读有效订阅，不写库；读取失败按未开通，避免阻断制卡主流程
+async function isActiveMember(db, openId) {
+  const id = text(openId)
+  if (!id || !db) return false
+  try {
+    const subscription = await subscriptionOf(db, id)
+    return !!(subscription && text(subscription.status) === 'active' && timeValue(subscription.expiresAt) > Date.now())
+  } catch (error) {
+    console.warn('[membership] 会员状态读取失败', text(error.code) || text(error.message))
+    return false
+  }
+}
 async function subscriptionOf(db, openId) {
   return docValue(db, SUB_COLLECTION, text(openId))
 }
@@ -702,6 +720,7 @@ module.exports = {
   listOrders,
   discountFor,
   discountedCost,
+  isActiveMember,
   planState,
   CONFIRMED_PLANS,
   __internals: {

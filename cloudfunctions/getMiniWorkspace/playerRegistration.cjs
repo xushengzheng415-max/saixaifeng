@@ -1,5 +1,6 @@
 'use strict'
 const crypto = require('node:crypto')
+const { resolveNativePlace, NATIONALITY_DEFAULT } = require('./idcardRegion.cjs')
 const text = v => String(v == null ? '' : v).trim()
 const digest = v => crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const live = p => p && !p.isDeleted && !['archived','deleted','removed'].includes(text(p.status).toLowerCase())
@@ -25,7 +26,9 @@ function idDetails(value) {
   const weights=[7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2]
   const check='10X98765432'[id.slice(0,17).split('').reduce((sum,n,i)=>sum+Number(n)*weights[i],0)%11]
   if (check!==id[17]) fail('IDCARD_INVALID','身份证校验不通过，请核对号码')
-  return {idCard:id,birthDate,gender:Number(id[16])%2?'male':'female'}
+  // 籍贯推算（2026-10-29 用户确认 A1）：身份证前 6 位给出省市级籍贯并标记来源；
+  // 平台字典未收录或同名歧义时只写文字籍贯，由编号流程保留待核验，不猜邻近城市。
+  return {idCard:id,birthDate,gender:Number(id[16])%2?'male':'female',...(resolveNativePlace(id)||{})}
 }
 function number(value) {
   const v=text(value)
@@ -54,15 +57,19 @@ function conflicts(rows, values, targetId) {
   if (same) fail(pendingJoin(same)?'PLAYER_IDCARD_PENDING':'PLAYER_IDCARD_CONFLICT',pendingJoin(same)?'本队已有该身份证的入队申请正在等待球队确认，请等待球队处理':'本队已有该身份证档案，请返回查找并认领')
   if (others.some(p=>sameNumber(p.jerseyNumber,values.jerseyNumber))) fail('PLAYER_JERSEY_CONFLICT',values.jerseyNumber+'号已被本队使用，请修改球衣号码')
 }
+// 认领身份核验（2026-10-19 用户口径）：身份证号只是检索方式之一，青少年档案常没有身份证。
+// 无身份证且未登记手机号的档案允许凭姓名认领，提交时补录的身份证号即成为该档案的身份凭据；
+// 已有身份证必须核对一致、已登记手机号必须匹配、已被他人认领或存在历史微信关联的档案仍需人工核对。
 function claimProof(p, loaded, idCard, invite) {
   if (!owners(p).length && [p.linkedOpenId,p.playerOpenId,p.guardianOpenId].some(text)) fail('PLAYER_IDENTITY_REVIEW','此档案有历史微信关联，请联系负责人核对')
   if (owners(p).length && !owners(p).includes(text(loaded.user._id))) fail('PLAYER_ALREADY_CLAIMED','此球员已由其他账号认领，请联系球队负责人')
-  if (text(p.idCard) && text(p.idCard).toUpperCase()!==text(idCard).toUpperCase()) fail('PLAYER_IDENTITY_MISMATCH','身份证与所选档案不一致，请重新选择或新建')
+  if (text(p.idCard)) {
+    if (!text(idCard)) fail('PLAYER_IDENTITY_MISMATCH','请填写该档案登记的身份证号')
+    if (text(p.idCard).toUpperCase()!==text(idCard).toUpperCase()) fail('PLAYER_IDENTITY_MISMATCH','身份证与所选档案不一致，请重新选择或新建')
+  }
   const phones=[p.playerPhone,p.guardianPhone,p.contactPhone].map(text).filter(v=>/^1[3-9]\d{9}$/.test(v))
   const phoneMatch=phones.includes(text(loaded.phone))
   if(phones.length&&!phoneMatch&&!owners(p).includes(text(loaded.user._id)))fail('PLAYER_PHONE_MISMATCH','请使用档案登记的联系手机号，或联系负责人核对')
-  const targeted=text(invite.playerId)===text(p._id) && p.manualPlaceholder===true
-  if (!text(p.idCard)&&!phoneMatch&&!targeted&&!owners(p).includes(text(loaded.user._id))) fail('PLAYER_IDENTITY_REVIEW','该档案缺少身份凭据，请让负责人从此球员详情发送补资料邀请')
 }
 // 递卡确认（恢复/转队）的身份核验：本人持有档案才可递交，不静默换绑、不恢复迁移残留。
 function restoreProof(p, loaded) {
@@ -158,6 +165,27 @@ async function run(deps,event) {
     await db.collection('service_entry_sessions').doc(sid).update({data:{playerRegistrationChoice:db.command.set(choice)}})
     return {success:true,choiceToken:choice.nonce,mode,player:detail}
   }
+  // 身份证前置核验（2026-10-29 用户要求）：填满 18 位就先查本队是否已有同身份证档案，
+  // 有重复立刻拦住，不让用户填完整张表、生成完球员卡才被提交打回。
+  // 只读查重，不建 choice、不写球员档案；查重口径与提交时的 conflicts 完全一致
+  // （本队在队 + 本队待球队确认，排除当前已选的认领目标）。
+  if (operation==='check_id') {
+    const identity=idDetails(event.idCard)
+    const recent=loaded.session.playerIdCheckWindow||{}
+    if(Number(recent.at)>Date.now()-60000 && Number(recent.count)>=20) fail('PLAYER_IDCHECK_LIMIT','核验较频繁，请稍后再试')
+    const targetId=text(loaded.session.playerRegistrationChoice&&loaded.session.playerRegistrationChoice.playerId)
+    const same=(await readPlayers(team._id)).find(p=>live(p)&&text(p._id)!==targetId&&text(p.idCard).toUpperCase()===identity.idCard)
+    await db.collection('service_entry_sessions').doc(sid).update({data:{playerIdCheckWindow:{at:Number(recent.at)>Date.now()-60000?recent.at:Date.now(),count:Number(recent.at)>Date.now()-60000?Number(recent.count||0)+1:1}}})
+    if (!same) return {success:true,available:true,idCard:identity.idCard,birthDate:identity.birthDate}
+    const pending=pendingJoin(same)
+    return {
+      success:true,
+      available:false,
+      idCard:identity.idCard,
+      code:pending?'PLAYER_IDCARD_PENDING':'PLAYER_IDCARD_CONFLICT',
+      message:pending?'本队已有该身份证的入队申请正在等待球队确认，请等待球队处理':'本队已有该身份证档案，请返回查找并认领'
+    }
+  }
   if (!['submit','preview','check_number','confirm_restore'].includes(operation)) fail('PLAYER_ACTION_INVALID','不支持的球员登记操作')
   const choice=loaded.session.playerRegistrationChoice
   if (!choice||text(event.choiceToken)!==text(choice.nonce)) fail('PLAYER_CHOICE_REQUIRED','请先查找并选择认领或新建')
@@ -241,6 +269,7 @@ async function run(deps,event) {
     claimProof(target,loaded,values.idCard,invite)
     if (text(target.name)&&text(target.name)!==values.name) fail('PLAYER_NAME_MISMATCH','姓名与所选档案不一致，请重新查找')
   }
+  const priorProfileComplete=require('./honeyBonus.cjs').isProfileCompleteReady(target||{})
   const portrait=(loaded.session.playerRegistrationPortraits||[]).find(p=>p.id===text(event.portraitId)&&p.processingStatus==='ready')
   if (!portrait) fail('PLAYER_PHOTO_REQUIRED','请先拍摄或上传形象照并完成抠图')
   if(target?.registrationVersion==='player-registration/2' && owners(target).length && (target.playerCardDynamic||target.playerCardFileId) && portrait.fileId!==text(target.playerCardSourceFileId)) {
@@ -251,7 +280,7 @@ async function run(deps,event) {
   // 新登记在球队确认前只占位，不建立球队归属；用请求指纹作为确认入队时的幂等键。
   const pendingJoinRequestId='jr_'+digest([sid,choice.nonce]).slice(0,28)
   const profileId='sp_'+digest([sid,choice.nonce]).slice(0,28), parentInvite='pp_'+crypto.randomBytes(24).toString('hex')
-  const data={...values,teamId:text(team._id),orgId:text(target?.orgId||invite.orgId||team.orgId),registrantType,registrantMode:'age_based',contactPhone:loaded.phone,photoUrl:portrait.fileId,profileStatus:'complete',manualPlaceholder:false,needsParentCompletion:false,standardProfileFlow:true,registrationVersion:'player-registration/2',authorizationAgreed:true,authorizationConfirmedAt:db.serverDate(),claimSource:'service_account_h5',playerInviteId:text(invite._id),updateTime:db.serverDate()}
+  const data={...values,nationality:text(target?.nationality)||NATIONALITY_DEFAULT,teamId:text(team._id),orgId:text(target?.orgId||invite.orgId||team.orgId),registrantType,registrantMode:'age_based',contactPhone:loaded.phone,photoUrl:portrait.fileId,profileStatus:'complete',manualPlaceholder:false,needsParentCompletion:false,standardProfileFlow:true,registrationVersion:'player-registration/2',authorizationAgreed:true,authorizationConfirmedAt:db.serverDate(),claimSource:'service_account_h5',playerInviteId:text(invite._id),updateTime:db.serverDate()}
   Object.assign(data,{playerCardSourceFileId:portrait.fileId,playerCardSourceType:'standard_portrait',playerCardCrop:portrait.fileId===target?.playerCardSourceFileId?(target.playerCardCrop||{zoom:1,x:0,y:0}):{zoom:1,x:0,y:0}})
   Object.assign(data,{recentPortraitId:profileId,parentProfileSubmissionStatus:'submitted',parentProfileCompletedAt:db.serverDate()})
   if (registrantType==='self') Object.assign(data,{playerPhone:loaded.phone,linkedUserId:loaded.user._id})
@@ -261,7 +290,7 @@ async function run(deps,event) {
     conflicts(await readPlayers(team._id),values,target?playerId:'')
     // This descriptor is consumed by webLoginApi, never a committed player or a
     // card grant. Existing claims retain their canonical career identity.
-    const cardPlayer={_id:playerId,teamId:text(team._id),orgId:data.orgId,source:target?.source||'team_player_invite',name:values.name,jerseyNumber:values.jerseyNumber,jerseyName:values.jerseyName,position:values.position,height:values.height,weight:values.weight,nationality:text(target?.nationality)}
+    const cardPlayer={_id:playerId,teamId:text(team._id),orgId:data.orgId,source:target?.source||'team_player_invite',name:values.name,jerseyNumber:values.jerseyNumber,jerseyName:values.jerseyName,position:values.position,height:values.height,weight:values.weight,nationality:text(target?.nationality)||data.nationality}
     return {success:true,registrationDraft:{player:cardPlayer,existing:Boolean(target),fingerprint,portraitId:portrait.id,portraitFileId:portrait.fileId,crop:data.playerCardCrop,choiceToken:choice.nonce}}
   }
   const cardDraft=loaded.session.playerRegistrationCardDraft
@@ -295,6 +324,16 @@ async function run(deps,event) {
           const current=await doc(tx,'players',playerId)
           if(!live(current)||revision(current)!==choice.revision)fail('PLAYER_CHOICE_STALE','球员档案已更新，请重新查找')
           const patch=Object.assign({},data)
+          // 认领补齐不覆盖档案已有的真实籍贯/国籍：身份证推算值只在原档案为空时补位，
+          // 否则会把人工登记的籍贯改成身份证地址，并让永久编号地区跟着变。
+          if(text(current.nativePlace)||current.nativePlaceRegion){
+            patch.nativePlace=text(current.nativePlace)
+            if(current.nativePlaceRegion)patch.nativePlaceRegion=current.nativePlaceRegion
+            else delete patch.nativePlaceRegion
+            if(text(current.nativePlaceSource))patch.nativePlaceSource=text(current.nativePlaceSource)
+            else delete patch.nativePlaceSource
+          }
+          if(text(current.nationality))patch.nationality=text(current.nationality)
           if(!text(current.currentHistoryId)){
             await tx.collection('player_team_history').doc(historyIdFor(playerId,text(team._id),choice.nonce)).set({data:{playerId,teamId:text(team._id),orgId:data.orgId,teamName:text(currentTeam.name||currentTeam.teamName),joinedAt:db.serverDate(),leftAt:null,joinSource:'claim',actorUserId:text(loaded.user._id),createTime:db.serverDate(),updateTime:db.serverDate()}})
             patch.currentHistoryId=historyIdFor(playerId,text(team._id),choice.nonce)
@@ -316,10 +355,16 @@ async function run(deps,event) {
       // 尽力而为、不阻断登记结果；幂等重放已在上方提前返回，不会重复通知。
       if (text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY)) {
         try {
-          await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyTeamPlayerJoin',bridgeKey:text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY),teamId:text(team._id),teamName:text(team.name||team.teamName),playerId,playerName:values.name,inviteId:text(invite._id),eventId:choice.nonce,pendingTeamConfirm:!target,pagePath:target?'':'pages/team/player-library/player-library?teamId='+text(team._id)}})
+          await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyTeamPlayerJoin',bridgeKey:text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY),teamId:text(team._id),teamName:text(team.name||team.teamName),playerId,playerName:values.name,inviteId:text(invite._id),eventId:choice.nonce,pendingTeamConfirm:!target,pagePath:target?'':'pages/team/player-library/player-library?teamId='+text(team._id)+'&pendingTeamConfirm=1'}})
         } catch(notifyError) { console.warn('[playerRegistration] 入队申请通知发送失败',text(notifyError&&notifyError.message)) }
       }
       await require('./data-center/numbering.cjs').afterWrite(db,'players',playerId)
+      if (!priorProfileComplete && text(loaded.officialOpenId)) {
+        try {
+          const bonus=await require('./honeyBonus.cjs').grantProfileCompleteBonus(db,{serviceAccountOpenId:text(loaded.officialOpenId),playerId})
+          if(bonus&&bonus.success!==true&&!bonus.deduped)console.warn('[playerRegistration] profile complete honey skipped',bonus.code||bonus.error||'unknown')
+        } catch(bonusError) { console.warn('[playerRegistration] profile complete honey failed',text(bonusError&&bonusError.message)) }
+      }
       return {success:true,...receipt}
     } catch(e) { if((e.code!=='PLAYER_POOL_CHANGED'&&!busy(e))||attempt===2)throw e }
   }

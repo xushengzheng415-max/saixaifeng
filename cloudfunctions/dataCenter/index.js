@@ -3,11 +3,17 @@ const cloud = require('wx-server-sdk')
 const { authenticate } = require('./identity.cjs')
 const { createDataService, error } = require('./shared/service.cjs')
 const { requestTransfer, acceptTransfer, listTransfers } = require('./transfers.cjs')
+const transferCenter = require('./transfer/index.cjs')
+const { COLLECTIONS: TRANSFER_COLLECTIONS } = require('./transfer/rules.cjs')
 cloud.init({ env:cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 
 exports.main = async (event = {}) => {
   try {
+    // 转会公开展示端（发现页「转会」分栏）：游客也能看的只读投影。
+    // 成交金额按成人／青少年分级：成人只回格式化 priceText，青少年不公开，接口不下发 amountFen；
+    // 不返回报价单、合同、审核记录与任何联系方式。
+    if (event.action === 'transferShowcase') return await require('./transfer/showcase.cjs').handle(db, event)
     const actor = await authenticate(cloud,db,event)
     if (['numberingRules','assignBusinessNumber'].includes(event.action)) {
       const numbering = require('./shared/numbering.cjs')
@@ -23,6 +29,9 @@ exports.main = async (event = {}) => {
     }
     if (event.action === 'inspectDuration') return await require('./durationVerification.cjs').inspectDuration(db,actor,event)
     if (event.action === 'verifyDuration') return await require('./durationVerification.cjs').verifyDuration(db,actor,event)
+    // 转会中心：独立领域路由。球队侧只认本人管理的球队，主办侧只认赛事范围，
+    // 赛事子账号必须显式持有 event.transfer 才能办理审核；不再走下面的 staff 数据读取门禁。
+    if (transferCenter.ACTIONS.includes(event.action)) return await transferCenter.handle(db, actor, event)
     if (actor.staff) {
       const tournamentId = String(actor.tournamentIds[0] || '')
       const requested = String(event.scope && event.scope.tournamentId || event.tournamentId || '')
@@ -34,7 +43,9 @@ exports.main = async (event = {}) => {
     if (event.action === 'initializeCollections') {
       if (!actor.platformOwner) throw error('DATA_FORBIDDEN','仅平台负责人可初始化数据中心')
       const items = []
-      for (const name of ['player_team_memberships','player_transfers','player_valuations']) {
+      // 转会中心集合与既有球员关系集合一并登记，便于平台负责人在首次部署后一次性建集合。
+      const names = ['player_team_memberships','player_transfers','player_valuations', ...Object.values(TRANSFER_COLLECTIONS)]
+      for (const name of [...new Set(names)]) {
         try { await db.createCollection(name); items.push({ name, status:'created' }) }
         catch (failure) {
           if (/already exist|已存在|DATABASE_COLLECTION_EXIST/i.test(String(failure.errMsg || failure.message || ''))) items.push({ name, status:'exists' })

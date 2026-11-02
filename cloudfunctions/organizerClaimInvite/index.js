@@ -932,10 +932,14 @@ exports.main = async function(event) {
       const sessions = token ? (await db.collection('auth_sessions').where({ tokenHash:hashSessionToken(token), userId:String(identity.user._id), active:true, expiresAt:_.gt(new Date()) }).limit(2).get()).data || [] : []
       const tournamentId = String(event && (event.__staffTournamentId || event.tournamentId) || '').trim()
       const rights = relayRights('organizerClaimInvite', event || {})
+      // 用户已确认：共享（子）账号同样可以分配球队账号权限。球队账号管理入口只校验会话唯一、
+      // 机构归属和赛事范围，不再要求额外的授权项。
+      const teamAccountAction = ['listTeamAccess', 'saveTeamAccess', 'removeTeamAccess', 'addPlayerAsStaff'].indexOf(String(event && event.action || '')) >= 0
+      const rightsAllowed = teamAccountAction || Array.isArray(rights) && rights.length > 0 &&
+        (await Promise.all(rights.map(right => staffPolicy.hasRight(db, identity.user._id, orgId, tournamentId, right)))).every(Boolean)
       if (sessions.length !== 1 || sessions[0].activeOrgId && String(sessions[0].activeOrgId) !== orgId ||
-          !Array.isArray(rights) || !rights.length ||
           !await validateStaffRelayScope(db, 'organizerClaimInvite', event || {}, tournamentId) ||
-          !(await Promise.all(rights.map(right => staffPolicy.hasRight(db, identity.user._id, orgId, tournamentId, right)))).every(Boolean)) throw new Error('当前赛事没有该认领管理权限')
+          !rightsAllowed) throw new Error('当前赛事没有该认领管理权限')
       identity.staff = true
     }
     if (event && event.action === 'getTeamExportPhotos') return await getTeamExportPhotos(event, identity)

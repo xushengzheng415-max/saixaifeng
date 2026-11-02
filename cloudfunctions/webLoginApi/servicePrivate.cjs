@@ -13,7 +13,12 @@ module.exports = function createServicePrivate({ cloud, config, hashSessionToken
   const byIds = (name, ids, fields) => readByIds(db,name,'_id',ids,{ fields, maxRows:5000 })
   async function oauthUrl(event) {
     if (!config.APP_ID || !config.APP_SECRET) return fail('SERVICE_ACCOUNT_NOT_CONFIGURED','微信授权暂不可用，请稍后重试')
-    const allowedReturns=['https://www.sxffootball.cn/service-account-h5/registration-resume.html','https://www.sxffootball.cn/preview/service-account-h5/me.html']
+    const allowedReturns=[
+      'https://www.sxffootball.cn/service-account-h5/registration-resume.html',
+      'https://www.sxffootball.cn/service-account-h5/card-world/index.html',
+      'https://www.sxffootball.cn/preview/service-account-h5/me.html',
+      'https://www.sxffootball.cn/preview/service-account-h5/card-world/index.html'
+    ]
     const redirectUri = allowedReturns.includes(event.returnUrl) ? event.returnUrl : 'https://www.sxffootball.cn/service-account-h5/me.html'
     const state = crypto.randomBytes(20).toString('hex')
     await db.collection('referee_oauth_states').doc(state).set({ data:{ state, purpose:'service_private', redirectUri, used:false, expiresAt:new Date(Date.now()+10*60*1000), createTime:db.serverDate() } })
@@ -170,7 +175,7 @@ async function notifyFeedback(doc){
       createTime:row.createTime||null
     }))}
   }
-  return async function handle(action,event={}) {
+  async function handle(action,event={}) {
     try {
       if(action==='servicePrivateOAuthUrl')return await oauthUrl(event)
       if(action==='servicePrivateOAuth')return await oauth(event)
@@ -178,4 +183,7 @@ async function notifyFeedback(doc){
       return fail('SERVICE_PRIVATE_ACTION_INVALID','操作不可用，请重新打开')
     } catch(error){if(['REGISTRATION_RESUME_INVALID','REGISTRATION_RESUME_CHANGED'].includes(error.code))return fail(error.code,error.message);return fail(error.code==='DATA_SCOPE_TOO_LARGE'?error.code:'SERVICE_PRIVATE_READ_FAILED','暂时无法读取，请稍后重新加载')}
   }
+  // 供卡世界等同源服务号 H5 复用同一自然人会话鉴权，不另开渠道。
+  handle.authenticate = authenticate
+  return handle
 }

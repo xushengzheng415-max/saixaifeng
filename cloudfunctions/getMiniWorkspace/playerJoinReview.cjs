@@ -5,7 +5,53 @@
 const text = value => (value === undefined || value === null ? '' : String(value).trim())
 
 module.exports = function createPlayerJoinReview(deps) {
-  const { db, safeGet, safeGetTeamPlayers, loadTeams, findWorkspaceForAction, workspaceError, toTime, registrantTypeForPlayer } = deps
+  const { db, cloud, safeGet, safeGetTeamPlayers, loadTeams, findWorkspaceForAction, workspaceError, toTime, registrantTypeForPlayer } = deps
+
+  // 驳回后必须重新打开球员的登记入口（2026-10-30）：登记回执留在会话里时，
+  // serviceRegistrationResume.restore() 会直接返回空，球员重开旧链接只会看到上次
+  // 「已提交」的结果页，看起来像又提交了一次，实际没有任何新写入，球队也收不到申请。
+  // 这里清空该球员提交过的会话回执、选择、草稿与照片，并留下驳回印记供登记页回显。
+  async function resetRegistrationAfterReject(teamId, playerId, reason, operatorId) {
+    try {
+      const rows = (await db.collection('service_entry_sessions').where({ registeredPlayerId: text(playerId) }).limit(200).get()).data || []
+      let cleared = 0
+      for (const row of rows) {
+        const written = await db.collection('service_entry_sessions').where({ _id: text(row._id) }).update({ data: {
+          registeredPlayerId: '',
+          playerRegistrationReceipt: db.command.remove(),
+          playerRegistrationChoice: db.command.remove(),
+          playerRegistrationFormDraft: db.command.remove(),
+          playerRegistrationCardDraft: db.command.remove(),
+          playerRegistrationPortraits: db.command.remove(),
+          lastRegistrationRejectAt: db.serverDate(),
+          lastRegistrationRejectReason: text(reason).slice(0, 100),
+          lastRegistrationRejectPlayerName: text(row.playerRegistrationReceipt && row.playerRegistrationReceipt.name),
+          lastRegistrationRejectTeamId: text(teamId),
+          lastRegistrationRejectBy: text(operatorId),
+          updateTime: db.serverDate()
+        } })
+        if (Number(written && written.stats && written.stats.updated || 0) === 1) cleared += 1
+      }
+      return cleared
+    } catch (error) {
+      console.warn('[playerJoinReview] 驳回后重置登记会话失败', text(error && error.message))
+      return 0
+    }
+  }
+
+  // 逐人驳回通知走已上线的服务号桥（tournamentRegistrationFlow），复用已审核通过的
+  // 「注册申请驳回通知」模板；失败只记录，不阻断驳回结果。
+  async function notifyPlayerJoinRejected(teamId, playerId) {
+    const bridgeKey = text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY)
+    if (!bridgeKey || !cloud) return null
+    try {
+      const invoked = await cloud.callFunction({ name: 'tournamentRegistrationFlow', data: { action: 'notifyTeamPlayerJoinRejected', bridgeKey, teamId, playerId } })
+      return invoked && invoked.result || null
+    } catch (error) {
+      console.warn('[playerJoinReview] 入队驳回通知发送失败', text(error && error.message))
+      return null
+    }
+  }
 
   function readDocument(client, collection, id) {
     return Promise.resolve(client.collection(collection).doc(String(id)).get()).then(result => {
@@ -55,18 +101,22 @@ module.exports = function createPlayerJoinReview(deps) {
     if (!teams.some(item => text(item._id) === teamId)) throw workspaceError('TEAM_SCOPE_DENIED', '球队不存在或不属于当前工作空间')
     const operatorId = text(identity.user._id)
     if (event.action !== 'confirmTeamPlayerJoin') {
+      const reason = text(event.reason).slice(0, 100) || '球队未通过'
       const rejected = await db.collection('players').where({ _id: playerId, pendingJoinTeamId: teamId, pendingJoinStatus: 'pending' }).update({
         data: {
           pendingJoinStatus: 'rejected',
           pendingJoinRejectedAt: db.serverDate(),
           pendingJoinRejectedBy: operatorId,
-          pendingJoinRejectReason: text(event.reason).slice(0, 100) || '球队未通过',
+          pendingJoinRejectReason: reason,
           updateTime: db.serverDate()
         }
       })
       const changed = Number(rejected && rejected.stats && rejected.stats.updated || 0)
       if (changed !== 1) throw workspaceError('PLAYER_JOIN_STATE_CHANGED', '该入队申请已被处理，请刷新后重试')
-      return { success: true, playerId, status: 'rejected' }
+      // 驳回成功后立即放行球员重新登记，并尽力通知球员；两者都不影响驳回结果。
+      const reopened = await resetRegistrationAfterReject(teamId, playerId, reason, operatorId)
+      const notice = await notifyPlayerJoinRejected(teamId, playerId)
+      return { success: true, playerId, status: 'rejected', reopenedSessions: reopened, notice: notice && notice.success ? notice.data : null }
     }
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const before = (await safeGet('players', { _id: playerId }, 1))[0]
