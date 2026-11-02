@@ -1,0 +1,309 @@
+{
+  "generatedAt": "2026-11-02T03:07:26.431104+00:00",
+  "productionFrontendCommit": "3c12a496911ffb6e93efea96d73ae15f1e4c5ac9",
+  "backendSourceCommit": "20465a4cc6c4f7503c3be67df5cd958f7024397a",
+  "previewCommit": "074bc2f946983b1fec3339cae4e261ed99fa569a",
+  "production": {
+    "url": "https://www.sxffootball.cn/admin/",
+    "time": "2026-11-02T03:01:40.550Z",
+    "checks": [
+      {
+        "file": "index.html",
+        "http": 200,
+        "sha256": "e8fe6cd2aa3282a8e0c511aa7a81e36e5395d000ddb189bef626fddbebec1fd1"
+      },
+      {
+        "file": "assets/index-2u7riYJu.css",
+        "http": 200,
+        "sha256": "2eb466826157bf241d89e92645c78b850702df1f7f8998b02707c4789a95e3d9"
+      },
+      {
+        "file": "assets/index-CiPh-8tU.js",
+        "http": 200,
+        "sha256": "0de4001805f0eee12867d08ce0bf54c85c2a011f3abe6b87fb37dfc58b056b33"
+      },
+      {
+        "file": "assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "file": "assets/index-hP8py2Pg.js",
+        "http": 200,
+        "sha256": "1e381e94d9f5e69e328ab25401f44eb3955441812ea3d1a9a63eed20552fd2ef"
+      },
+      {
+        "file": "assets/TeamDetail-DO4Rjx0p.css",
+        "http": 200,
+        "sha256": "f9ae7ccb3e4c272ddedf66426b104fe09864acc3d323191873dc168a84aa127c"
+      },
+      {
+        "file": "assets/TeamDetail-Vwjp6ks-.js",
+        "http": 200,
+        "sha256": "053115b0b3edc146942f5afce62f3af5cca090af7885199c2fd318762d43539e"
+      },
+      {
+        "file": "assets/TournamentTeams-C3rXeTka.js",
+        "http": 200,
+        "sha256": "3d0c472e4efa2fe386c3494755f6d8eed97e0a2a0f984134001582cbb528e7ce"
+      },
+      {
+        "file": "assets/TournamentTeams-Dw5RjPkr.css",
+        "http": 200,
+        "sha256": "ab94e93ac1251416ad2bdd841567bb2456c64fd0211152bff7b45fc6a2f96139"
+      }
+    ]
+  },
+  "preview": {
+    "url": "https://www.sxffootball.cn/preview/admin/",
+    "time": "2026-11-02T03:04:06.269Z",
+    "checks": [
+      {
+        "file": "index.html",
+        "http": 200,
+        "sha256": "66b6c5cfd5e4093605d138dadbb3ca265f12683bf8fc3ea7c8976dc8aa0ba31f"
+      },
+      {
+        "file": "assets/index-7eBerNJa.css",
+        "http": 200,
+        "sha256": "1897e693db293bac528fcc113aa9beeab5df4e59d80fe930c6fa9faaf3c810bf"
+      },
+      {
+        "file": "assets/index-BbuYXMkN.js",
+        "http": 200,
+        "sha256": "b265d6c52dfeb94b1da04c54b328c4ead58e2d5bff9f496450662bec83162f8f"
+      },
+      {
+        "file": "assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "file": "assets/index-DL5k_xJ3.js",
+        "http": 200,
+        "sha256": "457bffe1f83598adcabad5f4d7462026b1ae80e7021db307e1b4362669ffe57e"
+      },
+      {
+        "file": "assets/TeamDetail-C2vwYGQ5.css",
+        "http": 200,
+        "sha256": "0d961a8b832b9e2f0a47a2a263023b6028889ad4d546be860610d1c73a30971f"
+      },
+      {
+        "file": "assets/TeamDetail-Dx7MtAty.js",
+        "http": 200,
+        "sha256": "3a03b645f212d8f7378917fed2f53d93e35fc355e19078bc3c62d2a4dabeb36e"
+      },
+      {
+        "file": "assets/TournamentTeams-Bxns6lnk.css",
+        "http": 200,
+        "sha256": "4b833353b5f495239aeec4124aa2c6bb65049c750b3006611371caf5ddbd8697"
+      },
+      {
+        "file": "assets/TournamentTeams-thrzbG-T.js",
+        "http": 200,
+        "sha256": "2beee8f6658492e3777467aa13bc5a397eb534fd45a8bc0ac4225b99252c1cc2"
+      }
+    ]
+  },
+  "h5": {
+    "production": [
+      {
+        "file": "me.html",
+        "http": 200,
+        "sha256": "e43ee487a4c7af0031ea7c28c89ac9914e6c1984b4623a68cf90e32954c07812"
+      },
+      {
+        "file": "player-review.css",
+        "http": 200,
+        "sha256": "433607b6a55d53d565f6237925c82869ef23f28bacad848731c927fef7adeb0c"
+      },
+      {
+        "file": "player-review.html",
+        "http": 200,
+        "sha256": "3a018bc22df1ead692e0a0ced8376d04e27917ccf2ac48df292a9d03e01f7d9c"
+      },
+      {
+        "file": "player-review.js",
+        "http": 200,
+        "sha256": "6b0ed2e97c646e305ee99fae8a11231e100167ec39f50c840abc40c906d033cf"
+      },
+      {
+        "file": "service-personal.js",
+        "http": 200,
+        "sha256": "20dbdc867c0f94cf9367390e93d413753ec861ed7438eee0cce15db350aa4839"
+      }
+    ],
+    "preview": [
+      {
+        "file": "me.html",
+        "http": 200,
+        "sha256": "41f80ce9c32fdc0e6375aa7da89636df8550b39842207af17c13912d31bc5f49"
+      },
+      {
+        "file": "player-review.css",
+        "http": 200,
+        "sha256": "433607b6a55d53d565f6237925c82869ef23f28bacad848731c927fef7adeb0c"
+      },
+      {
+        "file": "player-review.html",
+        "http": 200,
+        "sha256": "3a018bc22df1ead692e0a0ced8376d04e27917ccf2ac48df292a9d03e01f7d9c"
+      },
+      {
+        "file": "player-review.js",
+        "http": 200,
+        "sha256": "6b0ed2e97c646e305ee99fae8a11231e100167ec39f50c840abc40c906d033cf"
+      },
+      {
+        "file": "service-personal.js",
+        "http": 200,
+        "sha256": "499da1940d16788d6c096ed037eaa6b4cd7c2af5cafe0b0c393c4d000f3e58b5"
+      }
+    ]
+  },
+  "backend": {
+    "web": {
+      "businessFiles": [
+        {
+          "file": "index.js",
+          "sha256": "ce4aef36e45a92274db05372c0bfb107c796d3070b0bf5027c573a1928cfb65e",
+          "matches": true
+        },
+        {
+          "file": "playerReviewWorkflow.cjs",
+          "sha256": "9c81c5093d1b2489435a1adb1566b1499cdf1c6cb21adb5eab6424e2ebbdaa88",
+          "matches": true
+        },
+        {
+          "file": "servicePrivate.cjs",
+          "sha256": "edb23f1485737fef98bb39669523c136777e31e9f09f474040df3e59ae575168",
+          "matches": true
+        },
+        {
+          "file": "servicePersonalAccount.cjs",
+          "sha256": "d37f627e659dee5b5bdc7faf4f021ddf4b467ae57e50b058164decb8e23a5deb",
+          "matches": true
+        },
+        {
+          "file": "playerCorrectionValidation.cjs",
+          "sha256": "b843dfd38b6ff9502605c0331c8de248a679d38b1757931a53bc1a0236b4814b",
+          "matches": true
+        },
+        {
+          "file": "data-center/idcard-region.cjs",
+          "sha256": "c318a809aae3a4827ffd5bcc44f568605454f82241814691f2b31daa483c64c3",
+          "matches": true
+        },
+        {
+          "file": "data-center/numbering-regions.json",
+          "sha256": "4b62fc1230e4105b68addb83d61af1d04031b6c98dfbf3294fefe6ac6ea564ed",
+          "matches": true
+        }
+      ],
+      "unrelatedSourcePreserved": true,
+      "finalIncrementalFixVerified": true
+    },
+    "flow": {
+      "businessFiles": [
+        {
+          "file": "index.js",
+          "sha256": "5ec562b98ccfb061e3f1c0459acefb7a10e3aa7aa0b5d03de569ab64abb8b2fb",
+          "matches": true
+        },
+        {
+          "file": "playerReviewIdentity.cjs",
+          "sha256": "30a1b550b358ae46cba43a135a0e18df761bf0d21cb0688fb81ebf85a10348cd",
+          "matches": true
+        },
+        {
+          "file": "playerReviewNotification.cjs",
+          "sha256": "7c4ff6325bda8c556c56fb5114542a20dac189778f379068eb70fa84be2566e6",
+          "matches": true
+        }
+      ],
+      "unrelatedSourcePreserved": true
+    }
+  },
+  "configuration": {
+    "web": {
+      "allPulledConfigurationPreserved": true,
+      "environmentValuesPreserved": true
+    },
+    "flow": {
+      "allPulledConfigurationPreserved": true,
+      "environmentValuesPreserved": true
+    }
+  },
+  "dependencies": {
+    "web": {
+      "dependencyFileCount": 6484,
+      "runtimeDependencyBytesPreserved": true,
+      "metadataChanges": [
+        "node_modules/.package-lock.json"
+      ],
+      "licenseMetadataOnly": true
+    },
+    "flow": {
+      "dependencyFileCount": 6401,
+      "runtimeDependencyBytesPreserved": true,
+      "metadataChanges": [
+        "node_modules/.package-lock.json"
+      ],
+      "licenseMetadataOnly": true
+    }
+  },
+  "pad": {
+    "feedUrl": "https://www.sxffootball.cn/desktop/android/latest.json",
+    "http": 200,
+    "packageId": "cn.sxffootball.pad.preview",
+    "version": "0.1.2",
+    "versionCode": 102,
+    "sha256": "0fba0822c0a74b47cb069358708bd0b6e6bde2d5c823704fad8de525331eec1b",
+    "home": "https://www.sxffootball.cn/preview/admin/#/login",
+    "deviceConnected": false,
+    "sourceUnchanged": true
+  },
+  "database": {
+    "collection": "player_review_tasks",
+    "permission": "ADMINONLY",
+    "readbackCount": 0
+  },
+  "limitations": [
+    "Generic WeChat reminder template not configured; station inbox active and UI reports unsent WeChat status",
+    "No real-user notifications or roster mutations performed for verification",
+    "No connected Pad device; viewport and existing feed/APK verified",
+    "Existing whole data-center test and copy baseline failures remain"
+  ],
+  "desktopProduction": {
+    "channel": "production",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/admin/",
+    "status": "passed"
+  },
+  "desktopPreview": {
+    "channel": "preview",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/preview/admin/",
+    "status": "passed"
+  }
+}

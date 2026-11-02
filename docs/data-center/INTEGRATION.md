@@ -428,6 +428,6 @@ DrawScreenProjection依据显式format分流：league为联赛签位顺序，不
 
 webLoginApi/uploadFile的staffUploadRights对football/team-registration-imports/{当前赛事}限定.docx初始化及临时读取，复用event.registration；分片会话继续绑定账号/机构/赛事，撤权拒绝。共享后端已上线，uploadFile按用户追加授权关闭云端自动安装，原依赖随包发布。见../releases/registration-upload-scope-20261028.md。
 
-## 2026-11-02 队员审核闭环与通知（实施中）
+## 2026-11-02 队员审核闭环与通知（已发布）
 
 PC TeamDetail/PlayerReviewQueue → rosterExceptionBoard（原赛事/机构/event.teams鉴权）→ playerReviewWorkflow。仅当前赛事参赛关系下读取队员，完整游标分页及范围预算失败显式报错；不新增竞技统计。队员通知持久化player_review_tasks，站内messages按账号去重；tournamentRegistrationFlow.playerReviewNotification验证限时HMAC后按已绑定账号发送，保留真实状态。H5 player-review → 既有servicePrivate自然人手机号会话 → 每次复核本人/监护人或未认领球队管理员权限；重新提交事务校验版本，保留原驳回原因与历史快照。源共享idcard-region.cjs生成webLoginApi部署副本，PC复用同源规则，不更改已有籍贯或稳定ID。发布事实见[专项记录](../releases/player-review-cycle-20261102.md)。
