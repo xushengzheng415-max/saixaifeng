@@ -1,0 +1,155 @@
+{
+  "generatedAt": "2026-11-02T04:59:19.753036+00:00",
+  "featureCommit": "cbfafb15",
+  "productionBuildCommit": "ee7e7d2976266e83c185060dc9079f7f50c51e0a",
+  "previewBuildCommit": "0e53c22810f556c95a8adbfa9da545ce41ae9caf",
+  "production": {
+    "url": "https://www.sxffootball.cn/admin/",
+    "time": "2026-11-02T04:52:22.897Z",
+    "checks": [
+      {
+        "file": "index.html",
+        "http": 200,
+        "sha256": "02d00d823ec0ef1dfc7e8e0fca24cc6af6eab4629e8ee4549bb9f77af6c3b902"
+      },
+      {
+        "file": "assets/index-2u7riYJu.css",
+        "http": 200,
+        "sha256": "2eb466826157bf241d89e92645c78b850702df1f7f8998b02707c4789a95e3d9"
+      },
+      {
+        "file": "assets/index-BlT660rB.js",
+        "http": 200,
+        "sha256": "4e01744a65965dba07e157d2fd01db9fee72395b9982b0eb4d2511d54d325f57"
+      },
+      {
+        "file": "assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "file": "assets/index-hP8py2Pg.js",
+        "http": 200,
+        "sha256": "1e381e94d9f5e69e328ab25401f44eb3955441812ea3d1a9a63eed20552fd2ef"
+      },
+      {
+        "file": "assets/TeamDetail-DnPOnJlz.js",
+        "http": 200,
+        "sha256": "55c0c8829ee5a5e12b9b2b8680a7ef48a0f5b6f2be93d1c7550ba66c9d34b28b"
+      },
+      {
+        "file": "assets/TeamDetail-lVfMmxnB.css",
+        "http": 200,
+        "sha256": "bd4a35bcc949ed7d67e27abab0db31469cf4a06679dccc447fb585c32c3511da"
+      },
+      {
+        "file": "assets/TournamentTeams-CbusD-rF.js",
+        "http": 200,
+        "sha256": "3b0314b1a5b2467d4758a69185465455c304d099fbfe2285721751d25e0f7309"
+      },
+      {
+        "file": "assets/TournamentTeams-Dw5RjPkr.css",
+        "http": 200,
+        "sha256": "ab94e93ac1251416ad2bdd841567bb2456c64fd0211152bff7b45fc6a2f96139"
+      }
+    ]
+  },
+  "preview": {
+    "url": "https://www.sxffootball.cn/preview/admin/",
+    "time": "2026-11-02T04:56:53.624Z",
+    "checks": [
+      {
+        "file": "index.html",
+        "http": 200,
+        "sha256": "abd74376c5cc60fa7cf57248643a4c1b86340ada3a39857e0ad13c3388143795"
+      },
+      {
+        "file": "assets/index-7eBerNJa.css",
+        "http": 200,
+        "sha256": "1897e693db293bac528fcc113aa9beeab5df4e59d80fe930c6fa9faaf3c810bf"
+      },
+      {
+        "file": "assets/index-BbuYXMkN.js",
+        "http": 200,
+        "sha256": "b265d6c52dfeb94b1da04c54b328c4ead58e2d5bff9f496450662bec83162f8f"
+      },
+      {
+        "file": "assets/index-BDNtuSwe.js",
+        "http": 200,
+        "sha256": "f3cdcbda6238c355c1de929f604d2dbc46a6b86c33ce28dcd9cd02abff2294a0"
+      },
+      {
+        "file": "assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "file": "assets/TeamDetail-BogRjRb1.js",
+        "http": 200,
+        "sha256": "0dcc5ea91c904907455afc66d51455f2703b9ef23a2a95965854a5b25aa2c61a"
+      },
+      {
+        "file": "assets/TeamDetail-CeYZwvJW.css",
+        "http": 200,
+        "sha256": "eea2aa1118dc033d723eaec0747fb757267dc7e5faca3d55222ba4a9604b1d77"
+      },
+      {
+        "file": "assets/TournamentTeams-Bxns6lnk.css",
+        "http": 200,
+        "sha256": "4b833353b5f495239aeec4124aa2c6bb65049c750b3006611371caf5ddbd8697"
+      },
+      {
+        "file": "assets/TournamentTeams-TcMSrhwO.js",
+        "http": 200,
+        "sha256": "8fc82332ba65996799c96e03f1b80164d217b949bd59c2661d4b730f5424681b"
+      }
+    ]
+  },
+  "cloudFunctionChanges": false,
+  "h5Changes": false,
+  "miniProgramChanges": false,
+  "pad": {
+    "existingPreviewPackage": "cn.sxffootball.pad.preview",
+    "version": "0.1.2",
+    "url": "https://www.sxffootball.cn/preview/admin/#/login",
+    "pageSynced": true,
+    "deviceTested": false
+  },
+  "businessVerification": {
+    "actualSubmitHandler": "isolated mock database writes only",
+    "browser": "actual form fields at desktop and Pad sizes",
+    "realPlayerWrites": false
+  },
+  "desktopProduction": {
+    "channel": "production",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/admin/",
+    "status": "passed"
+  },
+  "desktopPreview": {
+    "channel": "preview",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/preview/admin/",
+    "status": "passed"
+  }
+}
