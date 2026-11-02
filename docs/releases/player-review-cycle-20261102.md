@@ -1,6 +1,6 @@
 # 队员审核、资料修正与通知 2026-11-02
 
-状态：本地专项回归通过，发布与客户端回读待完成。
+状态：正式/测试PC、对应H5已发布；共享后端已差量部署并读回。Windows安装版两通道各8项通过。
 
 ## 内容与边界
 
@@ -21,4 +21,12 @@
 
 ## 发布证据
 
-待填。新集合player_review_tasks已创建，ADMINONLY权限已读回；真实业务数据尚未写入。共享后端按最新线上包差量；webLoginApi须通过裁判/报名包检查并保留配置与依赖，uploadFile不改动。桌面0.2.8远程页面同步；Pad仅既有测试包加载preview入口，本次不创建新的Pad正式包，未连接真机。
+正式前端构建3c12a496，后端修正源码20465a4c；main完整合入preview，测试最终构建074bc2f9，保留测试独有账号权限等改动。正式/测试PC各9项HTTP/资源摘要一致，H5各5文件HTTP/摘要一致；Windows0.2.8两通道各8项通过。完整证据见[player-review-cycle-20261102.readback.json](player-review-cycle-20261102.readback.json)。
+
+新集合player_review_tasks已创建，ADMINONLY权限已读回；验收后读回记录数0，未向真实用户发送本轮通知或操作真实队员。共享后端按最新线上包差量；webLoginApi须通过裁判/报名包检查并保留配置与依赖，uploadFile不改动。桌面0.2.8远程页面同步；Pad仅既有测试包加载preview入口，本次不创建新的Pad正式包，未连接真机。
+
+共享函数均Active/Available；实际私有配置前后相同，包含环境变量值，不在报告中记录敏感值。线上代码回下载与拟发布业务模块摘要一致，未涉及的源文件保持原样；web6484项运行依赖文件、flow依赖文件均未增加或改变运行代码，仅在线安装器更新node_modules/.package-lock.json的license元数据。证件摘要沿原tournamentRegistrationFlow受保护密钥，通过限时签名内部调用生成，不复制密钥或改环境配置。旧通知不能提交更新后的审核事项。
+
+Pad现有0.1.2/versionCode102测试包及更新清单HTTP200，APK摘要0fba0822c0a74b47cb069358708bd0b6e6bde2d5c823704fad8de525331eec1b；源码ClientPolicy.HOME仍为preview/admin，随测试站更新，不重发未修改安装包。未修改或重传小程序包，不宣称小程序正式审核/发布已完成。
+
+任务发布记录与无个人资料的摘要文件已单独按白名单归档并逐字节核验。全量知识库同步与--check仍报告既有人工镜像冲突，均已保留；本次未覆盖这些旧规范。finish-data-change在全量共享副本检查处因既有不一致停止，专项地区副本/治理及业务回归通过。
