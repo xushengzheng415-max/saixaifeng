@@ -39,8 +39,9 @@ async function candidates(db,actor,gateId){
   for(const row of rows){if(gateId&&text(row.gateId)!==text(gateId))continue;const loaded=await scope(db,row,actor);if(loaded)result.push({...loaded,row})}
   return result.sort((a,b)=>time(b.row.playerRegistrationFormDraft?.updatedAt||b.row.updateTime||b.row.createTime)-time(a.row.playerRegistrationFormDraft?.updatedAt||a.row.updateTime||a.row.createTime)||text(a.row._id).localeCompare(text(b.row._id)))
 }
-async function list(db,actor){
-  const rows=await candidates(db,actor),seen=new Set(),entries=[]
+async function list(db,actor,options){
+  const gateFilter=text(options&&options.gateId)
+  const rows=await candidates(db,actor,gateFilter),seen=new Set(),entries=[]
   const push=(gateId,reference,entry)=>{
     const key=JSON.stringify([gateId,reference])
     if(seen.has(key))return
@@ -48,18 +49,33 @@ async function list(db,actor){
     entries.push(entry)
   }
   for(const {row,team} of rows){
-    const teamName=text(team.name||team.teamName)
+    const teamName=text(team.name||team.teamName),gateId=text(row.gateId)
     const receipt=row.playerRegistrationReceipt,choice=row.playerRegistrationChoice,draft=row.playerRegistrationFormDraft
     const draftName=text(draft&&draft.values&&draft.values.name)
+    const rejectedAt=time(row.lastRegistrationRejectAt),rejectReason=text(row.lastRegistrationRejectReason)
+    let listed=false
     // 已完成的登记以回执为唯一凭据：同一会话完成后再登记其他球员（邀请usageMode=multi）会生成
     // 新的choice并覆盖draft，不能因此把已提交成功的那次显示成「待提交」。
-    if(receipt&&text(receipt.playerId))push(row.gateId,'registered:'+text(receipt.playerId),{id:text(row._id),teamName,playerName:text(receipt.name)||draftName,status:'registered',updatedAt:time(row.updateTime||row.createTime)})
+    if(receipt&&text(receipt.playerId)){
+      push(gateId,'registered:'+text(receipt.playerId),{id:text(row._id),gateId,teamName,playerName:text(receipt.name)||draftName,status:'registered',updatedAt:time(row.updateTime||row.createTime)})
+      listed=true
+    }
     // 进行中的登记：只有确实填过内容（草稿属于当前choice且不属于已完成的那次提交）才值得继续，
     // 只选过模式或只传过照片的空会话不再堆在列表里。
-    if(draftName&&text(draft.choiceToken)&&text(draft.choiceToken)===text(choice&&choice.nonce)&&text(draft.choiceToken)!==text(receipt&&receipt.choiceToken))
-      push(row.gateId,'draft:'+text(draft.choiceToken),{id:text(row._id),teamName,playerName:draftName,status:'draft',updatedAt:time(draft.updatedAt||row.updateTime||row.createTime)})
+    if(draftName&&text(draft.choiceToken)&&text(draft.choiceToken)===text(choice&&choice.nonce)&&text(draft.choiceToken)!==text(receipt&&receipt.choiceToken)){
+      push(gateId,'draft:'+text(draft.choiceToken),{id:text(row._id),gateId,teamName,playerName:draftName,status:'draft',rejectReason,rejectedAt,updatedAt:time(draft.updatedAt||row.updateTime||row.createTime)})
+      listed=true
+    }
+    // 被驳回的登记：球队驳回时会清掉回执与草稿，只留下驳回印记（球员名、理由、所属球队）。
+    // 这里必须单独成条，否则通知落地页看不到被驳回的那条，只剩同账号下更新的其他草稿。
+    if(!listed&&rejectedAt&&text(row.lastRegistrationRejectPlayerName)){
+      const rejectTeamId=text(row.lastRegistrationRejectTeamId)
+      const rejectTeam=rejectTeamId&&rejectTeamId!==text(team._id)?await read(db,'teams',rejectTeamId):null
+      const rejectTeamName=rejectTeam&&!Array.isArray(rejectTeam)?text(rejectTeam.name||rejectTeam.teamName):''
+      push(gateId,'rejected:'+rejectedAt,{id:text(row._id),gateId,teamName:rejectTeamName||teamName,playerName:text(row.lastRegistrationRejectPlayerName),status:'rejected',rejectReason,rejectedAt,updatedAt:rejectedAt})
+    }
   }
-  return {success:true,entries}
+  return {success:true,gateId:gateFilter,entries}
 }
 async function rotate(db,actor,record){
   identity(actor)

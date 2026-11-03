@@ -1919,6 +1919,26 @@ async function notifyPlayerReviewRejected(event) {
 // 逐人入队驳回通知（2026-10-30）：球员扫码登记后被球队驳回时，告诉球员被哪支球队驳回、
 // 原因是什么，并落到服务号自助登记入口重新填写。复用已审核通过的「注册申请驳回通知」
 // 模板与既有服务号桥，不新增环境变量；展示内容一律以服务端库为准。
+// 驳回通知必须指向被驳回的那条登记：球员邀请在服务号里的门控（service_follow_gates）就是
+// 这次登记的实际入口，带上 gate 参数后落地页才能定位到它，而不是该账号下更新的其他草稿。
+async function playerInviteGateId(player) {
+  const inviteId = text(player && player.playerInviteId)
+  if (!inviteId) return ''
+  try {
+    const result = await db.collection('service_follow_gates')
+      .where({ inviteId, purpose: 'player_invite_entry', status: 'active' })
+      .limit(5)
+      .get()
+    const usable = (result.data || [])
+      .filter(gate => dateValue(gate.expiresAt) > Date.now())
+      .sort((a, b) => dateValue(b.createTime) - dateValue(a.createTime))
+    return text(usable[0] && usable[0]._id)
+  } catch (error) {
+    console.warn('[tournamentRegistrationFlow] player invite gate lookup skipped', text(error && error.message))
+    return ''
+  }
+}
+
 async function notifyTeamPlayerJoinRejected(event) {
   const expected = text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY)
   if (!expected || text(event.bridgeKey) !== expected) return { success: false, code: 'BRIDGE_AUTH_FAILED', message: '服务号桥接校验失败' }
@@ -1934,7 +1954,8 @@ async function notifyTeamPlayerJoinRejected(event) {
   const rejectedAt = dateValue(player.pendingJoinRejectedAt || player.updateTime) || Date.now()
   const rejectedAtText = new Date(rejectedAt + 8 * 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ')
   const businessEventId = `team_player_join_rejected:${playerId}:${rejectedAt}`
-  const targetUrl = 'https://www.sxffootball.cn/service-account-h5/registration-resume.html'
+  const gateId = await playerInviteGateId(player)
+  const targetUrl = 'https://www.sxffootball.cn/service-account-h5/registration-resume.html' + (gateId ? '?gate=' + gateId : '')
   const record = (status, extra) => upsertByKey('notification_outbox', `${businessEventId}:service_account`, Object.assign({
     sport: SPORT, businessEventId, teamId, playerId, channel: 'service_account',
     status, attemptedAt: db.serverDate(), targetPage: targetUrl

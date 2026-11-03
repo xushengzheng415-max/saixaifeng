@@ -75,7 +75,9 @@ module.exports = function createServicePrivate({ cloud, config, hashSessionToken
     if(!context.user)return context
     if(['servicePrivateRegistrationList','servicePrivateResumeRegistration'].includes(action)){
       const recovery=require('./serviceRegistrationRecovery.cjs'),actor={userId:text(context.user._id),openId:text(context.session.serviceAccountOpenId),phone:text(context.user.phone||context.user.phoneNumber)}
-      return action==='servicePrivateRegistrationList'?recovery.list(db,actor):recovery.resume(db,actor,event.registrationId)
+      // 服务号驳回通知可带 gate 参数直达被驳回的那条登记；只接受合法门控ID，非法值退回整表列表。
+      const gateId = /^[a-f0-9]{32}$/.test(text(event.gate)) ? text(event.gate) : ''
+      return action==='servicePrivateRegistrationList'?recovery.list(db,actor,{gateId}):recovery.resume(db,actor,event.registrationId)
     }
     if(action==='servicePrivateAccountData')return require('./servicePersonalAccount.cjs')({db,user:context.user,session:context.session})
     // 蜂蜜充值：复用同一套自然人会话鉴权，账本归属仍然是服务号 OpenID

@@ -35,8 +35,21 @@ async function main(){
  rows.service_entry_sessions.blank={...structuredClone(rows.service_entry_sessions.s),_id:'blank',playerRegistrationChoice:null,playerRegistrationFormDraft:null,createTime:new Date(),tokenHash:'blank'}
  const recovered=await recovery.afterOAuth(db,actor,'g')
  assert.equal(rows.service_entry_sessions.s.tokenHash,hash(recovered.serviceEntrySession),'fresh OAuth must recover the unfinished draft rather than start a blank session')
+ // 被驳回的登记：球队驳回时服务端已清空回执与草稿，只留下驳回印记；
+ // 落地页必须仍能看到「被哪支球队驳回、什么原因」，并能重新填写，否则只会显示账号下更新的其他草稿。
+ rows.teams['reject-team']={_id:'reject-team',name:'开德体育足球队'}
+ rows.service_entry_sessions.rejected={_id:'rejected',active:true,purpose:'player_invite_entry',phoneVerified:true,userId:'u',officialOpenId:'official',gateId:'g',entryKey:'fixture-entry',tokenHash:'rejected',createTime:new Date(9000),updateTime:new Date(9000),lastRegistrationRejectAt:new Date(9000),lastRegistrationRejectPlayerName:'被驳回球员',lastRegistrationRejectReason:'资料不对',lastRegistrationRejectTeamId:'reject-team'}
+ const withRejected=await recovery.list(db,actor)
+ const rejectedEntry=withRejected.entries.find(entry=>entry.status==='rejected')
+ assert.ok(rejectedEntry,'rejected registration stays listed after the draft was cleared')
+ assert.equal(rejectedEntry.playerName,'被驳回球员');assert.equal(rejectedEntry.rejectReason,'资料不对');assert.equal(rejectedEntry.teamName,'开德体育足球队');assert.equal(rejectedEntry.gateId,'g')
+ assert.ok(withRejected.entries.every(entry=>entry.gateId==='g'),'every entry carries its gate id for deep-link filtering')
+ assert.equal((await recovery.list(db,actor,{gateId:'g'})).entries.length,withRejected.entries.length)
+ assert.equal((await recovery.list(db,actor,{gateId:'other'})).entries.length,0,'gate filter must not fall back to other registrations')
+ const resumedRejected=await recovery.resume(db,actor,'rejected')
+ assert.match(resumedRejected.serviceEntrySession,/^[a-f0-9]{64}$/,'rejected registration can be reopened')
  rows.users.u.phoneNumber='13900000000'
  await assert.rejects(()=>recovery.resume(db,actor,'s'),e=>e.code==='SERVICE_PRIVATE_ACCOUNT_UNAVAILABLE')
- console.log('PASS registration recovery: own WeChat/user only, minimal catalog, fresh-auth renewal of expired session, draft/choice/portrait preservation, token rotation, revocation and concurrent rotation rejection, unfinished OAuth recovery and phone conflict')
+ console.log('PASS registration recovery: own WeChat/user only, minimal catalog, fresh-auth renewal of expired session, draft/choice/portrait preservation, token rotation, revocation and concurrent rotation rejection, unfinished OAuth recovery, rejected registration entry with gate deep-link filter and reopen, phone conflict')
 }
 main().catch(e=>{console.error(e);process.exitCode=1})
