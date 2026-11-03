@@ -374,20 +374,19 @@
     if (!playerId) { showError('缺少球员信息，请从卡库重新进入'); return }
     rememberPlayerId(playerId)
     $('btn-back-link').href = backUrl()
+    // 一次请求同时拿到球员名/球队与价格余额：cardAiPortraitInfo 已做归属校验，
+    // 不再额外拉 5MB 的 getMyPlayerCard 形象照大图。
     Api.ensureSession().then(function () {
-      return Api.getCard(playerId)
+      return Api.aiPortraitInfo({ playerId: playerId })
     }).then(function (result) {
-      var player = (result && result.player) || {}
-      state.name = text(player.name)
-      state.teamName = text(player.teamName)
+      state.name = text(result.playerName)
+      state.teamName = text(result.teamName)
       $('player-name').textContent = state.name || '球员'
       $('player-team').textContent = state.teamName || '—'
       $('portrait-sub').textContent = (state.name || '球员') + ' · 上传照片直接生成'
       show('state-loading', false)
       show('content', true)
-      return Api.aiPortraitInfo({ playerId: playerId }).then(renderPrice).catch(function (error) {
-        $('balance-line').textContent = (error && error.message) || '蜂蜜余额暂时读取不到'
-      })
+      renderPrice(result)
     }).catch(function (error) {
       var code = (error && error.code) || ''
       if (code === 'CARD_AI_PORTRAIT_AUTH_REQUIRED' || code === 'PLAYER_CARD_AUTH_REQUIRED') {

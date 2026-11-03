@@ -41,6 +41,7 @@ function contextOf(context) {
     auth,
     player: entry.player,
     playerId,
+    teamName: text(entry.teamName),
     relation: entry.relation || null,
     isStillOwned: typeof isStillOwned === 'function' ? isStillOwned : null
   }
@@ -59,7 +60,7 @@ function priceView(pricing, extra) {
 
 // 生成前读一次：价格、余额、能不能直接用。读不到余额时如实给原因，不把余额显示成 0。
 async function info(context) {
-  const { db, auth, player, playerId } = contextOf(context)
+  const { db, auth, player, playerId, teamName } = contextOf(context)
   const pricing = await pricingModule().currentPricing(db, text(auth.openId))
   let balance = null
   let available = false
@@ -80,6 +81,7 @@ async function info(context) {
     success: true,
     playerId,
     playerName: text(player.name),
+    teamName,
     aiPortrait: priceView(pricing, { balance, available, reason })
   }
 }
