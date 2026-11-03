@@ -1,4 +1,4 @@
-# 我的球员卡 H5：编辑卡面入口与 AI 定妆照提示（2026-11-03）
+# 我的球员卡 H5：卡面设计独立页面 + 完整成卡预览 + AI 定妆照入口（2026-11-03）
 
 ## 背景
 
@@ -22,31 +22,43 @@
 
 分支 `codex/h5-card-world-edit-20261103`（基于 `6db69827`，并把 `api.js` 对齐到线上 `1ab69b4f`）：
 
-1. 卡库每张卡新增「编辑卡面」，复用已有卡面设置（背景 + 照片构图），不新增解锁逻辑。
-2. 主卡下方新增「对背景或形象照不满意？」提示卡，按钮直达服务号「球员登记 · 形象照」的
-   AI 定妆照（`../registration-resume.html`）。
-3. 卡面设置弹层顶部新增 AI 定妆照引导块。
-4. 修正三处把换照片/照片合成指向小程序的旧文案：小程序只负责签约与组阵。
-5. 资源版本号 `css/app.css`、`js/app.js` 更新为 `?v=20261103-ai1`。
+1. 卡面设计从弹层改为独立页面 `card-world/design.html`（`js/design.js`），不再用 `sheet-mask` / `preview-mask`。
+   - 删除 `#settings-mask`、`#preview-mask` 两段弹层标记与对应 JS（`openSettings`、`renderBackgrounds`、
+     `renderCrop`、`settingsPayload`、`previewCard`、`saveCard`、`state.settings`）。
+   - 主卡「设计卡面」和卡库「编辑卡面」统一跳 `./design.html?playerId=...`。
+   - 授权回调会丢掉查询串，`playerId` 另存 `sessionStorage('sxf_card_design_player')` 兜底。
+2. 卡面预览改为加载**完整成卡（背景 + 形象照）**：`previewMyPlayerCard` 返回的 `imageData` 直接铺在
+   `#design-stage`，不再只显示原始人像；背景缩略图也是各背景下的成卡渲染结果，逐张串行拉取。
+3. AI 形象照入口固定在本页两处：`#btn-ai-portrait`（「重点」提示卡）与 `#btn-ai-portrait-crop`（照片构图区），
+   失败态另外提供 `#btn-ai-error`，均跳 `../registration-resume.html`（服务号「球员登记 · 形象照」的智能生成）。
+4. 卡库每张卡新增「编辑卡面」。
+5. 修正把换照片/照片合成指向小程序的旧文案：小程序只负责签约与组阵。
+6. 资源版本号更新为 `?v=20261103-page1`（`css/app.css`、`js/app.js`、`js/design.js`）。
 
-页面不自判会员资格、背景解锁条件与蜂蜜消耗，全部沿用服务端返回。
+页面不自判会员资格、背景解锁条件与蜂蜜消耗，全部沿用服务端返回；`design.html` 不引入
+`holo-cosmos.css`，只保留必要样式。
 
 ## 发布状态
 
 | 目标 | 路径 | 状态 |
 |---|---|---|
-| 测试（独立副本） | `/preview/service-account-h5/card-world-ai/` | 已发布，回下载字节一致（index 9,682 B、css 12,538 B、app.js 19,561 B） |
+| 测试（独立副本） | `/preview/service-account-h5/card-world-ai/` | 已发布（2026-11-03 第 2 次），回下载字节一致：index 6,899 B、design.html 4,770 B、css/app.css 11,785 B、js/app.js 13,073 B、js/design.js 11,161 B |
 | 测试（依赖补齐） | `/preview/service-account-h5/registration-resume.html`、`.js` | 已发布（原 404，取正式字节） |
 | 正式 | `/service-account-h5/card-world/` | **未发布，待授权** |
 
-预览页：<https://www.sxffootball.cn/preview/service-account-h5/card-world-ai/index.html>
+预览页：
+
+- 卡库：<https://cloud1-7g8ckb3c7815a011-1419431905.tcloudbaseapp.com/preview/service-account-h5/card-world-ai/index.html>
+- 卡面设计：<https://cloud1-7g8ckb3c7815a011-1419431905.tcloudbaseapp.com/preview/service-account-h5/card-world-ai/design.html?playerId=...>
+- 正式域名同路径：`https://www.sxffootball.cn/preview/service-account-h5/card-world-ai/`
 
 注意：`/preview/service-account-h5/card-world/` 上仍是另一套全量玩法页（在途未验收），
 本次没有覆盖它，改动放在独立 `card-world-ai` 副本中，避免清除他人未验收内容。
 
 ## 验证
 
-- `node --check` 通过：`card-world/js/app.js`、`js/api.js`
-- 回下载字节级 SHA-256 一致：index.html / css/app.css / js/app.js
-- 页面标记回读：`ai-panel`、`btn-ai-portrait`、`v=20261103-ai1` 均存在
-- 待真机确认：卡库「编辑卡面」打开设置、AI 按钮跳到球员登记并能看到「智能生成」形象照
+- `node --check` 通过：`card-world/js/app.js`、`js/design.js`
+- 回下载字节级 SHA-256 一致：index.html / design.html / css/app.css / js/app.js / js/design.js
+- 残留扫描：`settings-mask`、`preview-mask`、`openSettings`、`crop-image`、`btn-ai-portrait-sheet` 均为 0 命中
+- 依赖可达：`../registration-resume.html`、`js/api.js`、`js/holo.js`、`css/holo-cosmos.css`、`assets/cosmos/*` 全部 200
+- 待真机确认：设计页打开即显示含背景的成卡；切换背景大图与缩略图同步更新；两处 AI 按钮能进「智能生成」形象照；保存后回到卡库
