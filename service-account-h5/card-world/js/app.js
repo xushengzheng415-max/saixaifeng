@@ -138,10 +138,16 @@
         '<span class="lib-card__name">' + escapeHtml(player.name || '球员') + '</span>' +
         '<span class="lib-card__meta">' + escapeHtml(meta || '数据中心未提供位置') + '</span>' +
         (isMain ? '<span class="lib-card__badge">当前主卡</span>' : '') +
+        '<div class="lib-card__btns">' +
+        '<button type="button" class="btn btn--ghost lib-card__btn" data-edit="' + escapeHtml(player.id) + '">编辑卡面</button>' +
         '<button type="button" class="btn btn--ghost lib-card__btn" data-player="' + escapeHtml(player.id) + '"' + (isMain ? ' disabled' : '') + '>' +
         (isMain ? '已是主卡' : '设为主卡') + '</button>' +
+        '</div>' +
         '</div>'
       list.appendChild(card)
+    })
+    Array.prototype.forEach.call(list.querySelectorAll('button[data-edit]'), function (button) {
+      button.addEventListener('click', function () { openSettings(button.getAttribute('data-edit')) })
     })
     Array.prototype.forEach.call(list.querySelectorAll('button[data-player]'), function (button) {
       button.addEventListener('click', function () { setMainCard(button.getAttribute('data-player'), button) })
@@ -208,9 +214,15 @@
       $('btn-save').disabled = false
     }).catch(function (error) {
       show('settings-mask', false)
-      if (error.code === 'PLAYER_CARD_PORTRAIT_REQUIRED') toast('该球员还没有标准形象照，请先去小程序完成拍摄')
+      if (error.code === 'PLAYER_CARD_PORTRAIT_REQUIRED') toast('该球员还没有标准形象照，请先做 AI 定妆照')
       else toast(error.message || '卡面读取失败，请重试')
     })
+  }
+
+  /* AI 定妆照：真实合成流程在服务号「球员登记 · 形象照」(join-player 的智能生成)，
+     本页只做引导，不自行判定资格、不扣费。 */
+  function openAiPortrait() {
+    location.href = '../registration-resume.html'
   }
 
   function renderBackgrounds() {
@@ -314,7 +326,7 @@
       show('settings-mask', false)
       return refresh()
     }).catch(function (error) {
-      if (error.code === 'PLAYER_CARD_PHOTO_PAY_REQUIRED') toast('换照片需去小程序合成，H5 不扣费')
+      if (error.code === 'PLAYER_CARD_PHOTO_PAY_REQUIRED') toast('换照片需先用 AI 定妆照合成新形象照，本页不扣费')
       else if (error.code === 'PLAYER_CARD_CONFLICT') toast('卡面已更新，请重新打开设置')
       else if (error.code === 'PLAYER_CARD_BACKGROUND_LOCKED') toast('该背景未解锁')
       else toast(error.message || '保存失败，请重试')
@@ -349,7 +361,7 @@
       show('weapp-launch', false)
       fallback.hidden = false
       fallback.textContent = '小程序入口配置中，请稍后从服务号菜单进入'
-      hint.textContent = '签约、组阵、照片合成在小程序中完成'
+      hint.textContent = '签约、组阵在小程序中完成'
       return
     }
     var launch = $('launch-weapp')
@@ -419,6 +431,8 @@
     $('btn-library').addEventListener('click', function () {
       document.getElementById('library-panel').scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
+    $('btn-ai-portrait').addEventListener('click', openAiPortrait)
+    $('btn-ai-portrait-sheet').addEventListener('click', openAiPortrait)
     $('btn-close-settings').addEventListener('click', function () { show('settings-mask', false) })
     $('settings-mask').addEventListener('click', function (event) {
       if (event.target === $('settings-mask')) show('settings-mask', false)

@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>我的球员卡 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261101-holo4" />
+  <link rel="stylesheet" href="css/app.css?v=20261103-ai1" />
   <link rel="stylesheet" href="css/holo-cosmos.css?v=20261101-holo4" />
 </head>
 <body>
@@ -78,6 +78,18 @@
           </div>
         </article>
 
+        <!-- AI 定妆照：换照片/合成形象照的唯一入口在服务号「球员登记 · 形象照」 -->
+        <article class="panel ai-panel" id="ai-panel">
+          <div class="ai-panel__head">
+            <span class="ai-panel__badge">重点</span>
+            <h2>对背景或形象照不满意？</h2>
+          </div>
+          <p class="ai-panel__text">
+            可以合成你自己的 <strong>AI 定妆照</strong>：上传头像和球服，生成专属形象照，再回到这里套用到卡面。
+          </p>
+          <button type="button" class="btn btn--gold ai-panel__btn" id="btn-ai-portrait">去做 AI 定妆照</button>
+        </article>
+
         <!-- 会员状态：只读展示，不出现价格与支付 -->
         <article class="panel membership" id="membership-panel" hidden>
           <div class="panel__head">
@@ -85,7 +97,7 @@
             <span class="hint">只读</span>
           </div>
           <p class="membership__state" id="membership-state">—</p>
-          <p class="membership__hint">会员可更换专属背景；换照片与照片合成请在足球世界小程序完成。</p>
+          <p class="membership__hint">会员可更换专属背景；换照片与照片合成请在服务号「球员登记 · 形象照」用 AI 定妆照完成。</p>
         </article>
 
         <!-- 我的卡库 -->
@@ -119,7 +131,7 @@
             </div>
           </div>
           <button type="button" class="weapp-fallback" id="weapp-fallback" hidden>请使用微信打开后进入足球世界</button>
-          <p class="weapp-hint" id="weapp-hint">签约、组阵、照片合成在小程序中完成</p>
+          <p class="weapp-hint" id="weapp-hint">签约、组阵在小程序中完成</p>
         </section>
       </section>
     </main>
@@ -133,6 +145,12 @@
         <button type="button" class="sheet__close" id="btn-close-settings" aria-label="关闭">×</button>
       </header>
       <div class="sheet__body" id="settings-body">
+        <div class="field ai-field">
+          <label class="field__label">形象照不满意？</label>
+          <p class="field__hint">可以合成你自己的 AI 定妆照，生成新形象照后再回这里调整构图。换照片不能在本页完成。</p>
+          <button type="button" class="btn btn--ghost" id="btn-ai-portrait-sheet">去做 AI 定妆照</button>
+        </div>
+
         <div class="field">
           <label class="field__label">背景卡面</label>
           <div class="backgrounds" id="background-list"></div>
@@ -162,7 +180,7 @@
             <input type="range" id="crop-y" min="-2" max="2" step="0.02" value="0" />
             <em id="crop-y-value">0.00</em>
           </div>
-          <p class="field__hint">只调整背景或构图可直接保存，不消耗蜂蜜；换照片需去小程序合成。</p>
+          <p class="field__hint">只调整背景或构图可直接保存，不消耗蜂蜜；换照片请先用 AI 定妆照合成新形象照。</p>
         </div>
       </div>
       <footer class="sheet__foot">
@@ -184,6 +202,6 @@
 
   <script src="js/api.js?v=20261101-holo4"></script>
   <script src="js/holo.js?v=20261101-holo4"></script>
-  <script src="js/app.js?v=20261101-holo4"></script>
+  <script src="js/app.js?v=20261103-ai1"></script>
 </body>
 </html>

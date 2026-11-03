@@ -140,6 +140,22 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .actions { display: flex; gap: 10px; margin-top: 14px; }
 .actions .btn { flex: 1; }
 
+/* AI 定妆照提醒：换照片/合成形象照的真实入口在服务号「球员登记 · 形象照」 */
+.ai-panel {
+  border-color: rgba(232, 197, 106, 0.42);
+  background: linear-gradient(160deg, rgba(232, 197, 106, 0.16), rgba(255, 255, 255, 0.04));
+}
+.ai-panel__head { display: flex; align-items: center; gap: 8px; }
+.ai-panel__head h2 { margin: 0; font-size: 15px; }
+.ai-panel__badge {
+  flex: 0 0 auto; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  color: #2f2205; border-radius: 6px; padding: 2px 7px;
+  background: linear-gradient(120deg, #f6e2a7, #c99a3c);
+}
+.ai-panel__text { margin: 10px 0 0; font-size: 12px; line-height: 1.65; color: var(--text); opacity: 0.9; }
+.ai-panel__text strong { color: var(--gold); }
+.ai-panel__btn { width: 100%; margin-top: 12px; }
+
 /* 主卡：星云箔光层叠见 holo-cosmos.css，这里只负责容器与空态 */
 .hero { position: relative; overflow: visible; }
 .hero::before {
@@ -218,6 +234,9 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 }
 .lib-card__btn { margin-top: auto; }
 .lib-card__btn.btn { width: 100%; padding: 8px 10px; font-size: 12px; }
+.lib-card__btns { display: flex; gap: 8px; margin-top: auto; }
+.lib-card__btns .lib-card__btn { flex: 1; margin-top: 0; }
+.lib-card__btns .lib-card__btn.btn { width: auto; }
 .library__empty { padding: 22px 8px; text-align: center; }
 .library__empty-icon { font-size: 30px; color: var(--muted); line-height: 0; }
 .library__empty strong { display: block; margin-top: 6px; font-size: 14px; }
@@ -260,6 +279,8 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .field { margin-bottom: 18px; }
 .field__label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 .field__hint { margin: 8px 0 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.ai-field { padding: 12px 12px 14px; margin: -4px 0 16px; border-radius: 12px; border: 1px dashed rgba(232, 197, 106, 0.45); background: rgba(232, 197, 106, 0.08); }
+.ai-field .btn { width: 100%; }
 
 .backgrounds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .bg-option {
