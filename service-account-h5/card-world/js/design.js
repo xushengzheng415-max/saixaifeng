@@ -53,8 +53,19 @@
     try { return String(sessionStorage.getItem(PENDING_KEY) || '').trim() } catch (error) { return '' }
   }
 
-  /* AI 定妆照：真实合成流程在服务号「球员登记 · 形象照」，本页只做跳转，不判定资格、不扣费。 */
-  function openAiPortrait() { location.href = '../registration-resume.html' }
+  /* AI 定妆照真实生成在「球员登记 · 形象照」的「✦ 智能生成」；这里只负责把人送到那个环节。 */
+  function openAiPortrait() {
+    var settings = state.settings
+    if (!window.CardWorldPortraitEntry) { toast('页面尚未准备好，请重新打开'); return }
+    window.CardWorldPortraitEntry.open(settings ? settings.name : '', settings ? settings.teamName : '', showAiNote)
+  }
+
+  /* 不能进入形象照环节时，把原因停在原地说清楚，而不是跳到一个无关的列表页。 */
+  function showAiNote(message) {
+    toast(message)
+    var note = $('ai-panel-note')
+    if (note) { note.textContent = message; note.hidden = !message }
+  }
 
   function setPreviewState(text, isError) {
     var el = $('preview-state')
@@ -261,6 +272,7 @@
       state.settings = {
         playerId: playerId,
         name: String(player.name || ''),
+        teamName: String(player.teamName || ''),
         tier: tier,
         version: Number(player.version || 0),
         backgroundId: String(player.backgroundId || tier || ''),

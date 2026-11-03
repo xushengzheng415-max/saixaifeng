@@ -86,6 +86,9 @@
     previewCard: function (data) { return api('previewMyPlayerCard', data) },
     saveCard: function (data) { return api('saveMyPlayerCard', data) },
     setMainCard: function (playerId) { return api('cardWorldSetMainCard', { playerId: playerId }) },
+    // AI 形象照的真实入口在「球员登记 · 形象照」：只复用既有的登记记录与令牌，不新建业务。
+    registrationEntries: function () { return api('servicePrivateRegistrationList') },
+    resumeRegistration: function (registrationId) { return api('servicePrivateResumeRegistration', { registrationId: registrationId }) },
     jsSdkConfig: function (url) { return api('servicePrivateJsSdkConfig', { url: url }) }
   }
 })(window)

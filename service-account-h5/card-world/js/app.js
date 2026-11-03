@@ -185,10 +185,22 @@
     location.href = './design.html?playerId=' + encodeURIComponent(playerId)
   }
 
-  /* AI 定妆照：真实合成流程在服务号「球员登记 · 形象照」(join-player 的智能生成)，
-     本页只做引导，不自行判定资格、不扣费。 */
+  /* AI 定妆照：真实生成在服务号「球员登记 · 形象照」的「✦ 智能生成」，
+     本页只负责把人送到那个环节，不自行判定资格、不扣费。
+     没有待提交登记时如实说明，不再跳到与 AI 形象照无关的「继续球员登记」列表。 */
   function openAiPortrait() {
-    location.href = '../registration-resume.html'
+    var main = state.main && !state.main.empty ? state.main : null
+    var name = main ? main.name : (state.players[0] && state.players[0].name)
+    var teamName = main ? main.teamName : (state.players[0] && state.players[0].teamName)
+    if (!window.CardWorldPortraitEntry) { toast('页面尚未准备好，请重新打开'); return }
+    window.CardWorldPortraitEntry.open(name, teamName, showAiNote)
+  }
+
+  /* 不能进入形象照环节时，把原因停在原地说清楚，而不是跳到一个无关的列表页。 */
+  function showAiNote(message) {
+    toast(message)
+    var note = document.getElementById('ai-panel-note')
+    if (note) { note.textContent = message; note.hidden = !message }
   }
 
   function loadScript(src) {

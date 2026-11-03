@@ -155,6 +155,7 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .ai-panel__text { margin: 10px 0 0; font-size: 12px; line-height: 1.65; color: var(--text); opacity: 0.9; }
 .ai-panel__text strong { color: var(--gold); }
 .ai-panel__btn { width: 100%; margin-top: 12px; }
+.ai-panel__note { margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: #f0c67a; }
 
 /* 主卡：星云箔光层叠见 holo-cosmos.css，这里只负责容器与空态 */
 .hero { position: relative; overflow: visible; }
