@@ -17,8 +17,6 @@
 
 const engine = require('./cardWorldEngine.cjs')
 const profileStore = require('./cardWorldProfile.cjs')
-const playerCardReader = require('./playerCardReader.cjs')
-const playerCardDynamic = require('./playerCardDynamic.cjs')
 const { readAll: readAllPaged } = require('./data-center/reader.cjs')
 
 const COLLECTIONS = {
@@ -342,7 +340,6 @@ module.exports = function createCardWorld(deps) {
       cityCode: CITY_PATTERN.test(cityCode) ? cityCode : '',
       cityName: String(user.cityName || '').trim(),
       mainPlayerId: '',
-      mainCard: null,
       /* 玩法准入（2026-11-02）：认领球员与所属赛事由服务端解析后存档，客户端不得自报。 */
       claim: { claimed: false, playerId: '', eventId: '', eventName: '', divisionLabel: '', statusText: '' },
       cursor: 0,
@@ -386,10 +383,6 @@ module.exports = function createCardWorld(deps) {
     }
   }
 
-  /**
-   * 城市解析（2026-11-02 起只用于展示与签约排序，准入由赛事决定）：
-   * 依次取档案已存值 → 请求入参 → 本赛事名册城市，仍缺失时维持原有提示，不静默编造。
-   */
   async function ensureCity(profile, params, fallbackCode) {
     const stored = String(profile.cityCode || '').trim()
     if (CITY_PATTERN.test(stored)) return { cityCode: stored }
@@ -488,7 +481,11 @@ module.exports = function createCardWorld(deps) {
     return engine.normalizeQuota(profile.quota, tier, dateKey)
   }
 
-  function placeholderStamps() {
+  function statValue(value) {
+    return Number.isSafeInteger(value) && value >= 0 ? String(value) : '—'
+  }
+
+  function mainCardStamps() {
     /*
      * 贴纸规则尚未由产品确认，这里沿用 local 演示的占位集合，
      * 服务端不做资格判定；确认规则后只在此处接统一发放结果。
@@ -501,15 +498,11 @@ module.exports = function createCardWorld(deps) {
     ]
   }
 
-  function statValue(value) {
-    return Number.isSafeInteger(value) && value >= 0 ? String(value) : '—'
-  }
-
   function mainCardView(world) {
     const profile = world.profile
     const cityText = [profile.cityName, profile.cityCode].filter(Boolean).join(' · ')
 
-    /* 优先展示主数据里的本人球员卡（卡面图与箔光由 H5 复用现有组件）。 */
+    /* 本人球员卡（主数据只读引用）优先；卡面与箔光由 H5 复用现有组件。 */
     if (world.selfMain) {
       const card = world.selfMain.card || {}
       const player = world.selfMain.player || {}
@@ -532,7 +525,7 @@ module.exports = function createCardWorld(deps) {
           { label: '进球', num: statValue(stats.goals) },
           { label: '助攻', num: statValue(stats.assists) }
         ],
-        stamps: placeholderStamps(),
+        stamps: mainCardStamps(),
         portraitNote: player.portraitAuthorized === false ? '形象照未授权，分享使用号码与阵容卡' : ''
       }
     }
@@ -572,7 +565,7 @@ module.exports = function createCardWorld(deps) {
         { label: '进球', num: statValue(player.goals) },
         { label: '助攻', num: statValue(player.assists) }
       ],
-      stamps: placeholderStamps(),
+      stamps: mainCardStamps(),
       portraitNote: player.portraitAuthorized ? '' : '形象照未授权，分享使用号码与阵容卡'
     }
   }
@@ -741,7 +734,8 @@ module.exports = function createCardWorld(deps) {
   async function readSelfCards(players) {
     if (!players || !players.length) return []
     try {
-      /* 不带 dynamic 选项：先读描述，避免为所有球员批量导出成卡图。 */
+      /* 按需加载卡面模块：未进入卡世界的实例不承担这部分冷启动成本。 */
+      const playerCardReader = require('./playerCardReader.cjs')
       return await playerCardReader.readCards(cloud, database(), players)
     } catch (error) {
       console.warn('[cardWorld] 本人球员卡读取失败:', JSON.stringify({
@@ -785,6 +779,7 @@ module.exports = function createCardWorld(deps) {
     if (card.cardUrl) return card
     if (!card.cardScene) return null
     try {
+      const playerCardDynamic = require('./playerCardDynamic.cjs')
       return Object.assign({}, card, await playerCardDynamic.exportCard(cloud, database(), player, card))
     } catch (error) {
       console.warn('[cardWorld] 主卡成卡图导出失败:', String((error && error.message) || error).slice(0, 200))
@@ -949,7 +944,6 @@ module.exports = function createCardWorld(deps) {
   }
 
   /* ---------------- 世界状态 ---------------- */
-
 
   async function loadWorld(user, params, options) {
     let profile

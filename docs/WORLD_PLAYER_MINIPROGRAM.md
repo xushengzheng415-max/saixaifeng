@@ -1,8 +1,8 @@
 # 球员端「赛小蜂足球世界」小程序工程
 
 状态：2026-10-31 工程搭建完成（本地演示适配器 + 自检通过）；同日补齐服务端 `cardWorld*` action 组源码与离线回归测试。
-**未部署云函数、未建集合、未上传小程序、未发布。**
-规则依据见 [PRODUCT_RULES.md](PRODUCT_RULES.md)、决策见 [ADR.md](ADR.md)（2026-10-31）。
+**2026-11-03 已把玩法准入差量合入最新线上包并部署 `webLoginApi`（回下载哈希一致、`cardWorldAccess` 线上可调）；集合未创建、小程序体验版未上传、未发布正式版。**
+规则依据见 [PRODUCT_RULES.md](PRODUCT_RULES.md)、决策见 [ADR.md](ADR.md)（2026-10-31、2026-11-02）。
 
 ## 一、端口边界
 
@@ -12,7 +12,7 @@
 | 源码 | `miniprogram-world/`（与球队端 `miniprogram/` 平行，互不引用） |
 | 云环境 | 业务环境 `cloud1-7g8ckb3c7815a011`（与球队端、PC、H5 共用，不建第二套数据库） |
 | 开通环境 | `sxf-world-dev-d6gxotk5mc8bb7cb6`（2026-10-31 新建，空库，仅用于获得云开发权限与日后网关；PostgreSQL 体系，禁止放业务表） |
-| 后端 | `webLoginApi` 的 `cardWorld*` action 组（`cloudfunctions/webLoginApi/cardWorld.cjs`，2026-10-31 已写源码，未部署） |
+| 后端 | `webLoginApi` 的 `cardWorld*` action 组（`cloudfunctions/webLoginApi/cardWorld.cjs`，2026-10-31 写源码，2026-11-03 差量部署，含 `cardWorldAccess`） |
 | 模式开关 | `config/env.js` 的 `MODE`：`local`（本地演示）/ `cloud`（`wx.cloud.callFunction`） |
 | 身份 | 手机号自然人账号（`phone` / `phoneNumber` 双字段兼容），不新建用户体系 |
 | 卡面 | 服从统一球员卡套件（[PLAYER_CARD_INTEGRATION.md](PLAYER_CARD_INTEGRATION.md)），不另存卡面字段 |
@@ -172,20 +172,21 @@ wx.cloud.callFunction({ name: 'cardWorldProbeNotExist' })
 服务端 `cardWorld.cjs` + `cardWorldEngine.cjs` + `index.js` 接线、2026-11-02 已在源码层同步玩法准入
 （`cardWorldAccess`、`claim` 解析、`eventId` + `appearances` 池过滤），
 离线回归 `tools/test-world-card-backend.cjs`（36/36 通过）、`check-referee-backend-package` 通过。
-部署状态仍为「未部署」，上线前必须按下方基线风险要求差量合入。
+2026-11-03 已按「最新线上包 + 差量合入」部署 `webLoginApi`：线上包 `index.js` 保持原样（其 `cardWorld` 接线早已存在），
+只替换 `cardWorld.cjs` / `cardWorldEngine.cjs`，包级 `check-referee-backend-package`（含报名 Word 上传权限）通过，
+部署后回下载三文件 SHA-256 与本地上传包一致，`fn invoke` 调 `cardWorldAccess` 返回预期的 `WORLD_LOGIN_REQUIRED`（无有效会话）。
 
 未完成 / 需另行授权：
 
 - **环境共享未确认**：AppID `wxa0ac7d45bcabd140` 调 `cloud1` 仍返回 `-601034 没有权限，请先开通云开发或者云托管`。
   2026-10-31 已新建开通环境 `sxf-world-dev-d6gxotk5mc8bb7cb6`（免费试用 6 个月，到期前需停用），
   还需：① 在开通环境里绑定该 AppID（AppSecret）；② 在 `cloud1` 所属账号的「环境设置 → 环境共享」添加该 AppID。
-- **未部署**：`webLoginApi` 的 `cardWorld*` 代码未发布，`card_world_players/profiles/cards` 三个集合未创建，
-  `config/env.js` 仍为 `MODE='local'`。
-- **发布基线风险**：本分支基于 `main e268aba6`。当前正式仓库工作区里 `webLoginApi/index.js` 及其同目录文件
-  还有大量未提交改动（线上包基线比本分支新），因此**不能从本 worktree 直接打包部署**，否则会覆盖线上函数。
-  正确做法：以最新线上包为基线，仅把 `cardWorld.cjs`、`cardWorldEngine.cjs` 两个新文件和 `index.js` 的 6 行接线
-  差量合入，再跑 `check-referee-backend-package` 与回下载比对。
-- `card_world_players` 同城名册尚无数据；名册来源（现有球员主档/球员卡统一读取接口）需产品确认后由运营导入。
+- **集合与数据未就绪**：`card_world_players/profiles/cards` 三个集合尚未创建（首次写入时由 `ensureCollections` 幂等创建），
+  `config/env.js` 仍为 `MODE='local'`，体验版按本地演示数据运行，不调用本次部署的 action。
+- **名册数据前置**：`card_world_players` 需运营按新口径导入，`eventId` 必填、`appearances` 填本赛事出场数、
+  另建议带 `eventName` / `divisionLabel`；缺这些字段时线上只会返回「未认领 / 不在本赛事名册中」，不会放行。
+- **发布基线风险**：本分支基于 `main e268aba6`，`webLoginApi/index.js` 及同目录其他文件与线上包仍有差异（线上更新）。
+  因此**不得从本 worktree 整包覆盖部署**；后续任何一次 `webLoginApi` 发布都必须继续以最新线上包为基线做差量合入。
 - 未上传小程序开发版/体验版，未推 Git 远端。
 - 真机验收（全息倾斜、3D 翻面、球场布局、胶囊安全区）待做。
 - 会员权益具体档位与 8/11 编制解锁方式、限定卡发放规则由平台侧另行确认后接入，球员端不自行判定。

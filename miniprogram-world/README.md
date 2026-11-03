@@ -9,9 +9,9 @@
 | 工程目录 | `miniprogram-world/` |
 | 业务云环境 | `cloud1-7g8ckb3c7815a011`（与球队端、PC、H5 共用同一环境，不建第二套数据库） |
 | 开通环境 | `sxf-world-dev-d6gxotk5mc8bb7cb6`（2026-10-31 新建的空环境，只用于获得云开发权限；PostgreSQL 体系，禁止放业务表） |
-| 后端入口 | `webLoginApi` 的 `cardWorld*` action 组（源码已在 `cloudfunctions/webLoginApi/cardWorld.cjs`，未部署） |
+| 后端入口 | `webLoginApi` 的 `cardWorld*` action 组（源码在 `cloudfunctions/webLoginApi/cardWorld.cjs`，2026-11-03 已差量部署，含 `cardWorldAccess`） |
 | 视觉 | 深空黑 + 熔金卡牌；共享图标见 `assets/icons/manifest.json` |
-| 当前状态 | `config/env.js` `MODE = 'local'` 跑通闭环；`cloud` 分支与服务端 action 已写好，待环境共享与部署授权后切换 |
+| 当前状态 | `config/env.js` `MODE = 'local'` 跑通闭环；`cloud` 分支与服务端 action 已写好，`webLoginApi` 已于 2026-11-03 差量部署，待环境共享与名册数据后切换 |
 
 ## 玩法口径（2026-10-31，用户已确认）
 
@@ -152,7 +152,7 @@ node tools/verify-world-scope.cjs              # 玩法开放范围 22 项（认
 | 集合 | `card_world_players`（本赛事名册，需运营导入且只含本赛事有比赛记录球员）、`card_world_profiles`、`card_world_cards` |
 | 环境变量 | `WORLD_MINI_PROGRAM_APP_ID`、`WORLD_MINI_PROGRAM_APP_SECRET`（保留现有变量） |
 | 发布校验 | `node --check` 三文件 + `node tools/check-referee-backend-package.cjs <实际包目录>` + `node tools/test-world-card-backend.cjs` |
-| 规则前置（2026-11-02） | 开放范围已同步进源码：`cardWorldAccess` 准入（已认领球员卡 + 与当前赛事一致）、`readPlayerPool` 按 `eventId` 取池并要求 `appearances > 0`、`card_world_players` 新增 `eventId` 必填字段（`appearances` / `eventName` / `divisionLabel` 供准入与展示）、玩法 action 统一 `requireAccess`。同一认领球员命中多个赛事时返回 `EVENT_MISMATCH` 转人工核对，不静默取第一条。上述代码仍未部署，部署前须按基线要求差量合入并重跑离线回归。 |
+| 规则前置（2026-11-02） | 开放范围已同步进源码并已部署（2026-11-03）：`cardWorldAccess` 准入（已认领球员卡 + 与当前赛事一致）、`readPlayerPool` 按 `eventId` 取池并要求 `appearances > 0`、`card_world_players` 新增 `eventId` 必填字段（`appearances` / `eventName` / `divisionLabel` 供准入与展示）、玩法 action 统一 `requireAccess`。同一认领球员命中多个赛事时返回 `EVENT_MISMATCH` 转人工核对，不静默取第一条。部署方式为「最新线上包 + 差量合入两个 `cardWorld*.cjs`」，`index.js` 保持线上原样，回下载哈希一致。运营导入名册前线上只会返回未认领/不在名册，不会放行。 |
 | 基线 | 必须以最新线上包为基线做差量合入；本 worktree 基于旧 `main`，不能直接打包覆盖线上函数 |
 
 ## 不发版说明
