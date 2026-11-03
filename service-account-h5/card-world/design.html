@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>卡面设计 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261104-ai3" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai4" />
 </head>
 <body>
   <div class="app">
@@ -30,7 +30,7 @@
         <p id="error-text">请稍后重试</p>
         <div class="state-card__actions">
           <button type="button" class="btn btn--gold" id="btn-retry">重新加载</button>
-          <button type="button" class="btn btn--ghost" id="btn-ai-error" hidden>去做 AI 定妆照</button>
+          <button type="button" class="btn btn--ghost" id="btn-ai-error" hidden>直接生成 AI 形象照</button>
         </div>
       </section>
 
@@ -45,34 +45,38 @@
             <img id="design-image" alt="卡面预览" hidden />
             <div class="design-stage__empty" id="design-empty">正在合成卡面…</div>
           </div>
-          <p class="field__hint" id="design-hint">当前显示的是最终成卡效果：所选背景与形象照已经合成。</p>
+          <div class="design-actions design-actions--single">
+            <button type="button" class="btn btn--ghost" id="btn-edit-crop">编辑构图</button>
+          </div>
+          <p class="field__hint" id="design-hint">当前显示的是最终成卡效果：所选背景与形象照已经合成。点「编辑构图」调整形象照的大小与位置。</p>
         </article>
 
-        <!-- AI 形象照：直接进独立生成页 portrait.html，生成后回到本页套进卡面 -->
+        <!-- 形象照不满意：直接生成 AI 形象照并替换掉卡面上的形象照，本页只保留这一个 AI 入口 -->
         <article class="panel ai-panel" id="ai-panel">
           <div class="ai-panel__head">
             <span class="ai-panel__badge">重点</span>
-            <h2>形象照不满意？</h2>
+            <h2>对卡面形象照不满意？</h2>
           </div>
           <p class="ai-panel__text">
-            可以合成你自己的 <strong>AI 定妆照</strong>：上传头像和球服、选好姿势直接生成，
-            生成后回到本页就把新照片套进卡面。
+            点下面的按钮直接生成 <strong>AI 形象照</strong>：上传头像和球服、选好姿势就生成，
+            点「使用这张形象照」回来就把新照片替换掉这张卡面里的形象照。
           </p>
-          <button type="button" class="btn btn--gold ai-panel__btn" id="btn-ai-portrait">去做 AI 定妆照</button>
+          <button type="button" class="btn btn--gold ai-panel__btn" id="btn-ai-portrait">直接生成 AI 形象照</button>
+          <p class="field__hint">生成会消耗蜂蜜，失败或放弃会自动退回；不需要改形象照时，只调背景或构图直接保存即可。</p>
         </article>
 
-        <!-- 背景卡面 -->
+        <!-- 背景卡面：只开放已达到的卡级，未达等级灰度显示并提示解锁积分 -->
         <article class="panel">
           <div class="panel__head">
             <h2>背景卡面</h2>
             <span class="hint" id="background-hint">—</span>
           </div>
           <div class="backgrounds backgrounds--thumb" id="background-list"></div>
-          <p class="field__hint">每张缩略图都是该背景下的成卡效果，点选后上方大图同步更新。</p>
+          <p class="field__hint">每张缩略图都是该背景下的成卡效果；未达等级的卡片显示为灰度，并标注解锁所需生涯积分。</p>
         </article>
 
         <!-- 照片构图 -->
-        <article class="panel">
+        <article class="panel" id="crop-panel">
           <div class="panel__head">
             <h2>照片构图</h2>
             <span class="hint">只调大小与位置</span>
@@ -92,8 +96,7 @@
             <input type="range" id="crop-y" min="-2" max="2" step="0.02" value="0" />
             <em id="crop-y-value">0.00</em>
           </div>
-          <p class="field__hint">只调整背景或构图可直接保存，不消耗蜂蜜；换照片请先用 AI 定妆照合成新形象照。</p>
-          <button type="button" class="btn btn--ghost design-actions__ai" id="btn-ai-portrait-crop">生成 AI 形象照</button>
+          <p class="field__hint">只调整背景或构图可直接保存，不消耗蜂蜜；要换形象照请用上方「直接生成 AI 形象照」。</p>
         </article>
 
         <div class="design-actions">
@@ -106,7 +109,7 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="js/api.js?v=20261104-ai3"></script>
-  <script src="js/design.js?v=20261104-ai3"></script>
+  <script src="js/api.js?v=20261104-ai4"></script>
+  <script src="js/design.js?v=20261104-ai4"></script>
 </body>
 </html>

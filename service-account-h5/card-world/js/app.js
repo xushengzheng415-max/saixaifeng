@@ -185,7 +185,7 @@
     location.href = './design.html?playerId=' + encodeURIComponent(playerId)
   }
 
-  /* AI 定妆照：直接进独立的 portrait.html 生成页，不再绕「球员登记 · 形象照」。
+  /* AI 形象照：直接进独立的 portrait.html 生成页，不再绕「球员登记 · 形象照」。
      扣费、凭证与卡面素材入库都在服务端，本页只负责跳转。 */
   function aiPortraitPlayerId() {
     if (state.main && !state.main.empty && state.main.playerId) return state.main.playerId

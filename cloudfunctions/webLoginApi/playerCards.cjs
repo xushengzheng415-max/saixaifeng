@@ -3,6 +3,18 @@ const suite = require('./playerCardSuite.cjs')
 const {createPlayerCardLibrary}=require('./playerCardLibrary.cjs')
 const { makeForegroundLayer } = require('./playerCardRender.cjs')
 
+// 卡级顺序与门禁：背景只能选「已达到的等级」，更高等级一律锁定并给出解锁积分。
+// 阈值来自数据中心积分规则（platform_settings/player-card-score-rules），默认银卡 45、金卡 100。
+const CARD_TIERS=['bronze','silver','gold']
+const CARD_TIER_LABELS={bronze:'铜卡',silver:'银卡',gold:'金卡'}
+const CARD_TIER_DEFAULT_UNLOCK={silver:45,gold:100}
+function tierUnlockPoints(tierRule,rank){
+  const tier=CARD_TIERS[rank]
+  if(!tier||tier==='bronze')return null
+  const value=Number(tierRule&&tierRule[tier==='silver'?'silverAt':'goldAt'])
+  if(Number.isSafeInteger(value)&&value>0)return value
+  return CARD_TIER_DEFAULT_UNLOCK[tier]||null
+}
 const PHOTO_REPLACE_HONEY_COST = 100
 function photoReplaceHoneyCost() {
   const raw = process.env.PLAYER_CARD_PHOTO_REPLACE_HONEY_COST
@@ -68,8 +80,18 @@ function cardChangePermission(level, player, portrait, event) {
   const firstStandard = player.playerCardSourceType === 'legacy_roster' && portrait.sourceType !== 'legacy_roster'
   const photoReplaceRequired = Boolean((player.playerCardFileId || player.playerCardDynamic) && (!existingPhoto || existingPhoto !== String(portrait.transparentFileId)) && !firstStandard && !level.playerCard.canReplacePhoto)
   const backgroundId = String(event.backgroundId || level.cardTier)
-  if (!['bronze','silver','gold'].includes(backgroundId)) return { code:'PLAYER_CARD_BACKGROUND_INVALID', error:'卡片背景不可用' }
-  if (backgroundId !== level.cardTier && !level.playerCard.canChangeBackground) return { code:'PLAYER_CARD_BACKGROUND_LOCKED', error:'满 100 分或开通会员后可更换卡片背景' }
+  if (!CARD_TIERS.includes(backgroundId)) return { code:'PLAYER_CARD_BACKGROUND_INVALID', error:'卡片背景不可用' }
+  const currentRank = CARD_TIERS.indexOf(String(level.cardTier))
+  const wantedRank = CARD_TIERS.indexOf(backgroundId)
+  // 高于当前卡级的背景一律锁定，会员权益也不能越级；
+  // 预览（allowLockedBackground）仍可生成灰度效果图，保存路径必须拒绝。
+  const lockedByTier = wantedRank > currentRank
+  const unlockAt = lockedByTier ? tierUnlockPoints(level.tierRule, wantedRank) : null
+  if (lockedByTier && event.allowLockedBackground !== true) {
+    return { code:'PLAYER_CARD_BACKGROUND_LOCKED', error:'生涯积分满 ' + (unlockAt == null ? '' : unlockAt + ' ') + '分并升到' + CARD_TIER_LABELS[backgroundId] + '后才可使用该背景', unlockTier: backgroundId, unlockAt }
+  }
+  if (!lockedByTier && backgroundId !== level.cardTier && !level.playerCard.canChangeBackground) return { code:'PLAYER_CARD_BACKGROUND_LOCKED', error:'满 100 分或开通会员后可更换卡片背景', unlockAt: 100 }
+  if (lockedByTier) return { backgroundId, backgroundLocked:true, unlockTier: backgroundId, unlockAt }
   if (photoReplaceRequired) return { backgroundId, photoReplaceRequired: true, photoReplaceCost: photoReplaceHoneyCost() }
   return { backgroundId }
 }
@@ -227,8 +249,22 @@ function createPlayerCards(deps) {
     return Object.fromEntries(snapshots.map(item => [item.cardTypeId,{templateId:item.templateId,version:item.version,title:item.title}]))
   }
   const library=createPlayerCardLibrary({cloud})
+  let tierThresholdsCache=null
   async function handler(event) {
     const db = cloud.database(), auth = await authorize(event, db), entries = await playersFor(auth, db)
+    // 银卡/金卡门槛只从积分规则读取一次，随后随 summary 下发，前端不写死分数。
+    async function tierThresholds(){
+      if(tierThresholdsCache)return tierThresholdsCache
+      const rules=require('./data-center/score-rules.cjs')
+      try{
+        const active=(await require('./data-center/score-rule-store.cjs').config(db))?.active||rules.defaults()
+        const parameters=rules.parameters(active.parameters)
+        tierThresholdsCache={silverAt:parameters.silverAt,goldAt:parameters.goldAt}
+      }catch(error){
+        tierThresholdsCache={silverAt:rules.DEFAULT_PARAMETERS.silverAt,goldAt:rules.DEFAULT_PARAMETERS.goldAt}
+      }
+      return tierThresholdsCache
+    }
     // 会员只放开换背景，不放开换照片；积分核定结果仍以数据中心为准，此处只做权益叠加
     let memberBackgroundUnlock = null
     async function membershipUnlocksBackground() {
@@ -249,7 +285,9 @@ function createPlayerCards(deps) {
       const p = entry.player
       const score = await withMembershipBackground(precomputed || await (deps.scoreForPlayer ? deps.scoreForPlayer(String(p._id)) : createDataService(db).playerCardForAuthorizedPlayer(String(p._id))))
       const ready = score.status === 'ready'
-      return { id: String(p._id), name: p.name || '球员', teamName: entry.teamName || '', jerseyNumber: p.jerseyNumber || '', jerseyName: p.jerseyName || '', position: p.position || '', height: p.height ?? null, weight: p.weight ?? null, nationality: p.nationality || '', appearances: ready ? score.metrics.appearances : null, cardTier: ready ? score.tier : null, playerCard: score, photoReplace: photoReplaceSummary(score), cardFileId: p.playerCardFileId || '', version: Number(p.playerCardVersion || 0), mode: p.playerCardMode || 'portrait', savedTier: p.playerCardTier || '', backgroundId:p.playerCardBackgroundId || score.tier || '',displayTemplateId:p.playerCardDisplayTemplateId || '' }
+      // tierRule 让前端按同一积分门槛做灰度与解锁提示，不在页面写死 45/100。
+      const tierRule = await tierThresholds()
+      return { id: String(p._id), name: p.name || '球员', teamName: entry.teamName || '', jerseyNumber: p.jerseyNumber || '', jerseyName: p.jerseyName || '', position: p.position || '', height: p.height ?? null, weight: p.weight ?? null, nationality: p.nationality || '', appearances: ready ? score.metrics.appearances : null, cardTier: ready ? score.tier : null, playerCard: score, tierRule, photoReplace: photoReplaceSummary(score), cardFileId: p.playerCardFileId || '', version: Number(p.playerCardVersion || 0), mode: p.playerCardMode || 'portrait', savedTier: p.playerCardTier || '', backgroundId:p.playerCardBackgroundId || score.tier || '',displayTemplateId:p.playerCardDisplayTemplateId || '' }
     }
     if (event.action === 'listMyPlayerCards') {
       // One canonical career dataset feeds summaries and base cards for every
@@ -342,17 +380,25 @@ function createPlayerCards(deps) {
     if (!['previewMyPlayerCard','saveMyPlayerCard'].includes(event.action)) return { success: false, error: '未知球员卡操作' }
     const level = await summary(entry)
     const portrait = await standardPortrait(auth, entry, db)
-    const permission = cardChangePermission(level, entry.player, portrait, event)
+    const permission = cardChangePermission(level, entry.player, portrait, event.action === 'previewMyPlayerCard' ? { ...event, allowLockedBackground: true } : event)
     if (permission.code) return { success:false, ...permission }
     const backgroundId = permission.backgroundId
+    // 未达等级的背景只允许预览灰度效果，这里把解锁门槛回传，供页面提示。
+    const backgroundLock = permission.backgroundLocked
+      ? { backgroundLocked: true, unlockTier: permission.unlockTier, unlockAt: permission.unlockAt }
+      : {}
     if (auth.parentInvite && String(event.portraitId || '') !== String(portrait._id)) return { success:false, code:'PLAYER_CARD_PORTRAIT_CHANGED', error:'形象照已更新，请返回确认页重新制作球员卡' }
     const crop = normalizeCrop(event.crop), layout = normalizeLayout(event.layout), mode = 'portrait'
     const active = await suite.activeTemplate(db, backgroundId)
     if (!active) return { success:false, code:'PLAYER_CARD_TEMPLATE_UNAVAILABLE', error:'该卡种尚未发布，请稍后重试' }
     if (event.expectedTemplateId && (String(event.expectedTemplateId)!==String(active.templateId) || Number(event.expectedTemplateVersion)!==Number(active.version))) return {success:false,code:'PLAYER_CARD_TEMPLATE_CHANGED',error:'球员卡模板已更新，请重新打开编辑器'}
     if (event.action === 'previewMyPlayerCard') {
-      const dynamic=await require('./playerCardDynamic.cjs').descriptor(cloud,db,{...entry.player,playerCardSourceFileId:portrait.transparentFileId,playerCardCrop:crop},active);if(event.dynamicCardProtocol!=='player-card-dynamic/1'){const rendered=await suite.renderPlayer(cloud,db,entry.player,active,level.playerCard,{portraitFileId:portrait.transparentFileId,crop});return {success:true,imageData:'data:image/png;base64,'+rendered.png.toString('base64'),templateId:active.templateId,publishedVersion:active.version}}return {success:true,...dynamic,templateId:active.templateId,publishedVersion:active.version}
-
+      const dynamic=await require('./playerCardDynamic.cjs').descriptor(cloud,db,{...entry.player,playerCardSourceFileId:portrait.transparentFileId,playerCardCrop:crop},active)
+      if(event.dynamicCardProtocol!=='player-card-dynamic/1'){
+        const rendered=await suite.renderPlayer(cloud,db,entry.player,active,level.playerCard,{portraitFileId:portrait.transparentFileId,crop})
+        return {success:true,...backgroundLock,imageData:'data:image/png;base64,'+rendered.png.toString('base64'),templateId:active.templateId,publishedVersion:active.version}
+      }
+      return {success:true,...backgroundLock,...dynamic,templateId:active.templateId,publishedVersion:active.version}
     }
     const expectedVersion = Number(event.expectedVersion)
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) throw new Error('球员卡版本无效，请重新加载')

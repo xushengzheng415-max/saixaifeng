@@ -1,6 +1,6 @@
 (function () {
   'use strict'
-  // 服务号 H5 · 球员卡「AI 定妆照」页：
+  // 服务号 H5 · 球员卡「AI 形象照」页：
   // 本页只做一件事——上传参考照片、选姿势、生成透明形象照，点「使用这张」直接写进球员卡面。
   // 扣费、凭证、入库都在服务端（cardAiPortraitPrepare / cardAiPortraitApply），本页不决定金额。
   var Api = window.CardWorldApi
@@ -155,7 +155,7 @@
   function setBusy(busy, message) {
     state.busy = busy
     $('btn-generate').disabled = busy
-    $('btn-generate').textContent = busy ? (message || '生成中…') : '生成 AI 定妆照'
+    $('btn-generate').textContent = busy ? (message || '生成中…') : '生成 AI 形象照'
     $('btn-regenerate').disabled = busy
     $('btn-use').disabled = busy
     if (!busy) clearInterval(state.timer)
@@ -390,7 +390,7 @@
     }).catch(function (error) {
       var code = (error && error.code) || ''
       if (code === 'CARD_AI_PORTRAIT_AUTH_REQUIRED' || code === 'PLAYER_CARD_AUTH_REQUIRED') {
-        showError('请先完成微信授权与手机号绑定后再生成定妆照')
+        showError('请先完成微信授权与手机号绑定后再生成形象照')
         return
       }
       if (code === 'PLAYER_CARD_FORBIDDEN') { showError('只能生成本人或已绑定孩子的球员形象照'); return }

@@ -2,10 +2,12 @@
   'use strict'
   var Api = window.CardWorldApi
   var BACKGROUNDS = [
-    { id: 'bronze', name: '铜卡', note: '基础' },
-    { id: 'silver', name: '银卡', note: '进阶' },
-    { id: 'gold', name: '金卡', note: '精英' }
+    { id: 'bronze', name: '铜卡', note: '基础', rank: 0 },
+    { id: 'silver', name: '银卡', note: '进阶', rank: 1 },
+    { id: 'gold', name: '金卡', note: '精英', rank: 2 }
   ]
+  /* 兜底门槛与 data-center/score-rules.cjs 一致；实际值由服务端 tierRule 下发。 */
+  var TIER_FALLBACK = { silverAt: 45, goldAt: 100 }
   var state = {
     playerId: '',
     settings: null,
@@ -53,13 +55,40 @@
     try { return String(sessionStorage.getItem(PENDING_KEY) || '').trim() } catch (error) { return '' }
   }
 
-  /* AI 定妆照直接进独立的 portrait.html 生成页；生成并「使用这张」后回到本页即套进卡面。 */
+  /* AI 形象照直接进独立的 portrait.html 生成页；生成并「使用这张」后回到本页即替换卡面形象照。 */
   function openAiPortrait() {
     var settings = state.settings
     var playerId = (settings && settings.playerId) || playerIdFromQuery()
     if (!playerId) { toast('还没有可生成的球员卡，先回到卡库选择球员'); return }
     if (settings && settings.playerId) rememberPlayerId(settings.playerId)
     location.href = './portrait.html?playerId=' + encodeURIComponent(playerId)
+  }
+
+  /* 卡面效果下方「编辑构图」：把页面滚到照片构图面板，避免用户找不到滑块。 */
+  function focusCropPanel() {
+    var panel = $('crop-panel')
+    if (!panel) return
+    try { panel.scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch (error) { panel.scrollIntoView() }
+    panel.classList.add('is-focused')
+    setTimeout(function () { panel.classList.remove('is-focused') }, 1600)
+  }
+
+  function tierRank(tier) {
+    var hit = BACKGROUNDS.filter(function (item) { return item.id === String(tier || '') })[0]
+    return hit ? hit.rank : null
+  }
+
+  /* 银卡/金卡解锁所需生涯积分：服务端下发优先，前端只用兜底值。 */
+  function unlockPoints(item) {
+    var rule = state.settings.tierRule || TIER_FALLBACK
+    var value = Number(item.id === 'silver' ? rule.silverAt : item.id === 'gold' ? rule.goldAt : 0)
+    if (Number.isFinite(value) && value > 0) return value
+    return item.id === 'silver' ? TIER_FALLBACK.silverAt : item.id === 'gold' ? TIER_FALLBACK.goldAt : 0
+  }
+
+  function pointsShort(item) {
+    var at = unlockPoints(item)
+    return at ? Math.max(0, at - Number(state.settings.points || 0)) : 0
   }
 
   function setPreviewState(text, isError) {
@@ -98,10 +127,10 @@
   function handleError(error) {
     var code = (error && error.code) || ''
     if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') {
-      showError('该球员还没有标准形象照，先用 AI 定妆照生成一张再回来设计卡面。', true)
+      showError('该球员还没有标准形象照，先用「直接生成 AI 形象照」生成一张再回来设计卡面。', true)
       return
     }
-    if (code === 'PLAYER_CARD_BACKGROUND_LOCKED') { toast('该背景尚未解锁'); setPreviewState('背景未解锁', true); return }
+    if (code === 'PLAYER_CARD_BACKGROUND_LOCKED') { toast((error && error.message) || '该背景尚未解锁'); setPreviewState('背景未解锁', true); return }
     if (code === 'PLAYER_CARD_TEMPLATE_CHANGED' || code === 'PLAYER_CARD_TEMPLATE_UNAVAILABLE') { toast('卡面模板已更新，请返回重新进入'); return }
     if (code === 'PLAYER_CARD_CONFLICT') { toast('卡面已在别处更新，请返回卡库重新进入'); return }
     toast((error && error.message) || '操作失败，请重试')
@@ -142,46 +171,74 @@
   function renderBackgrounds() {
     var settings = state.settings
     var list = $('background-list')
+    var current = tierRank(settings.tier)
     list.innerHTML = ''
     BACKGROUNDS.forEach(function (item) {
-      var allowed = settings.canChangeBackground || item.id === settings.tier
+      /* 只开放已达到的卡级：更高等级一律灰度锁定，并按积分门槛提示；
+         同级以内改背景仍需满 100 分或会员权益（服务端同一套判定）。 */
+      var aboveTier = current == null ? false : item.rank > current
+      var allowed, note
+      if (current == null) {
+        allowed = false
+        note = '积分待核定'
+      } else if (aboveTier) {
+        allowed = false
+        note = unlockPoints(item) + ' 分解锁'
+      } else if (item.id !== settings.tier && !settings.canChangeBackground) {
+        allowed = false
+        note = '满 100 分或会员解锁'
+      } else {
+        allowed = true
+        note = item.note
+      }
       var active = item.id === settings.backgroundId
       var button = document.createElement('button')
       button.type = 'button'
-      button.className = 'bg-option bg-option--thumb' + (active ? ' is-active' : '') + (allowed ? '' : ' is-locked')
+      button.className = 'bg-option bg-option--thumb' + (active ? ' is-active' : '') + (allowed ? '' : ' is-locked') + (aboveTier ? ' is-tier-locked' : '')
       button.disabled = !allowed
       button.setAttribute('data-bg', item.id)
       var thumb = state.thumbs[item.id]
-      var note = item.note
-      if (!allowed) note = settings.membershipBackground ? '会员可用' : '未解锁'
       button.innerHTML =
         '<span class="bg-thumb">' +
-        (thumb ? '<img src="' + escapeHtml(thumb) + '" alt="' + escapeHtml(item.name) + ' 背景效果" />' : '<span class="bg-thumb__ph">效果加载中</span>') +
+        (thumb ? '<img src="' + escapeHtml(thumb) + '" alt="' + escapeHtml(item.name) + ' 背景效果" />' : '<span class="bg-thumb__ph">' + (aboveTier ? '解锁后可见' : '效果加载中') + '</span>') +
+        (allowed ? '' : '<span class="bg-lock">🔒</span>') +
         '</span>' +
         '<strong>' + escapeHtml(item.name) + '</strong>' +
         '<small>' + escapeHtml(note) + '</small>'
       button.addEventListener('click', function () {
-        if (!allowed || active) return
+        if (active) return
+        if (!allowed) {
+          if (aboveTier) {
+            toast(item.name + '需要生涯积分满 ' + unlockPoints(item) + ' 分，还差 ' + pointsShort(item) + ' 分')
+          } else {
+            toast('更换背景需要生涯积分满 100 分或开通会员')
+          }
+          return
+        }
         settings.backgroundId = item.id
         renderBackgrounds()
         requestPreview()
       })
       list.appendChild(button)
     })
-    $('background-hint').textContent = settings.canChangeBackground
-      ? (settings.backgroundUnlock === 'membership' ? '会员权益已生效' : '已解锁更换背景')
-      : '满 100 分或开通会员后可更换背景'
+    $('background-hint').textContent = backgroundHint(current)
+  }
+
+  function backgroundHint(current) {
+    var settings = state.settings
+    if (current == null) return '积分待核定'
+    if (current === 0) return '还差 ' + pointsShort(BACKGROUNDS[1]) + ' 分升银卡'
+    if (current === 1) return '还差 ' + pointsShort(BACKGROUNDS[2]) + ' 分升金卡'
+    return '已达金卡等级'
   }
 
   /* 背景缩略图同样走服务端成卡渲染，保证看到的是真实背景而不是色块。
+     未达等级的缩略图也要取：页面用灰度展示，让用户看到解锁后的样式。
      逐张串行请求，失败即跳过，不阻塞主预览。 */
   function loadThumbs() {
     var settings = state.settings
     if (!settings || !settings.tier || state.thumbBusy) return
-    var pending = BACKGROUNDS.filter(function (item) {
-      if (state.thumbs[item.id]) return false
-      return settings.canChangeBackground || item.id === settings.tier
-    })
+    var pending = BACKGROUNDS.filter(function (item) { return !state.thumbs[item.id] })
     if (!pending.length) return
     state.thumbBusy = true
     var chain = Promise.resolve()
@@ -217,7 +274,7 @@
       toast('卡面已保存')
       setTimeout(function () { location.href = './index.html' }, 900)
     }).catch(function (error) {
-      if (error.code === 'PLAYER_CARD_PHOTO_PAY_REQUIRED') toast('换照片需先用 AI 定妆照合成新形象照，本页不扣费')
+      if (error.code === 'PLAYER_CARD_PHOTO_PAY_REQUIRED') toast('换照片需先用「直接生成 AI 形象照」合成新形象照，本页不扣费')
       else handleError(error)
     }).then(function () {
       state.saving = false
@@ -237,7 +294,7 @@
   function bind() {
     $('btn-retry').addEventListener('click', function () { init() })
     $('btn-ai-portrait').addEventListener('click', openAiPortrait)
-    $('btn-ai-portrait-crop').addEventListener('click', openAiPortrait)
+    $('btn-edit-crop').addEventListener('click', focusCropPanel)
     $('btn-ai-error').addEventListener('click', openAiPortrait)
     $('btn-back').addEventListener('click', function () { location.href = './index.html' })
     $('btn-save').addEventListener('click', saveCard)
@@ -271,20 +328,30 @@
         tier: tier,
         version: Number(player.version || 0),
         backgroundId: String(player.backgroundId || tier || ''),
+        points: Number(score.points || 0),
+        tierRule: player.tierRule || TIER_FALLBACK,
         canChangeBackground: Boolean(score.canChangeBackground),
-        membershipBackground: Boolean(score.membershipBackground),
-        backgroundUnlock: String(score.backgroundUnlock || ''),
         crop: draft.crop || { zoom: 1, x: 0, y: 0 }
       }
       $('design-sub').textContent = (state.settings.name || '球员') + ' · 背景与形象照'
+      /* 历史上已保存的背景可能高于当前卡级（例如会员越级选过金卡）：
+         这里按已达到的卡级回退预览，保存时服务端同样会拒绝越级背景。 */
+      var savedRank = tierRank(state.settings.backgroundId)
+      var currentRank = tierRank(state.settings.tier)
+      var fallbackFrom = ''
+      if (savedRank != null && currentRank != null && savedRank > currentRank) {
+        fallbackFrom = state.settings.backgroundId
+        state.settings.backgroundId = state.settings.tier
+      }
       show('state-loading', false)
       show('content', true)
       renderBackgrounds()
       renderCrop()
       requestPreview().then(loadThumbs)
+      if (fallbackFrom) toast('原卡面背景超出当前卡级，已按' + BACKGROUNDS[currentRank].name + '预览，需要积分达标后才能保存')
     }).catch(function (error) {
       var code = (error && error.code) || ''
-      if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') { showError('该球员还没有标准形象照，先用 AI 定妆照生成一张再回来设计卡面。', true); return }
+      if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') { showError('该球员还没有标准形象照，先用「直接生成 AI 形象照」生成一张再回来设计卡面。', true); return }
       if (code === 'PLAYER_CARD_FORBIDDEN') { showError('只能设计本人或已绑定孩子的球员卡'); return }
       showError((error && error.message) || '卡面读取失败，请稍后重试')
     })

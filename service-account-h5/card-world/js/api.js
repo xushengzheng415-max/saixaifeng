@@ -86,7 +86,7 @@
     previewCard: function (data) { return api('previewMyPlayerCard', data) },
     saveCard: function (data) { return api('saveMyPlayerCard', data) },
     setMainCard: function (playerId) { return api('cardWorldSetMainCard', { playerId: playerId }) },
-    // AI 定妆照：卡面页直接生成，不再绕到「球员登记 · 形象照」。
+    // AI 形象照：卡面页直接生成，不再绕到「球员登记 · 形象照」。
     // 扣费与成片归属都在服务端（cardPortraitAi.cjs），前端只负责提交请求编号与参考照片。
     aiPortraitInfo: function (data) { return api('cardAiPortraitInfo', data) },
     prepareAiPortrait: function (data) { return api('cardAiPortraitPrepare', data) },

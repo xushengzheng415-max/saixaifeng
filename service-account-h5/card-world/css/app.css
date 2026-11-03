@@ -140,7 +140,7 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .actions { display: flex; gap: 10px; margin-top: 14px; }
 .actions .btn { flex: 1; }
 
-/* AI 定妆照提醒：换照片/合成形象照的真实入口在服务号「球员登记 · 形象照」 */
+/* AI 形象照提醒：换照片/合成形象照的入口在卡面设计页的「直接生成 AI 形象照」 */
 .ai-panel {
   border-color: rgba(232, 197, 106, 0.42);
   background: linear-gradient(160deg, rgba(232, 197, 106, 0.16), rgba(255, 255, 255, 0.04));
@@ -274,7 +274,10 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 
 .design-actions { display: flex; gap: 10px; margin-top: 16px; }
 .design-actions .btn { flex: 1; }
-.design-actions__ai { width: 100%; margin-top: 10px; }
+.design-actions--single { margin-top: 12px; }
+
+/* 照片构图被「编辑构图」定位到时的短暂高亮，避免用户找不到滑块 */
+.panel.is-focused { box-shadow: 0 0 0 1px rgba(232, 197, 106, 0.6), 0 0 18px rgba(232, 197, 106, 0.25); }
 
 .field__hint { margin: 8px 0 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
 
@@ -287,14 +290,20 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 }
 .bg-option small { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); font-weight: 400; }
 .bg-option.is-active { border-color: rgba(232, 197, 106, 0.75); box-shadow: 0 0 0 1px rgba(232, 197, 106, 0.35) inset; }
-.bg-option.is-locked { opacity: 0.55; }
+.bg-option.is-locked { opacity: 0.62; }
 .bg-option[disabled] { cursor: not-allowed; }
+/* 未达卡级的背景保留真实成卡图，只做灰度 + 锁标 + 解锁分数 */
+.bg-option--thumb.is-tier-locked { opacity: 1; }
+.bg-option--thumb.is-tier-locked .bg-thumb img { filter: grayscale(1) brightness(0.68) contrast(0.95); }
+.bg-option--thumb.is-tier-locked strong { color: var(--muted); }
+.bg-option--thumb.is-tier-locked small { color: #f0c67a; }
 
 /* 背景缩略图：每张都是该背景下的成卡效果，避免只给色块 */
 .backgrounds--thumb { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .bg-option--thumb { padding: 8px 6px 10px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .bg-option--thumb strong { font-size: 12px; }
 .bg-thumb {
+  position: relative;
   width: 100%; aspect-ratio: 3 / 4; border-radius: 9px; overflow: hidden;
   background: radial-gradient(closest-side at 50% 38%, rgba(93, 130, 220, 0.22), #0b0f18 72%);
   border: 1px solid var(--panel-line);
@@ -302,6 +311,10 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 }
 .bg-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .bg-thumb__ph { font-size: 10px; color: var(--muted); }
+.bg-lock {
+  position: absolute; right: 6px; bottom: 6px; font-size: 12px; line-height: 1;
+  padding: 3px 5px; border-radius: 6px; background: rgba(7, 9, 15, 0.72);
+}
 .bg-option--thumb.is-active .bg-thumb { border-color: rgba(232, 197, 106, 0.7); }
 
 .slider-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--muted); }
@@ -309,7 +322,7 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .slider-row em { width: 42px; text-align: right; font-style: normal; color: var(--text); font-variant-numeric: tabular-nums; }
 .slider-row input { flex: 1; accent-color: var(--gold); }
 
-/* ---------- AI 定妆照（portrait.html） ---------- */
+/* ---------- AI 形象照（portrait.html） ---------- */
 .upload {
   position: relative;
   margin-top: 12px;
