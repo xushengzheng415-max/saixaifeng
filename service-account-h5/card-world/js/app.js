@@ -5,16 +5,8 @@
   var state = {
     players: [],
     main: null,
-    membership: null,
-    settings: null,
-    saving: false
+    membership: null
   }
-
-  var BACKGROUNDS = [
-    { id: 'bronze', name: '铜卡', note: '基础' },
-    { id: 'silver', name: '银卡', note: '进阶' },
-    { id: 'gold', name: '金卡', note: '精英' }
-  ]
 
   function $(id) { return document.getElementById(id) }
 
@@ -147,7 +139,7 @@
       list.appendChild(card)
     })
     Array.prototype.forEach.call(list.querySelectorAll('button[data-edit]'), function (button) {
-      button.addEventListener('click', function () { openSettings(button.getAttribute('data-edit')) })
+      button.addEventListener('click', function () { gotoDesign(button.getAttribute('data-edit')) })
     })
     Array.prototype.forEach.call(list.querySelectorAll('button[data-player]'), function (button) {
       button.addEventListener('click', function () { setMainCard(button.getAttribute('data-player'), button) })
@@ -183,158 +175,20 @@
     })
   }
 
-  function openSettings(playerId) {
+  /* 卡面设计走独立页面 design.html：预览、背景、构图和 AI 形象照入口都在该页，
+     本页不再弹层设置，避免只显示形象照看不到背景。 */
+  function gotoDesign(playerId) {
     if (!playerId) {
       toast('还没有球员卡，先去足球世界签约')
       return
     }
-    show('settings-mask', true)
-    $('settings-body').style.opacity = '0.5'
-    $('btn-save').disabled = true
-    Api.getCard(playerId).then(function (result) {
-      var player = result.player || {}
-      var score = player.playerCard || {}
-      var draft = result.draft || {}
-      state.settings = {
-        playerId: playerId,
-        name: player.name || '',
-        tier: player.cardTier || '',
-        version: Number(player.version || 0),
-        backgroundId: player.backgroundId || player.cardTier || 'bronze',
-        canChangeBackground: Boolean(score.canChangeBackground),
-        membershipBackground: Boolean(score.membershipBackground),
-        backgroundUnlock: score.backgroundUnlock || '',
-        crop: draft.crop || player.playerCardCrop || { zoom: 1, x: 0, y: 0 },
-        portrait: result.standardPortraitData || '',
-        scene: result.cardScene || null
-      }
-      $('settings-body').style.opacity = '1'
-      renderBackgrounds()
-      renderCrop()
-      $('btn-save').disabled = false
-    }).catch(function (error) {
-      show('settings-mask', false)
-      if (error.code === 'PLAYER_CARD_PORTRAIT_REQUIRED') toast('该球员还没有标准形象照，请先做 AI 定妆照')
-      else toast(error.message || '卡面读取失败，请重试')
-    })
+    location.href = './design.html?playerId=' + encodeURIComponent(playerId)
   }
 
   /* AI 定妆照：真实合成流程在服务号「球员登记 · 形象照」(join-player 的智能生成)，
      本页只做引导，不自行判定资格、不扣费。 */
   function openAiPortrait() {
     location.href = '../registration-resume.html'
-  }
-
-  function renderBackgrounds() {
-    var settings = state.settings
-    var list = $('background-list')
-    list.innerHTML = ''
-    var current = settings.backgroundId
-    BACKGROUNDS.forEach(function (item) {
-      var allowed = settings.canChangeBackground || item.id === settings.tier
-      var button = document.createElement('button')
-      button.type = 'button'
-      button.className = 'bg-option' + (item.id === current ? ' is-active' : '') + (allowed ? '' : ' is-locked')
-      button.disabled = !allowed
-      button.setAttribute('data-bg', item.id)
-      var note = item.note
-      if (!allowed) note = settings.membershipBackground ? '会员可用' : '未解锁'
-      button.innerHTML = escapeHtml(item.name) + '<small>' + escapeHtml(note) + '</small>'
-      button.addEventListener('click', function () {
-        if (!allowed) return
-        settings.backgroundId = item.id
-        renderBackgrounds()
-      })
-      list.appendChild(button)
-    })
-    $('background-hint').textContent = settings.canChangeBackground
-      ? (settings.backgroundUnlock === 'membership' ? '会员权益已生效，可不达 100 分更换背景' : '已满足更换背景条件')
-      : '满 100 分或开通会员后可更换背景'
-  }
-
-  function cropValues() {
-    return {
-      zoom: Number($('crop-zoom').value),
-      x: Number($('crop-x').value),
-      y: Number($('crop-y').value)
-    }
-  }
-
-  function applyCropPreview() {
-    var image = $('crop-image')
-    var crop = cropValues()
-    image.style.transform = 'translate(-50%, -50%) translate(' + (crop.x * 100) + '%, ' + (crop.y * 100) + '%) scale(' + crop.zoom + ')'
-    $('crop-zoom-value').textContent = crop.zoom.toFixed(2)
-    $('crop-x-value').textContent = crop.x.toFixed(2)
-    $('crop-y-value').textContent = crop.y.toFixed(2)
-    if (state.settings) state.settings.crop = crop
-  }
-
-  function renderCrop() {
-    var settings = state.settings
-    var crop = settings.crop || { zoom: 1, x: 0, y: 0 }
-    $('crop-zoom').value = String(crop.zoom || 1)
-    $('crop-x').value = String(crop.x || 0)
-    $('crop-y').value = String(crop.y || 0)
-    var image = $('crop-image')
-    if (settings.portrait) {
-      image.src = settings.portrait
-      image.hidden = false
-      $('crop-empty').hidden = true
-    } else {
-      image.hidden = true
-      $('crop-empty').hidden = false
-      $('crop-empty').textContent = '未能读取标准形象照'
-    }
-    applyCropPreview()
-  }
-
-  function settingsPayload(extra) {
-    var settings = state.settings
-    return Object.assign({
-      playerId: settings.playerId,
-      backgroundId: settings.backgroundId,
-      crop: cropValues(),
-      mode: 'portrait',
-      tier: settings.tier,
-      expectedVersion: settings.version
-    }, extra || {})
-  }
-
-  function previewCard() {
-    if (!state.settings) return
-    if (!state.settings.tier) { toast('球员积分待核定，暂不能预览'); return }
-    $('btn-preview').disabled = true
-    Api.previewCard(settingsPayload()).then(function (result) {
-      if (!result.imageData) { toast('该卡面暂不支持预览，请直接保存'); return }
-      $('preview-image').src = result.imageData
-      show('preview-mask', true)
-    }).catch(function (error) {
-      if (error.code === 'PLAYER_CARD_BACKGROUND_LOCKED') toast('该背景未解锁')
-      else toast(error.message || '预览失败，请重试')
-    }).then(function () { $('btn-preview').disabled = false })
-  }
-
-  function saveCard() {
-    if (!state.settings || state.saving) return
-    if (!state.settings.tier) { toast('球员积分待核定，暂不能保存卡面'); return }
-    state.saving = true
-    $('btn-save').disabled = true
-    $('btn-save').textContent = '保存中…'
-    Api.saveCard(settingsPayload()).then(function () {
-      toast('卡面已保存')
-      show('settings-mask', false)
-      return refresh()
-    }).catch(function (error) {
-      if (error.code === 'PLAYER_CARD_PHOTO_PAY_REQUIRED') toast('换照片需先用 AI 定妆照合成新形象照，本页不扣费')
-      else if (error.code === 'PLAYER_CARD_CONFLICT') toast('卡面已更新，请重新打开设置')
-      else if (error.code === 'PLAYER_CARD_BACKGROUND_LOCKED') toast('该背景未解锁')
-      else toast(error.message || '保存失败，请重试')
-    }).then(function () {
-      state.saving = false
-      $('btn-save').disabled = false
-      $('btn-save').textContent = '保存卡面'
-    })
   }
 
   function loadScript(src) {
@@ -426,26 +280,12 @@
     $('btn-settings').addEventListener('click', function () {
       var main = state.main && !state.main.empty ? state.main : null
       var playerId = main ? main.playerId : (state.players[0] && state.players[0].id)
-      openSettings(playerId)
+      gotoDesign(playerId)
     })
     $('btn-library').addEventListener('click', function () {
       document.getElementById('library-panel').scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
     $('btn-ai-portrait').addEventListener('click', openAiPortrait)
-    $('btn-ai-portrait-sheet').addEventListener('click', openAiPortrait)
-    $('btn-close-settings').addEventListener('click', function () { show('settings-mask', false) })
-    $('settings-mask').addEventListener('click', function (event) {
-      if (event.target === $('settings-mask')) show('settings-mask', false)
-    })
-    $('btn-close-preview').addEventListener('click', function () { show('preview-mask', false) })
-    $('preview-mask').addEventListener('click', function (event) {
-      if (event.target === $('preview-mask')) show('preview-mask', false)
-    })
-    $('btn-preview').addEventListener('click', previewCard)
-    $('btn-save').addEventListener('click', saveCard)
-    ;['crop-zoom', 'crop-x', 'crop-y'].forEach(function (id) {
-      $(id).addEventListener('input', applyCropPreview)
-    })
     $('weapp-fallback').addEventListener('click', function () { toast('请使用微信打开本页后进入小程序') })
   }
 

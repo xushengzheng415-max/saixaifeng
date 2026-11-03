@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#07090f" />
+  <title>卡面设计 · 赛小蜂足球</title>
+  <link rel="stylesheet" href="css/app.css?v=20261103-page1" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="topbar__back" href="./index.html" aria-label="返回我的球员卡">‹</a>
+      <img class="topbar__logo" src="assets/card-world-icon.jpg" alt="赛小蜂" />
+      <div class="topbar__title">
+        <strong>卡面设计</strong>
+        <span id="design-sub">背景 · 形象照 · 构图</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="state-card" id="state-loading">
+        <i class="spinner"></i>
+        <strong>正在读取卡面…</strong>
+        <span>背景与形象照由服务端合成，不在此页上传</span>
+      </section>
+
+      <section class="state-card" id="state-error" hidden>
+        <strong id="error-title">暂时无法进入卡面设计</strong>
+        <p id="error-text">请稍后重试</p>
+        <div class="state-card__actions">
+          <button type="button" class="btn btn--gold" id="btn-retry">重新加载</button>
+          <button type="button" class="btn btn--ghost" id="btn-ai-error" hidden>去做 AI 定妆照</button>
+        </div>
+      </section>
+
+      <section id="content" hidden>
+        <!-- 卡面效果：完整卡面（背景 + 形象照），不是单张人像 -->
+        <article class="panel">
+          <div class="panel__head">
+            <h2>卡面效果</h2>
+            <span class="hint" id="preview-state">—</span>
+          </div>
+          <div class="design-stage" id="design-stage">
+            <img id="design-image" alt="卡面预览" hidden />
+            <div class="design-stage__empty" id="design-empty">正在合成卡面…</div>
+          </div>
+          <p class="field__hint" id="design-hint">当前显示的是最终成卡效果：所选背景与形象照已经合成。</p>
+        </article>
+
+        <!-- AI 形象照：本页一定要有的入口 -->
+        <article class="panel ai-panel" id="ai-panel">
+          <div class="ai-panel__head">
+            <span class="ai-panel__badge">重点</span>
+            <h2>形象照不满意？</h2>
+          </div>
+          <p class="ai-panel__text">
+            可以合成你自己的 <strong>AI 定妆照</strong>：上传头像和球服，生成专属形象照，再回到本页把新照片套进卡面。
+          </p>
+          <button type="button" class="btn btn--gold ai-panel__btn" id="btn-ai-portrait">去做 AI 定妆照</button>
+        </article>
+
+        <!-- 背景卡面 -->
+        <article class="panel">
+          <div class="panel__head">
+            <h2>背景卡面</h2>
+            <span class="hint" id="background-hint">—</span>
+          </div>
+          <div class="backgrounds backgrounds--thumb" id="background-list"></div>
+          <p class="field__hint">每张缩略图都是该背景下的成卡效果，点选后上方大图同步更新。</p>
+        </article>
+
+        <!-- 照片构图 -->
+        <article class="panel">
+          <div class="panel__head">
+            <h2>照片构图</h2>
+            <span class="hint">只调大小与位置</span>
+          </div>
+          <div class="slider-row">
+            <span>缩放</span>
+            <input type="range" id="crop-zoom" min="1" max="4" step="0.05" value="1" />
+            <em id="crop-zoom-value">1.00</em>
+          </div>
+          <div class="slider-row">
+            <span>左右</span>
+            <input type="range" id="crop-x" min="-2" max="2" step="0.02" value="0" />
+            <em id="crop-x-value">0.00</em>
+          </div>
+          <div class="slider-row">
+            <span>上下</span>
+            <input type="range" id="crop-y" min="-2" max="2" step="0.02" value="0" />
+            <em id="crop-y-value">0.00</em>
+          </div>
+          <p class="field__hint">只调整背景或构图可直接保存，不消耗蜂蜜；换照片请先用 AI 定妆照合成新形象照。</p>
+          <button type="button" class="btn btn--ghost design-actions__ai" id="btn-ai-portrait-crop">生成 AI 形象照</button>
+        </article>
+
+        <div class="design-actions">
+          <button type="button" class="btn btn--ghost" id="btn-back">返回卡库</button>
+          <button type="button" class="btn btn--gold" id="btn-save">保存卡面</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="js/api.js?v=20261101-holo4"></script>
+  <script src="js/design.js?v=20261103-page1"></script>
+</body>
+</html>

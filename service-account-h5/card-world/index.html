@@ -1,11 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>我的球员卡 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261103-ai1" />
+  <link rel="stylesheet" href="css/app.css?v=20261103-page1" />
   <link rel="stylesheet" href="css/holo-cosmos.css?v=20261101-holo4" />
 </head>
 <body>
@@ -73,7 +73,7 @@
           <p class="hero__note" id="hero-note" hidden></p>
 
           <div class="actions">
-            <button type="button" class="btn btn--gold" id="btn-settings">卡面设置</button>
+            <button type="button" class="btn btn--gold" id="btn-settings">设计卡面</button>
             <button type="button" class="btn btn--ghost" id="btn-library">我的卡库</button>
           </div>
         </article>
@@ -137,71 +137,10 @@
     </main>
   </div>
 
-  <!-- 卡面设置 -->
-  <div class="sheet-mask" id="settings-mask" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <header class="sheet__head">
-        <h2 id="settings-title">卡面设置</h2>
-        <button type="button" class="sheet__close" id="btn-close-settings" aria-label="关闭">×</button>
-      </header>
-      <div class="sheet__body" id="settings-body">
-        <div class="field ai-field">
-          <label class="field__label">形象照不满意？</label>
-          <p class="field__hint">可以合成你自己的 AI 定妆照，生成新形象照后再回这里调整构图。换照片不能在本页完成。</p>
-          <button type="button" class="btn btn--ghost" id="btn-ai-portrait-sheet">去做 AI 定妆照</button>
-        </div>
-
-        <div class="field">
-          <label class="field__label">背景卡面</label>
-          <div class="backgrounds" id="background-list"></div>
-          <p class="field__hint" id="background-hint"></p>
-        </div>
-
-        <div class="field">
-          <label class="field__label">照片构图</label>
-          <div class="crop-stage">
-            <div class="crop-frame">
-              <img id="crop-image" alt="标准形象照" hidden />
-              <div class="crop-empty" id="crop-empty">形象照读取中…</div>
-            </div>
-          </div>
-          <div class="slider-row">
-            <span>缩放</span>
-            <input type="range" id="crop-zoom" min="1" max="4" step="0.05" value="1" />
-            <em id="crop-zoom-value">1.00</em>
-          </div>
-          <div class="slider-row">
-            <span>左右</span>
-            <input type="range" id="crop-x" min="-2" max="2" step="0.02" value="0" />
-            <em id="crop-x-value">0.00</em>
-          </div>
-          <div class="slider-row">
-            <span>上下</span>
-            <input type="range" id="crop-y" min="-2" max="2" step="0.02" value="0" />
-            <em id="crop-y-value">0.00</em>
-          </div>
-          <p class="field__hint">只调整背景或构图可直接保存，不消耗蜂蜜；换照片请先用 AI 定妆照合成新形象照。</p>
-        </div>
-      </div>
-      <footer class="sheet__foot">
-        <button type="button" class="btn btn--ghost" id="btn-preview">预览</button>
-        <button type="button" class="btn btn--gold" id="btn-save">保存卡面</button>
-      </footer>
-    </div>
-  </div>
-
-  <!-- 预览 -->
-  <div class="preview-mask" id="preview-mask" hidden>
-    <div class="preview">
-      <img id="preview-image" alt="卡面预览" />
-      <button type="button" class="btn btn--ghost" id="btn-close-preview">关闭预览</button>
-    </div>
-  </div>
-
   <div class="toast" id="toast" hidden></div>
 
   <script src="js/api.js?v=20261101-holo4"></script>
   <script src="js/holo.js?v=20261101-holo4"></script>
-  <script src="js/app.js?v=20261103-ai1"></script>
+  <script src="js/app.js?v=20261103-page1"></script>
 </body>
 </html>
