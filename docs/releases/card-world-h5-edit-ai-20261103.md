@@ -42,9 +42,13 @@
 
 | 目标 | 路径 | 状态 |
 |---|---|---|
-| 测试（独立副本） | `/preview/service-account-h5/card-world-ai/` | 已发布（2026-11-03 第 2 次），回下载字节一致：index 6,899 B、design.html 4,770 B、css/app.css 11,785 B、js/app.js 13,073 B、js/design.js 11,161 B |
+| 测试（独立副本） | `/preview/service-account-h5/card-world-ai/` | 已发布，与正式端字节完全一致（index 6,899 B、design.html 4,770 B、css/app.css 11,785 B、js/app.js 13,073 B、js/design.js 11,161 B） |
 | 测试（依赖补齐） | `/preview/service-account-h5/registration-resume.html`、`.js` | 已发布（原 404，取正式字节） |
-| 正式 | `/service-account-h5/card-world/` | **未发布，待授权** |
+| 正式 | `/service-account-h5/card-world/` | **已发布（2026-11-03，用户明确授权）**，回下载字节一致；新增 design.html、js/design.js，更新 index.html、css/app.css、js/app.js |
+
+发布前基线核对（回下载与 git blob 比对，去 BOM/CRLF 后完全相等）：`index.html`、`css/app.css`、
+`js/app.js` = `6db69827`；`js/api.js` = 本分支 HEAD（对齐线上 `1ab69b4f`）。本次只替换上述 5 个文件，
+未触碰 `js/holo.js`、`css/holo-cosmos.css`、`assets/*`。
 
 预览页：
 
@@ -52,13 +56,21 @@
 - 卡面设计：<https://cloud1-7g8ckb3c7815a011-1419431905.tcloudbaseapp.com/preview/service-account-h5/card-world-ai/design.html?playerId=...>
 - 正式域名同路径：`https://www.sxffootball.cn/preview/service-account-h5/card-world-ai/`
 
+正式页：
+
+- 卡库：<https://www.sxffootball.cn/service-account-h5/card-world/index.html>
+- 卡面设计：`https://www.sxffootball.cn/service-account-h5/card-world/design.html?playerId=...`（从卡库点「设计卡面」自动带上）
+
 注意：`/preview/service-account-h5/card-world/` 上仍是另一套全量玩法页（在途未验收），
-本次没有覆盖它，改动放在独立 `card-world-ai` 副本中，避免清除他人未验收内容。
+本次没有覆盖它，测试副本放在独立 `card-world-ai`。
 
 ## 验证
 
 - `node --check` 通过：`card-world/js/app.js`、`js/design.js`
-- 回下载字节级 SHA-256 一致：index.html / design.html / css/app.css / js/app.js / js/design.js
+- 正式端回下载字节级 SHA-256 一致：index.html / design.html / css/app.css / js/app.js / js/design.js
+- 正式端依赖可达（全部 200）：`js/api.js`、`js/holo.js`、`css/holo-cosmos.css`、`assets/card-world-icon.jpg`、
+  `assets/cosmos/*`、`../registration-resume.html`、`registration-resume.js`、`service-entry.css`、`me.html`
+- 测试副本与正式端逐文件哈希相同（无落后）
 - 残留扫描：`settings-mask`、`preview-mask`、`openSettings`、`crop-image`、`btn-ai-portrait-sheet` 均为 0 命中
-- 依赖可达：`../registration-resume.html`、`js/api.js`、`js/holo.js`、`css/holo-cosmos.css`、`assets/cosmos/*` 全部 200
 - 待真机确认：设计页打开即显示含背景的成卡；切换背景大图与缩略图同步更新；两处 AI 按钮能进「智能生成」形象照；保存后回到卡库
+- 回滚基线：`.codex-artifacts/h5-card-edit-20261103/prod-before-page1/`（正式改前 3 个文件的原始字节）
