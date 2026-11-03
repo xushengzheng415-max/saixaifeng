@@ -16,8 +16,14 @@ module.exports = function createServicePrivate({ cloud, config, hashSessionToken
     const allowedReturns=[
       'https://www.sxffootball.cn/service-account-h5/registration-resume.html',
       'https://www.sxffootball.cn/service-account-h5/card-world/index.html',
+      // 卡面设计页与「AI 定妆照」页是独立页面，授权回来要能落回原页继续操作；
+      // 只放开本域名下的固定路径，不接受任意 returnUrl。
+      'https://www.sxffootball.cn/service-account-h5/card-world/design.html',
+      'https://www.sxffootball.cn/service-account-h5/card-world/portrait.html',
       'https://www.sxffootball.cn/preview/service-account-h5/me.html',
-      'https://www.sxffootball.cn/preview/service-account-h5/card-world/index.html'
+      'https://www.sxffootball.cn/preview/service-account-h5/card-world/index.html',
+      'https://www.sxffootball.cn/preview/service-account-h5/card-world-ai/design.html',
+      'https://www.sxffootball.cn/preview/service-account-h5/card-world-ai/portrait.html'
     ]
     const redirectUri = allowedReturns.includes(event.returnUrl) ? event.returnUrl : 'https://www.sxffootball.cn/service-account-h5/me.html'
     const state = crypto.randomBytes(20).toString('hex')

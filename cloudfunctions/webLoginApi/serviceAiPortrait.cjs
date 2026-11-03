@@ -245,4 +245,6 @@ async function refund(db, loaded, event) {
   const state = await info(db, loaded)
   return { success: true, refunded: amount > 0, refundedAmount: amount, cost, listCost, balance: state.balance, aiPortrait: state }
 }
-module.exports = { apply, info, portraitCost, prepare, refund }
+// portraitListCost / currentPricing 也给卡面「AI 定妆照」入口复用：
+// 两处必须读同一套价格与会员折扣，不允许各自写一遍算法。
+module.exports = { apply, info, portraitCost, portraitListCost, currentPricing, prepare, refund }

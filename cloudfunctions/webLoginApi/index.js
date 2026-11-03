@@ -6563,6 +6563,10 @@ exports.main = async (event, context) => {
       case 'getMyPlayerCard':
       case 'previewMyPlayerCard':
       case 'saveMyPlayerCard':
+      case 'cardAiPortraitInfo':
+      case 'cardAiPortraitPrepare':
+      case 'cardAiPortraitApply':
+      case 'cardAiPortraitCancel':
         const { createPlayerCards } = require('./playerCards.cjs')
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue,
           // 服务号 H5 复用同一套 servicePrivate 鉴权，不新增平行登录态。

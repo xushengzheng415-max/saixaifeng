@@ -86,9 +86,12 @@
     previewCard: function (data) { return api('previewMyPlayerCard', data) },
     saveCard: function (data) { return api('saveMyPlayerCard', data) },
     setMainCard: function (playerId) { return api('cardWorldSetMainCard', { playerId: playerId }) },
-    // AI 形象照的真实入口在「球员登记 · 形象照」：只复用既有的登记记录与令牌，不新建业务。
-    registrationEntries: function () { return api('servicePrivateRegistrationList') },
-    resumeRegistration: function (registrationId) { return api('servicePrivateResumeRegistration', { registrationId: registrationId }) },
+    // AI 定妆照：卡面页直接生成，不再绕到「球员登记 · 形象照」。
+    // 扣费与成片归属都在服务端（cardPortraitAi.cjs），前端只负责提交请求编号与参考照片。
+    aiPortraitInfo: function (data) { return api('cardAiPortraitInfo', data) },
+    prepareAiPortrait: function (data) { return api('cardAiPortraitPrepare', data) },
+    applyAiPortrait: function (data) { return api('cardAiPortraitApply', data) },
+    cancelAiPortrait: function (data) { return api('cardAiPortraitCancel', data) },
     jsSdkConfig: function (url) { return api('servicePrivateJsSdkConfig', { url: url }) }
   }
 })(window)

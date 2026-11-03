@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#07090f" />
+  <title>AI 定妆照 · 赛小蜂足球</title>
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai3" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="topbar__back" href="./index.html" id="btn-back-link" aria-label="返回">‹</a>
+      <img class="topbar__logo" src="assets/card-world-icon.jpg" alt="赛小蜂" />
+      <div class="topbar__title">
+        <strong>AI 定妆照</strong>
+        <span id="portrait-sub">上传照片 · 选姿势 · 直接生成</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="state-card" id="state-loading">
+        <i class="spinner"></i>
+        <strong>正在读取球员与蜂蜜余额…</strong>
+        <span>只读取当前微信已绑定账号下的球员</span>
+      </section>
+
+      <section class="state-card" id="state-error" hidden>
+        <strong id="error-title">暂时无法生成定妆照</strong>
+        <p id="error-text">请稍后重试</p>
+        <div class="state-card__actions">
+          <button type="button" class="btn btn--gold" id="btn-retry">重新加载</button>
+        </div>
+      </section>
+
+      <section id="content" hidden>
+        <!-- 目标球员 -->
+        <article class="panel">
+          <div class="panel__head">
+            <h2 id="player-name">球员</h2>
+            <span class="hint" id="player-team">—</span>
+          </div>
+          <p class="field__hint" id="player-hint">生成后点「使用这张形象照」，会直接成为这张球员卡的卡面形象照。</p>
+        </article>
+
+        <!-- 参考照片 -->
+        <article class="panel ai-panel">
+          <div class="ai-panel__head">
+            <span class="ai-panel__badge">第 1 步</span>
+            <h2>上传参考照片</h2>
+          </div>
+          <p class="ai-panel__text">一张能看清脸的照片即可：光线均匀、单人、正对镜头。球衣可以另选颜色。</p>
+          <div class="upload">
+            <img class="upload__preview" id="photo-preview" alt="参考照片" hidden />
+            <div class="upload__empty" id="photo-empty">点这里选择照片</div>
+            <input class="upload__input" type="file" id="photo-input" accept="image/*" />
+          </div>
+          <p class="ai-panel__note" id="photo-note" hidden></p>
+        </article>
+
+        <!-- 姿势 -->
+        <article class="panel">
+          <div class="panel__head">
+            <h2>第 2 步 · 姿势</h2>
+            <span class="hint">抱膀定妆照</span>
+          </div>
+          <div class="pose-list" id="pose-list"></div>
+        </article>
+
+        <!-- 球衣颜色 -->
+        <article class="panel">
+          <div class="panel__head">
+            <h2>第 3 步 · 球衣颜色</h2>
+            <span class="hint">可不选</span>
+          </div>
+          <div class="color-list" id="color-list"></div>
+          <p class="field__hint">不选就按参考照片里的球衣处理；选颜色时按纯色圆领球衣合成。</p>
+        </article>
+
+        <!-- 生成 -->
+        <article class="panel ai-panel" id="generate-panel">
+          <div class="ai-panel__head">
+            <span class="ai-panel__badge">生成</span>
+            <h2 id="generate-title">第 4 步 · 生成</h2>
+          </div>
+          <p class="ai-panel__text" id="price-line">每次生成并保存进卡面消耗 <strong id="price-cost">100</strong> 滴蜂蜜，会员按当前会员价扣费。</p>
+          <p class="field__hint" id="balance-line">蜂蜜余额读取中…</p>
+          <div class="result-stage" id="result-stage" hidden>
+            <img id="result-image" alt="AI 定妆照结果" />
+          </div>
+          <p class="ai-panel__note" id="generate-note" hidden></p>
+          <button type="button" class="btn btn--gold ai-panel__btn" id="btn-generate">生成 AI 定妆照</button>
+          <div class="design-actions" id="result-actions" hidden>
+            <button type="button" class="btn btn--ghost" id="btn-regenerate">重新生成</button>
+            <button type="button" class="btn btn--gold" id="btn-use">使用这张形象照</button>
+          </div>
+          <p class="field__hint" id="generate-hint">生成失败或点「返回」离开时，本次蜂蜜会原路退回。</p>
+        </article>
+
+        <div class="design-actions">
+          <button type="button" class="btn btn--ghost" id="btn-back">返回卡面设计</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="js/api.js?v=20261104-ai3"></script>
+  <script src="js/portrait.js?v=20261104-ai3"></script>
+</body>
+</html>

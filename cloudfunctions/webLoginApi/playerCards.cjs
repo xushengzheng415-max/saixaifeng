@@ -199,7 +199,15 @@ function createPlayerCards(deps) {
   }
   async function standardPortrait(auth, entry, db) {
     let portrait = null
-    if (auth.parentInvite) {
+    // 卡面 AI 定妆照（服务号「AI 定妆照」页生成并点「使用这张」）优先作为卡面素材；
+    // 它只服务卡面，不覆盖登记与人脸核验使用的 parent_portraits 记录。
+    if (!auth.parentInvite && String(entry.player.playerCardAiPortraitFileId || '').startsWith('cloud://')) {
+      portrait = {
+        _id: String(entry.player.playerCardAiPortraitId || 'ai_card_portrait'),
+        transparentFileId: String(entry.player.playerCardAiPortraitFileId),
+        sourceType: 'ai_card_portrait'
+      }
+    } else if (auth.parentInvite) {
       const rows = await readAll(db, 'parent_portraits', { parentInvite: auth.parentInvite })
       portrait = rows.filter(row => ['ready_for_confirmation', 'confirmed'].includes(String(row.status || '')) && String(row.serviceAccountOpenId || '') === String(auth.openId || '')).sort((a,b) => Number(b.version || 0) - Number(a.version || 0))[0] || null
     } else if (entry.player.recentPortraitId) {
@@ -291,6 +299,16 @@ function createPlayerCards(deps) {
       return appeals.submit(db,actor,event,ledger,{...entry.player,teamName:entry.teamName})
     }
     const isStillOwned = current => entry.relation ? owns(current,entry.relation) : ['teamId','guardianUserId','linkedUserId','playerUserId'].every(field=>String(current[field]||'') === String(entry.player[field]||''))
+    // 卡面「AI 定妆照」：扣费、凭证、入库统一在 cardPortraitAi.cjs，本文件只做路由，
+    // 不在这里复制第二套计费或素材归属判断。
+    if (['cardAiPortraitInfo','cardAiPortraitPrepare','cardAiPortraitApply','cardAiPortraitCancel'].includes(event.action)) {
+      const aiPortrait = require('./cardPortraitAi.cjs')
+      const context = { db, cloud, auth, entry, isStillOwned }
+      if (event.action === 'cardAiPortraitInfo') return aiPortrait.info(context)
+      if (event.action === 'cardAiPortraitPrepare') return aiPortrait.prepare(context, event)
+      if (event.action === 'cardAiPortraitApply') return aiPortrait.apply(context, event)
+      return aiPortrait.cancel(context, event)
+    }
     if (event.action === 'deleteMyPlayerCard') return library.remove(entry.player,String(event.templateId || ''),isStillOwned)
     if (['getMyPreloadedPlayerCard','previewMyPreloadedPlayerCard','saveMyPreloadedPlayerCard','selectMyPlayerCard'].includes(event.action)) {
       const level = await summary(entry)

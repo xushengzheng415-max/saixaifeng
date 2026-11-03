@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "openapi": [
+      "hunyuan.image.generateImage"
+    ]
+  },
+  "timeout": 120,
+  "memorySize": 256,
+  "desc": "AI形象照演示 - 抱膀定妆照姿势试验（演示用）"
+}

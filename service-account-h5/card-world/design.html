@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>卡面设计 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261103-page2" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai3" />
 </head>
 <body>
   <div class="app">
@@ -48,18 +48,17 @@
           <p class="field__hint" id="design-hint">当前显示的是最终成卡效果：所选背景与形象照已经合成。</p>
         </article>
 
-        <!-- AI 形象照：本页一定要有的入口（生成在「球员登记 · 形象照」的「✦ 智能生成」） -->
+        <!-- AI 形象照：直接进独立生成页 portrait.html，生成后回到本页套进卡面 -->
         <article class="panel ai-panel" id="ai-panel">
           <div class="ai-panel__head">
             <span class="ai-panel__badge">重点</span>
             <h2>形象照不满意？</h2>
           </div>
           <p class="ai-panel__text">
-            可以合成你自己的 <strong>AI 定妆照</strong>：上传头像和球服，生成专属形象照，再回到本页把新照片套进卡面。
-            生成在「球员登记 · 形象照」的「✦ 智能生成」里进行。
+            可以合成你自己的 <strong>AI 定妆照</strong>：上传头像和球服、选好姿势直接生成，
+            生成后回到本页就把新照片套进卡面。
           </p>
-          <button type="button" class="btn btn--gold ai-panel__btn" id="btn-ai-portrait">去球员登记生成 AI 定妆照</button>
-          <p class="ai-panel__note" id="ai-panel-note" hidden></p>
+          <button type="button" class="btn btn--gold ai-panel__btn" id="btn-ai-portrait">去做 AI 定妆照</button>
         </article>
 
         <!-- 背景卡面 -->
@@ -107,8 +106,7 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="js/api.js?v=20261103-page2"></script>
-  <script src="js/portrait-entry.js?v=20261103-page2"></script>
-  <script src="js/design.js?v=20261103-page2"></script>
+  <script src="js/api.js?v=20261104-ai3"></script>
+  <script src="js/design.js?v=20261104-ai3"></script>
 </body>
 </html>

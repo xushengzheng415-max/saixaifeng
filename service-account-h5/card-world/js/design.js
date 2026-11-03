@@ -53,18 +53,13 @@
     try { return String(sessionStorage.getItem(PENDING_KEY) || '').trim() } catch (error) { return '' }
   }
 
-  /* AI 定妆照真实生成在「球员登记 · 形象照」的「✦ 智能生成」；这里只负责把人送到那个环节。 */
+  /* AI 定妆照直接进独立的 portrait.html 生成页；生成并「使用这张」后回到本页即套进卡面。 */
   function openAiPortrait() {
     var settings = state.settings
-    if (!window.CardWorldPortraitEntry) { toast('页面尚未准备好，请重新打开'); return }
-    window.CardWorldPortraitEntry.open(settings ? settings.name : '', settings ? settings.teamName : '', showAiNote)
-  }
-
-  /* 不能进入形象照环节时，把原因停在原地说清楚，而不是跳到一个无关的列表页。 */
-  function showAiNote(message) {
-    toast(message)
-    var note = $('ai-panel-note')
-    if (note) { note.textContent = message; note.hidden = !message }
+    var playerId = (settings && settings.playerId) || playerIdFromQuery()
+    if (!playerId) { toast('还没有可生成的球员卡，先回到卡库选择球员'); return }
+    if (settings && settings.playerId) rememberPlayerId(settings.playerId)
+    location.href = './portrait.html?playerId=' + encodeURIComponent(playerId)
   }
 
   function setPreviewState(text, isError) {
