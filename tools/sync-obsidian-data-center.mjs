@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/team-tactics-board-20261103.md','发布记录/球队首页战术板-20261103.md'],
+  ['docs/releases/trf-claimant-recipient-restore-20261103.md','发布记录/入队通知接收人回退重发-20261103.md'],
   ['docs/releases/team-staff-manage-permission-20261103.md','发布记录/球队管理权限按team.manage判定-20261103.md'],
   ['docs/releases/team-player-library-back-20261102.md','发布记录/球队球员库通知落点与返回首页-20261102.md'],
   ['docs/releases/card-world-holo4-static-20261101.md','发布记录/card-world-holo4-static-20261101.md'],
