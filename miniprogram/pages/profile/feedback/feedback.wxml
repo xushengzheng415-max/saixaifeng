@@ -1,0 +1,20 @@
+<view class="page">
+  <view class="tabs"><button class="{{formClass}}" bindtap="showSubmit">提交反馈</button><button class="{{recordsClass}}" bindtap="showMine">我的反馈</button></view>
+  <view wx:if="{{!loggedIn}}" class="state"><text>登录后可提交和查看反馈</text><button class="primary" bindtap="login">去登录</button></view>
+  <block wx:else>
+    <view wx:if="{{showForm}}" class="form">
+      <text class="label">问题类型</text><view class="types"><button wx:for="{{types}}" wx:key="id" class="{{item.className}}" data-id="{{item.id}}" bindtap="chooseType" disabled="{{submitting}}">{{item.label}}</button></view>
+      <text class="label">问题描述</text><textarea value="{{content}}" maxlength="500" placeholder="请描述问题场景、操作步骤（至少10个字）" bindinput="contentInput" disabled="{{submitting}}"/><text class="count">{{contentLength}}/500</text>
+      <text class="label">联系微信号</text><input value="{{contact}}" maxlength="20" placeholder="6–20位，字母开头" bindinput="contactInput" disabled="{{submitting}}"/><text class="note">微信号仅用于客服就本问题联系你。</text>
+      <text wx:if="{{submitError}}" class="error">{{submitError}}</text><text wx:if="{{successText}}" class="success">{{successText}}</text>
+      <button class="primary" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">提交反馈</button>
+    </view>
+    <view wx:if="{{showRecords}}" class="records">
+      <view class="records-head"><text>反馈记录</text><button bindtap="loadRecords" disabled="{{loading}}">刷新</button></view>
+      <view wx:if="{{loading}}" class="state">正在读取反馈…</view>
+      <view wx:elif="{{errorText}}" class="state"><text class="error">{{errorText}}</text><button bindtap="loadRecords">重试</button></view>
+      <view wx:elif="{{!hasRecords}}" class="state"><text>暂无反馈记录</text><button bindtap="showSubmit">提交反馈</button></view>
+      <block wx:else><view wx:for="{{records}}" wx:key="feedbackId" class="record"><view class="record-head"><text>{{item.typeLabel}}</text><text class="status">{{item.statusText}}</text></view><text class="time">{{item.timeText}}</text><text class="content">{{item.content}}</text><view wx:if="{{item.hasReply}}" class="reply"><text class="label">客服回复</text><text class="time">{{item.replyTimeText}}</text><text class="content">{{item.reply}}</text><button wx:for="{{item.tutorials}}" wx:for-item="tutorial" wx:key="id" class="tutorial" data-id="{{tutorial.id}}" bindtap="openTutorial">查看教程：{{tutorial.title}}</button></view></view><text wx:if="{{showLimit}}" class="note">显示最近50条反馈</text></block>
+    </view>
+  </block>
+</view>

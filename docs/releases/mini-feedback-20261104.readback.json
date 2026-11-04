@@ -1,0 +1,32 @@
+{
+  "function": "webLoginApi",
+  "changedFiles": [
+    "index.js",
+    "miniFeedback.cjs",
+    "servicePrivate.cjs"
+  ],
+  "changedSHA256": {
+    "index.js": "d5a112d19d8a6d603674cf429d6a7ef0eeeb7be3533e45aa14214ecafdb09d83",
+    "miniFeedback.cjs": "7fe5acf1fe94e78856628844476756071ca27b423a27128f5586a831d09972ca",
+    "servicePrivate.cjs": "8749e122c8baec2a794649bd50acedcd4ffd684811e8356369ca757debc6d5b3"
+  },
+  "otherFilesPreserved": 6717,
+  "dependenciesPreserved": true,
+  "status": "Active",
+  "availableStatus": "Available",
+  "runtime": "Nodejs18.15",
+  "memoryMB": 512,
+  "timeoutSeconds": 120,
+  "installDependency": "FALSE",
+  "runtimeConfigChanged": false,
+  "nativeVersion": "1.2.41",
+  "nativeUpload": "developer-succeeded",
+  "nativeFormal": "not-submitted-or-published",
+  "nativeExperience": "not-set",
+  "nativeTotalBytes": 5613354,
+  "nativeMainBytes": 1992258,
+  "unauthenticatedProbe": "MINI_FEEDBACK_AUTH_REQUIRED",
+  "nativeAndH5IsolatedIntegrationTests": "pass",
+  "realFeedbackCreated": false,
+  "nativeVisualAutomation": "initial 390x844 form captured; full automation timed out; no claim of full real-device E2E"
+}

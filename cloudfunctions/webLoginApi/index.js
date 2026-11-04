@@ -6071,6 +6071,9 @@ exports.main = async (event, context) => {
     }
     let result
     switch (action) {
+      case 'miniFeedbackSubmit':
+      case 'miniFeedbackList':
+        result = await require('./servicePrivate.cjs')({cloud,config:SERVICE_ACCOUNT_CONFIG,hashSessionToken,dateValue,httpsGet,createSession:createRefereeH5Session})(action, params); break
       case 'phoneCodeLoginOptions':
         result = await phoneCodeLoginService().options()
         break

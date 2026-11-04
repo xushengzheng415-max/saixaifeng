@@ -458,3 +458,8 @@ QuickHybridConsole→tournament_league_tables.leaguePairingMode→generateSchedu
 ## 2026-11-04 球员库选入赛事待审名单
 
 `getMiniWorkspace.officialRoster/submitOfficialRoster` 使用统一完整读取及稳定球员ID，校验本队归属、管理权限和本组参赛关系。原照片/核验资料保留引用，资料缺项允许先提交submitted快照；不生成已通过资格，不改球员身份或其他组别/锁定历史。单场阵容继续校验真实资料状态。已部署共享后端并逐文件读回；小程序仅开发预览与1.2.40开发包已上传，未宣称微信正式/体验版生效。详见[记录](../releases/roster-library-pending-review-20261104.md)。
+
+
+## 2026-11-04 小程序个人反馈
+
+小程序miniFeedbackSubmit/miniFeedbackList经webLoginApi可信微信上下文校验自然人账号，再调用与H5相同servicePrivate反馈处理器；service_feedback按userId隔离并共用回复、状态和教程。无服务号绑定不阻断提交，通知按真实唯一绑定执行。未改球队/球员/名单数据。后端已差量发布读回，原生开发版1.2.41上传成功，体验/正式尚未生效。见[记录](../releases/mini-feedback-20261104.md)。

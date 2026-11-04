@@ -173,7 +173,7 @@ Page({
     if (action === 'teams') return wx.switchTab({ url: '/pages/teams/index' })
     if (action === 'security') return this.goToInfo()
     if (action === 'support') return wx.showModal({ title: '服务与帮助', content: '请在当前机构的赛事或球队页面查看对应待办；需要协助时可通过机构管理员发起咨询。', showCancel: false })
-    if (action === 'feedback') return wx.showModal({ title: '意见反馈', content: '请将问题场景、页面和复现步骤提交给机构管理员，以便跟进处理。', showCancel: false })
+    if (action === 'feedback') { if (this.data.guestMode) return workspace.promptLogin('登录后可提交反馈并查看客服回复。'); return wx.navigateTo({ url: '/pages/profile/feedback/feedback' }) }
     if (action === 'versionLog') return wx.navigateTo({ url: '/pages/profile/version-log/version-log' })
     if (action === 'about') return wx.showModal({ title: '关于赛小蜂足球', content: '赛小蜂足球为赛事组织、球队协作和赛场执行提供统一服务。\n\n当前版本：' + release.version, showCancel: false })
   },
