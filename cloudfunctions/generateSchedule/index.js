@@ -698,10 +698,10 @@ function normalizeScheduleTiming(scheduleConfig, division) {
 // 标准循环赛轮转法：每轮每支球队最多参加一场比赛。
 // 与 pairingTemplates.standardRoundRobinRounds 共用同一口径：首轮相邻签位配对
 // （1-2、3-4、5-6…），其余轮次固定首位轮转，跨小组可按轮次同步开赛。
-function buildRoundRobinRounds(sourceTeams) {
+function buildRoundRobinRounds(sourceTeams, pairingMode) {
   var teams = (sourceTeams || []).slice()
   if (teams.length < 2) return []
-  return pairingTemplates.standardRoundRobinRounds(teams.length, 'single').map(function(pairings) {
+  return pairingTemplates.standardRoundRobinRounds(teams.length, 'single', pairingMode).map(function(pairings) {
     return pairings.map(function(pair) {
       return { home: teams[pair[0] - 1], away: teams[pair[1] - 1] }
     })
@@ -1103,7 +1103,7 @@ function generateLeagueSchedule(tournamentId, ranking, leagueConfig, scheduleCon
   var teams = ranking.map(function(r) { return r.team }).filter(Boolean)
   var loopCount = leagueConfig.loopType === 'double' ? 2 : 1
   var matchIdx = 0
-  var rounds = buildRoundRobinRounds(teams)
+  var rounds = buildRoundRobinRounds(teams, leagueConfig.leaguePairingMode)
 
   for (var loop = 0; loop < loopCount; loop++) {
     for (var roundIndex = 0; roundIndex < rounds.length; roundIndex++) {
@@ -1478,7 +1478,7 @@ async function loadLeagueData(tournamentId, divisionId) {
     })
   })
 
-  var leagueConfig = { loopType: list[0].loopType || 'single' }
+  var leagueConfig = { loopType: list[0].loopType || 'single',leaguePairingMode:pairingTemplates.normalizeLeaguePairingMode(list[0].leaguePairingMode) }
 
   return { ranking: ranking, leagueConfig: leagueConfig }
 }

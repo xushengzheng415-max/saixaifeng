@@ -13,7 +13,7 @@
 
 
     <section v-if="hasSavedResult" class="summary">
-      <span>参赛球队 <b>{{ teamCount }}</b></span><i /><span>已分组 <b>{{ assignedCount }}</b></span><i /><span>{{ resultUnitCount }} {{ unitLabel }}</span><i /><span>{{ sizeLabel }}</span><i /><em><el-icon><CircleCheckFilled /></el-icon>分组校验通过</em><el-tag :type="isConfirmed ? 'success' : 'warning'" effect="light">{{ statusLabel }}</el-tag><div class="summary-actions"><el-button v-if="!isConfirmed && !isArchived" type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认分组</el-button><el-button v-if="isConfirmed && !isArchived" type="primary" :loading="pairingGenerating" @click="generatePairingsAndViewPairings">赛程中心</el-button><el-button plain @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button></div>
+      <span>参赛球队 <b>{{ teamCount }}</b></span><i /><span>已分组 <b>{{ assignedCount }}</b></span><i /><span>{{ resultUnitCount }} {{ unitLabel }}</span><i /><span>{{ sizeLabel }}</span><span v-if="['league','hybrid'].includes(format)">首轮：{{ leaguePairingLabel(leaguePairingChoice) }}</span><i /><em><el-icon><CircleCheckFilled /></el-icon>分组校验通过</em><el-tag :type="isConfirmed ? 'success' : 'warning'" effect="light">{{ statusLabel }}</el-tag><div class="summary-actions"><el-button v-if="!isConfirmed && !isArchived" type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认分组</el-button><el-button v-if="isConfirmed && !isArchived" type="primary" :loading="pairingGenerating" @click="generatePairingsAndViewPairings">赛程中心</el-button><el-button plain @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button></div>
     </section>
 
     <section v-if="hasSavedResult" class="toolbar">
@@ -66,6 +66,7 @@
 </template>
 
 <script setup>
+import {leaguePairingMode,leaguePairingLabel,leagueRoundsForTeams} from '../../utils/leaguePairings.js'
 import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { knockoutSeedOrder } from '../../utils/knockoutDraw.mjs'
@@ -101,6 +102,7 @@ const resultStatus = ref('draft')
 const advanceCount = ref(8)
 const bracketCapacity = ref(0)
 const leagueRoundCount = ref(0)
+const leaguePairingChoice=ref('adjacent'),leagueLoopType=ref('single')
 const posterVisible = ref(false)
 const posterTheme = ref('emerald-stadium')
 const posterRef = ref(null)
@@ -124,7 +126,7 @@ const teamCount = computed(() => teams.value.length)
 const assignedCount = computed(() => format.value === 'tournament' ? groups.value.reduce((sum, group) => sum + group.teams.length, 0) : teams.value.length)
 const resultUnitCount = computed(() => format.value === 'tournament' ? groups.value.length : format.value === 'league' ? leagueRoundCount.value : Math.max(1, Number(bracketCapacity.value || advanceCount.value) - 1))
 const unitLabel = computed(() => format.value === 'tournament' ? '个小组' : format.value === 'league' ? '轮赛程' : '场淘汰赛')
-const sizeLabel = computed(() => format.value === 'tournament' ? `每组 ${groups.value[0]?.maxTeams || 0} 支` : format.value === 'hybrid' ? `晋级 ${advanceCount.value} 支` : format.value === 'cup' ? `${bracketCapacity.value} 个签位` : '单循环赛制')
+const sizeLabel = computed(() => format.value === 'tournament' ? `每组 ${groups.value[0]?.maxTeams || 0} 支` : format.value === 'hybrid' ? `晋级 ${advanceCount.value} 支` : format.value === 'cup' ? `${bracketCapacity.value} 个签位` : leagueLoopType.value==='double'?'双循环赛制':'单循环赛制')
 const formatTitle = computed(() => ({ league: '联赛制排序结果', cup: '淘汰赛签位结果', hybrid: '混合制联赛阶段排序' })[format.value] || '分组结果')
 const formatDescription = computed(() => ({ league: '按当前队伍顺序生成单循环赛程草稿', cup: '当前组别第一轮淘汰赛签位快照', hybrid: `联赛阶段前 ${advanceCount.value} 名进入淘汰赛` })[format.value] || '')
 const visibleGroups = computed(() => groups.value.filter(group => groupFilter.value === 'all' || group.name === groupFilter.value).map(group => ({ ...group, teams: group.teams.filter(team => !keyword.value || team.name.includes(keyword.value)) })))
@@ -257,7 +259,9 @@ async function load() {
       } else teams.value = await enrichTeamRecords(teams.value,tournamentTeamRows)
       advanceCount.value = Number(primary?.advanceCount || 8)
       bracketCapacity.value = Number(primary?.capacity || primary?.slots?.length || primary?.advanceCount || 0)
-      leagueRoundCount.value = teams.value.length > 1 ? teams.value.length - 1 : 0
+      leaguePairingChoice.value=leaguePairingMode(primary?.leaguePairingMode)
+      leagueLoopType.value=primary?.loopType==='double'?'double':'single'
+      leagueRoundCount.value=leagueRoundsForTeams(teams.value,leaguePairingChoice.value,leagueLoopType.value).length
     }
     const statuses = records.value.map(row => row.status)
     const explicitlyConfirmed = records.value.length > 0 && records.value.every(row => row.status === 'published' || (row.status === 'confirmed' && Boolean(row.confirmedAt)))
@@ -308,9 +312,9 @@ function publishConfirmedProjection() {
   const slots=format.value==='cup' ? knockoutSlots.value.map(slot=>slot.teamId ? {id:slot.teamId,name:slot.name,logo:slot.logo || slot.logoUrl || ''} : null) : []
   const ordered=format.value==='cup' ? slots.filter(Boolean) : teams.value.map(team=>({id:team.id,name:team.name,logo:team.logo || team.logoUrl || ''}))
   const assignments=(format.value==='cup'?slots:ordered).flatMap((team,index)=>team?[{teamId:team.id,teamName:team.name,groupIndex:0,position:index+1}]:[])
-  const payload={format:format.value,stage:'result',confirmed:true,capacity:bracketCapacity.value,advanceCount:format.value==='hybrid'?advanceCount.value:0,seedOrder:format.value==='hybrid'?knockoutSeedOrder(advanceCount.value):[],slots,teams:ordered,assignments,assignedCount:ordered.length,tournamentName:tournament.value.name,divisionName:divisionName.value,updatedAt:new Date().toISOString()}
+  const payload={leaguePairingMode:leaguePairingChoice.value,loopType:leagueLoopType.value,format:format.value,stage:'result',confirmed:true,capacity:bracketCapacity.value,advanceCount:format.value==='hybrid'?advanceCount.value:0,seedOrder:format.value==='hybrid'?knockoutSeedOrder(advanceCount.value):[],slots,teams:ordered,assignments,assignedCount:ordered.length,tournamentName:tournament.value.name,divisionName:divisionName.value,updatedAt:new Date().toISOString()}
   try{const previous=JSON.parse(localStorage.getItem(name) || '{}');localStorage.setItem(name,JSON.stringify({...previous,...payload}))}catch(error){console.warn('保存抽签投屏状态失败',error)}
-  if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel(name);channel.postMessage(payload);setTimeout(()=>channel.close(),0)}
+  if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel(name);channel.postMessage(JSON.parse(JSON.stringify(payload)));setTimeout(()=>channel.close(),0)}
 }
 
 async function confirm() {

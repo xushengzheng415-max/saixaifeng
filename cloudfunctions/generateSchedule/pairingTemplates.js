@@ -141,14 +141,25 @@ function roundRobinStage(code, pairings, round) {
 // 初始排列按「奇数签位在前、偶数签位倒序在后」交错，等价于把签表相邻签位
 // 放进同一轮：首轮即 A1-A2、A3-A4、B1-B2…；之后固定首位、其余签位轮转，
 // 保证每轮每队只赛一场、任意两队只相遇一次（赛会制为中立场地，不安排主客场轮换）。
-function standardRoundRobinRounds(teamCount, loopType) {
+function normalizeLeaguePairingMode(value) {
+  var mode=String(value || 'adjacent').trim()
+  if(mode!=='adjacent' && mode!=='head_tail')throw new Error('请选择有效的首轮对阵方式')
+  return mode
+}
+function standardRoundRobinRounds(teamCount, loopType, pairingMode) {
+  var mode=normalizeLeaguePairingMode(pairingMode)
   var size = Math.max(2, Math.min(64, Number(teamCount || 0)))
   var order = Array.from({ length: size }, function(_, index) { return index + 1 })
   if (order.length % 2 === 1) order.push(null)
   var count = order.length
   var entries = []
+  if(mode==='head_tail') {
+    entries=order.filter(function(seed){return seed!=null})
+    if(size%2)entries.splice(Math.ceil(size/2),0,null)
+  } else {
   for (var seedIndex = 0; seedIndex < count; seedIndex += 2) entries.push(order[seedIndex])
   for (var mirrorIndex = count - 1; mirrorIndex >= 1; mirrorIndex -= 2) entries.push(order[mirrorIndex])
+  }
   var rounds = []
   for (var roundIndex = 0; roundIndex < count - 1; roundIndex += 1) {
     var pairings = []
@@ -179,7 +190,7 @@ function standardRoundRobinTemplate(options) {
     : Array.from({ length: Math.max(1, Number(options.groupCount || 1)) }, function() { return Number(options.teamsPerGroup || options.teamCount || 0) })
   var loopType = String(options.loopType || 'single') === 'double' ? 'double' : 'single'
   var groups = groupSizes.map(function(size, groupIndex) {
-    return { code: String.fromCharCode(65 + groupIndex), rounds: standardRoundRobinRounds(size, loopType) }
+    return { code: String.fromCharCode(65 + groupIndex), rounds: standardRoundRobinRounds(size, loopType, options.leaguePairingMode) }
   })
   var maxRounds = groups.reduce(function(max, group) { return Math.max(max, group.rounds.length) }, 0)
   var stages = []
@@ -291,4 +302,4 @@ function resolveTemplate(key) {
   return null
 }
 
-module.exports = { buildPairingsFromTemplate, sourceLabel, resolveTemplate, liyangYouthTemplate, liyangMiddleTemplate, liyangOldTemplate, standardRoundRobinRounds, standardRoundRobinTemplate, validatePairingTemplate }
+module.exports = { buildPairingsFromTemplate, sourceLabel, resolveTemplate, liyangYouthTemplate, liyangMiddleTemplate, liyangOldTemplate, standardRoundRobinRounds, standardRoundRobinTemplate, normalizeLeaguePairingMode, validatePairingTemplate }
