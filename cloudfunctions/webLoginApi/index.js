@@ -6076,7 +6076,7 @@ exports.main = async (event, context) => {
         result = await require('./servicePrivate.cjs')({cloud,config:SERVICE_ACCOUNT_CONFIG,hashSessionToken,dateValue,httpsGet,createSession:createRefereeH5Session})(action, params); break
       case 'updateDivisionExecutionRules':
       case 'updateDivisionSubstitutionRules':
-        result = await require('./divisionExecutionRules.cjs').createDivisionExecutionRules({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed,staffPolicy})(params); break
+        result = await require('./divisionExecutionRules.cjs').createDivisionExecutionRules({cloud,authenticateWebSession,buildOrganizerScope,buildStaffEventScope,organizerRecordAllowed,staffPolicy})(params); break
       case 'phoneCodeLoginOptions':
         result = await phoneCodeLoginService().options()
         break

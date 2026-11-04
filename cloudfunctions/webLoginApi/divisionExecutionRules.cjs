@@ -1,5 +1,5 @@
 'use strict'
-const benchFields={benchTotalLimit:30,benchPlayerLimit:30,benchOfficialLimit:20}
+const benchFields={benchPlayerLimit:30}
 const metadata=new Set(['action','authToken','dynamicCardProtocol','assistanceGrantId','staffTournamentId','staffModule','divisionId','expectedRulesVersion'])
 const editable=new Set(['substitutionMode','substitutionLimit','substitutionWindows','substitutionReentryAllowed','regulationDetails'])
 const integer=value=>value!=null&&['number','string'].includes(typeof value)&&String(value).trim()!==''&&Number.isInteger(Number(value))&&Number(value)>=0?Number(value):null
@@ -13,7 +13,7 @@ function buildDivisionExecutionUpdate(before,input,actor,now=new Date()){
   if(input.regulationDetails!==undefined){
     if(!input.regulationDetails||typeof input.regulationDetails!=='object'||Array.isArray(input.regulationDetails))fail('BENCH_RULE_INVALID','替补席设置格式不正确')
     for(const [field,value] of Object.entries(input.regulationDetails)){
-      if(!Object.hasOwn(benchFields,field))fail('EXEC_RULE_FIELDS_LOCKED','仅可调整换人和替补席人数')
+      if(!Object.hasOwn(benchFields,field))fail('EXEC_RULE_FIELDS_LOCKED','仅可调整换人和替补球员人数，请刷新后再保存')
       if(value==null||typeof value==='string'&&!value.trim()){bench[field]=null;continue}
       const count=integer(value)
       if(count==null||count>benchFields[field])fail('BENCH_RULE_INVALID','替补席人数超出允许范围')
@@ -32,29 +32,37 @@ function buildDivisionExecutionUpdate(before,input,actor,now=new Date()){
     ...(before.rulesRevisionPending?{rulesRevisionOf:version,rulesVersionDraft:version+'-R'+history.length}:{}),
     substitutionRulesUpdatedAt:now,substitutionRulesUpdatedBy:String(actor.id||''),substitutionRulesUpdateReason:'调整比赛规则',updateTime:now}
 }
-function createDivisionExecutionRules({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed,staffPolicy=require('./staffPolicy.cjs')}){
+function createDivisionExecutionRules({cloud,authenticateWebSession,buildOrganizerScope,buildStaffEventScope,organizerRecordAllowed,staffPolicy=require('./staffPolicy.cjs')}){
   return async event=>{
     try{
       const auth=await authenticateWebSession(event);if(!auth.success)return auth
       if(event.assistanceGrantId)return {success:false,code:'ASSISTANCE_OPERATION_DENIED',error:'协助模式不能修改竞赛规则'}
       const id=String(event.divisionId||'').trim();if(!id||id.length>100)fail('DIVISION_REQUIRED','请选择竞赛组别')
       const db=cloud.database(),owner=auth.principalType==='platform_owner'&&auth.user?.isPlatformOwner===true
-      const scope=owner?null:await buildOrganizerScope(db,{...auth.user,orgId:auth.orgId||auth.user?.orgId})
-      if(!owner&&(!scope?.orgId||scope.organizationConflict))fail('DIVISION_SCOPE_DENIED','当前账号没有组别管理权限')
+      const orgId=String(auth.orgId||auth.user?.orgId||'')
+      const delegated=!owner&&Boolean(orgId)&&await staffPolicy.isStaff(db,auth.userId,orgId)&&!await staffPolicy.owner(db,auth.userId,orgId)
       let result
       await db.runTransaction(async transaction=>{
         const response=await transaction.collection('divisions').doc(id).get(),before=Array.isArray(response.data)?response.data[0]:response.data
-        if(!before||!owner&&!organizerRecordAllowed('divisions',before,scope))fail('DIVISION_SCOPE_DENIED','无权修改该组别规则')
-        if(!owner&&await staffPolicy.isStaff(db,auth.userId,scope.orgId)&&!await staffPolicy.owner(db,auth.userId,scope.orgId)){
-          if(String(event.staffTournamentId||'')!==String(before.tournamentId)||!await staffPolicy.hasRight(db,auth.userId,scope.orgId,before.tournamentId,'event.competition'))fail('DIVISION_SCOPE_DENIED','当前赛事没有竞赛规则修改权限')
-        }
+        if(!before)fail('DIVISION_SCOPE_DENIED','组别不存在或无权修改')
+        const tournamentId=String(before.tournamentId||'')
+        if(event.staffTournamentId&&String(event.staffTournamentId)!==tournamentId)fail('DIVISION_SCOPE_DENIED','当前赛事与组别不一致')
+        let scope=null
+        if(delegated){
+          if(!tournamentId||!await staffPolicy.hasRight(db,auth.userId,orgId,tournamentId,'event.competition'))fail('DIVISION_SCOPE_DENIED','当前赛事没有竞赛规则修改权限')
+          scope=await buildStaffEventScope(db,auth.userId,orgId,tournamentId,'event.competition')
+        }else if(!owner)scope=await buildOrganizerScope(db,{...auth.user,orgId})
+        if(!owner&&(!scope?.orgId||scope.organizationConflict))fail('DIVISION_SCOPE_DENIED','当前账号没有组别管理权限')
+        if(!owner&&!organizerRecordAllowed('divisions',before,scope))fail('DIVISION_SCOPE_DENIED','无权修改该组别规则')
+        if(!owner&&['orgId','organizationId','organization_id'].some(key=>before[key]&&String(before[key])!==String(scope.orgId)))fail('DIVISION_SCOPE_DENIED','组别机构归属不一致，请核对赛事资料')
         if(String(event.expectedRulesVersion||'')!==String(before.rulesVersion||'V1.0'))fail('DIVISION_RULE_VERSION_CHANGED','规则已更新，请刷新后重新修改')
         if(before.rulesLocked!==true&&!before.activeRulesVersion)fail('DIVISION_RULE_NOT_FINALIZED','请在规则草稿中修改比赛设置')
         const update=buildDivisionExecutionUpdate(before,event,{id:auth.userId||auth.user?._id,type:owner?'platform_owner':'organizer'})
         const detailKeys=['firstHalfSubstitutionWindows','secondHalfSubstitutionWindows','halftimeSubstitutionWindows','substitutionReentryForbidden','unlimitedPlayersPerWindow',...Object.keys(benchFields)]
         const ruleKeys=['substitutionMode','substitutionLimit','substitutionWindows','substitutionReentryAllowed']
         const prior=before.activeRulesSnapshot||before.rulesSnapshot||{},priorDetails=prior.regulationDetails||{}
-        const same=ruleKeys.every(key=>before[key]===update[key]&&(!Object.hasOwn(prior,key)||prior[key]===update[key]))
+        const same=Object.keys(event.regulationDetails||{}).every(key=>Object.hasOwn(priorDetails,key))
+          &&ruleKeys.every(key=>before[key]===update[key]&&(!Object.hasOwn(prior,key)||prior[key]===update[key]))
           &&detailKeys.every(key=>(before.regulationDetails?.[key]??null)===(update.regulationDetails[key]??null)
             &&(Object.hasOwn(priorDetails,key)?priorDetails[key]:before.regulationDetails?.[key]??null)===(update.activeRulesSnapshot.regulationDetails[key]??null))
         if(same){result={...before,alreadyCurrent:true};return}
