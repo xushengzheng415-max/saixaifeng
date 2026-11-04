@@ -20,6 +20,7 @@
 
     <section v-else-if="isLeagueProjection" class="league-screen-state">
       <div class="section-heading"><p class="eyebrow">{{ isHybridProjection ? 'LEAGUE AND KNOCKOUT' : 'LEAGUE DRAW' }}</p><h1>{{ isHybridProjection ? '联赛＋淘汰抽签' : state.confirmed ? '联赛抽签结果' : '联赛抽签顺序' }}</h1><span>{{ state.teams.length }} 支球队 · {{ state.assignedCount }} 支已入位</span></div>
+      <p class="league-pairing-label">首轮：{{ leaguePairingLabel(state.leaguePairingMode) }}</p>
       <div class="league-screen-layout" :class="{ 'with-knockout':isHybridProjection }">
         <section class="league-order-table" aria-label="联赛抽签顺序">
           <h2 v-if="isHybridProjection">联赛阶段</h2>
@@ -54,6 +55,7 @@
 </template>
 
 <script setup>
+import {leaguePairingLabel} from '../../utils/leaguePairings.js'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import KnockoutDrawTree from '../../components/tournament/KnockoutDrawTree.vue'

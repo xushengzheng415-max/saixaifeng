@@ -15,6 +15,8 @@ const files = [
   ['docs/releases/team-avatar-display-20261101.md','发布记录/team-avatar-display-20261101.md'],
   ['docs/handoffs/FRIENDLY_SIGNUP_TRAE_HANDOFF_2026-11-01.md','研发交接/约球报名后端接线Trae交接-20261101.md'],
   ['docs/releases/registration-identity-pending-20261101.readback.json','发布记录/registration-identity-pending-20261101.readback.json'],
+  ['docs/releases/league-first-round-mode-20261104.md','发布记录/league-first-round-mode-20261104.md'],
+  ['docs/releases/league-first-round-mode-20261104.readback.json','发布记录/league-first-round-mode-20261104.readback.json'],
   ['docs/releases/team-owner-display-20261104.md','发布记录/team-owner-display-20261104.md'],
   ['docs/releases/team-owner-display-20261104.readback.json','发布记录/team-owner-display-20261104.readback.json'],
   ['docs/releases/pc-formal-alignment-20261102.md','发布记录/pc-formal-alignment-20261102.md'],

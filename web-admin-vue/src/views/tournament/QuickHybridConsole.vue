@@ -41,7 +41,8 @@
       </section>
 
       <section class="panel ranking">
-        <header><div><h2>联赛抽签位</h2><p>逐个抽取 1—{{ teams.length }} 号签位，签位顺序用于生成单循环对阵</p></div><div class="league-header-actions"><el-tag type="success" effect="light">{{ leagueAssignedCount }} 支已入位</el-tag><el-button size="small" type="success" plain :disabled="!teams.length" @click="randomize">一键抽签</el-button></div></header>
+        <header><div><h2>联赛抽签位</h2><p>逐个抽取 1—{{ teams.length }} 号签位，签位顺序用于生成{{ leagueLoopType === 'double' ? '双循环' : '单循环' }}对阵</p></div><div class="league-header-actions"><el-tag type="success" effect="light">{{ leagueAssignedCount }} 支已入位</el-tag><el-button size="small" type="success" plain :disabled="!teams.length || leaguePairingLocked" @click="randomize">一键抽签</el-button></div></header>
+        <LeaguePairingControl :model-value="leaguePairingChoice" :disabled="leaguePairingLocked" @update:model-value="setLeaguePairingMode" />
         <div class="ranking-tip"><span>i</span> 签位全部排定后生成轮次对阵；比赛日期、时间和场地在赛历中另行安排。</div>
         <ol>
           <li v-for="(team, index) in leagueSlots" :key="`slot-${index}`" :class="{ filled: team }" draggable="true" @dragstart="onLeagueSlotDragStart(index)" @dragover.prevent @drop="dropLeagueSlot(index)">
@@ -150,6 +151,8 @@
 <script setup>
 import { computed, getCurrentInstance, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import LeaguePairingControl from '../../components/tournament/LeaguePairingControl.vue'
+import {leaguePairingMode,leagueRoundsForTeams} from '../../utils/leaguePairings.js'
 import KnockoutDrawTree from '../../components/tournament/KnockoutDrawTree.vue'
 import { knockoutCapacity, fillKnockoutSlots, knockoutSeedOrder } from '../../utils/knockoutDraw.mjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -186,6 +189,7 @@ const cupSnapshotConfirmed = ref(false)
 const savedDrawConfirmed = ref(false)
 const cupDraggingTeam = ref(null)
 const leagueSlots = ref([])
+const leaguePairingChoice=ref('adjacent'),leagueLoopType=ref('single'),leaguePairingLocked=ref(false)
 const leagueDraggingTeam = ref(null)
 const leagueDraggingFrom = ref(-1)
 let projectionChannel = null
@@ -218,24 +222,8 @@ const leaguePendingText = computed(() => `签位全部排定后生成轮次预�
 const hybridSeedOrder = computed(() => knockoutSeedOrder(Number(advanceCount.value)))
 const hybridSemiCount = computed(() => Number(advanceCount.value) === 8 ? 4 : Number(advanceCount.value) === 4 ? 2 : 1)
 
-const leagueRounds = computed(() => {
-  if (!leagueComplete.value) return []
-  const rotating = [...leagueSlots.value]
-  if (rotating.length % 2) rotating.push({ id: '__bye__', name: '轮空' })
-  const rounds = []
-  for (let round = 0; round < rotating.length - 1; round += 1) {
-    const matches = []
-    for (let index = 0; index < rotating.length / 2; index += 1) {
-      const home = rotating[index]
-      const away = rotating[rotating.length - 1 - index]
-      if (home.id !== '__bye__' && away.id !== '__bye__') matches.push(round % 2 ? { home: away, away: home } : { home, away })
-    }
-    rounds.push(matches)
-    rotating.splice(1, 0, rotating.pop())
-  }
-  return rounds
-})
-const previewRounds = computed(() => leagueRounds.value.slice(0, 3))
+const leagueRounds = computed(() => leagueComplete.value ? leagueRoundsForTeams(leagueSlots.value,leaguePairingChoice.value,leagueLoopType.value) : [])
+const previewRounds = computed(() => leagueRounds.value)
 const activeMatches = computed(() => previewRounds.value[activeRound.value] || [])
 const leagueMatchCount = computed(() => leagueRounds.value.reduce((total, round) => total + round.length, 0))
 
@@ -284,6 +272,9 @@ async function load() {
     const collection = isCup.value ? 'tournament_bracket' : 'tournament_league_tables'
     const existing = await queryList(collection, { where: { tournamentId }, limit: 1000 })
     const saved = [...existing].sort((a,b)=>new Date(b.updateTime?.$date || b.updateTime || b.createTime || 0)-new Date(a.updateTime?.$date || a.updateTime || a.createTime || 0)).find(item => String(item.divisionId || 'default') === divisionId.value && item.type === workflowType.value && item.status !== 'archived')
+    leaguePairingChoice.value=leaguePairingMode(saved?.leaguePairingMode || activeDivision.value.leaguePairingMode)
+    leagueLoopType.value=String(saved?.loopType || activeDivision.value.loopType || 'single')==='double'?'double':'single'
+    leaguePairingLocked.value=Boolean(saved && (['confirmed','published','archived'].includes(saved.status)))
     savedDrawConfirmed.value = Boolean(saved && (['published','archived'].includes(saved.status) || saved.status === 'confirmed' && saved.confirmedAt))
     const order = Array.isArray(saved?.teams) ? saved.teams.map(item => String(item.teamId)).filter(Boolean) : []
     const map = new Map(teams.value.map(item => [item.id, item]))
@@ -383,6 +374,7 @@ function clearCupSlot(index) {
   recordDraftAction('remove')
 }
 function placeLeagueTeam(team) {
+  if(isLeague.value && leaguePairingLocked.value)return
   if (leagueAssignedIds.value.has(team.id)) return
   const index = leagueSlots.value.findIndex(slot => !slot)
   if (index < 0) return
@@ -393,12 +385,14 @@ function placeLeagueTeam(team) {
   recordDraftAction('place')
 }
 function onLeagueSlotDragStart(index) {
+  if(isLeague.value && leaguePairingLocked.value)return
   const team = leagueSlots.value[index]
   if (!team) return
   leagueDraggingTeam.value = team
   leagueDraggingFrom.value = index
 }
 function dropLeagueSlot(index) {
+  if(isLeague.value && leaguePairingLocked.value)return
   const from = leagueDraggingFrom.value
   const team = leagueDraggingTeam.value
   leagueDraggingTeam.value = null
@@ -413,6 +407,7 @@ function dropLeagueSlot(index) {
   recordDraftAction(from >= 0 ? 'swap' : 'place')
 }
 function removeLeagueSlot(index) {
+  if(isLeague.value && leaguePairingLocked.value)return
   if (!leagueSlots.value[index]) return
   const next = [...leagueSlots.value]
   next[index] = null
@@ -421,6 +416,7 @@ function removeLeagueSlot(index) {
   recordDraftAction('remove')
 }
 function randomize() {
+  if(isLeague.value && leaguePairingLocked.value)return
   const next = [...teams.value]
   for (let index = next.length - 1; index > 0; index -= 1) {
     const target = Math.floor(Math.random() * (index + 1))
@@ -441,16 +437,17 @@ function projectionAssignments() {
 }
 function projectionPayload() {
   const ordered = isCup.value ? cupSlots.value.filter(Boolean) : isLeague.value ? leagueSlots.value.filter(Boolean) : orderedTeams.value
-  return { format:workflowType.value, capacity:isCup.value ? cupSlots.value.length : 0, confirmed:savedDrawConfirmed.value, advanceCount:isHybrid.value ? Number(advanceCount.value) : 0, seedOrder:isHybrid.value ? hybridSeedOrder.value : [], slots:isCup.value ? cupSlots.value.map(team => team ? {id:team.id,name:team.name,logo:team.logo} : null) : [], stage: ordered.length && ordered.length === teams.value.length ? 'result' : 'drawing', tournamentName: tournament.value.name || '足球赛事', divisionName: divisionName.value, teams: teams.value, assignments: projectionAssignments(), screen: { theme:'emerald', showTournament:true, showCrest:true, showProgress:true }, assignedCount: ordered.length, updatedAt: new Date().toISOString() }
+  return { leaguePairingMode:leaguePairingChoice.value,loopType:leagueLoopType.value,format:workflowType.value, capacity:isCup.value ? cupSlots.value.length : 0, confirmed:savedDrawConfirmed.value, advanceCount:isHybrid.value ? Number(advanceCount.value) : 0, seedOrder:isHybrid.value ? hybridSeedOrder.value : [], slots:isCup.value ? cupSlots.value.map(team => team ? {id:team.id,name:team.name,logo:team.logo} : null) : [], stage: ordered.length && ordered.length === teams.value.length ? 'result' : 'drawing', tournamentName: tournament.value.name || '足球赛事', divisionName: divisionName.value, teams: teams.value, assignments: projectionAssignments(), screen: { theme:'emerald', showTournament:true, showCrest:true, showProgress:true }, assignedCount: ordered.length, updatedAt: new Date().toISOString() }
 }
 const projectionAddress = computed(() => `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId.value)}&format=${workflowType.value}&capacity=${cupSlots.value.length}`)
 function publishProjection() {
-  const payload = projectionPayload()
+  const payload = JSON.parse(JSON.stringify(projectionPayload()))
   try { localStorage.setItem(projectionChannelName.value, JSON.stringify(payload)) } catch {}
   if (typeof BroadcastChannel !== 'undefined') { projectionChannel?.close(); projectionChannel = new BroadcastChannel(projectionChannelName.value); projectionChannel.postMessage(payload) }
 }
 function openProjection() { publishProjection() }
 function clearOrder() {
+  if(isLeague.value && leaguePairingLocked.value)return
   orderedTeams.value = []
   if (isLeague.value) leagueSlots.value = Array(teams.value.length).fill(null)
   if (isCup.value) cupSlots.value = Array(knockoutCapacity(teams.value.length)).fill(null)
@@ -458,8 +455,9 @@ function clearOrder() {
   renderVersion.value += 1
   recordDraftAction('clear')
 }
+function setLeaguePairingMode(value){if(leaguePairingLocked.value)return;leaguePairingChoice.value=leaguePairingMode(value);activeRound.value=0;recordDraftAction('pairing-mode')}
 function recordDraftAction(action) {
-  componentInstance?.update?.()
+  if(action!=='pairing-mode')componentInstance?.update?.()
   cupSnapshotConfirmed.value = false
   savedDrawConfirmed.value = false
   publishProjection()
@@ -473,12 +471,13 @@ function backOverview() { router.push({ path: `/tournaments/${tournamentId}/draw
 function goResult() { router.push({ path: `/tournaments/${tournamentId}/draw`, query: { divisionId: divisionId.value, mode: 'quick', view: 'result', format: workflowType.value, ...(visualQa ? { visualQa: '1' } : {}) } }) }
 
 async function confirm() {
+  if(isLeague.value && leaguePairingLocked.value)return ElMessage.warning('已确认的联赛抽签不能直接覆盖，请先核对已有对阵')
   const type = workflowType.value
   const label = isLeague.value ? '联赛排序' : isCup.value ? '淘汰赛签位' : '混合制分组'
   try {
     const generatedMatches = isLeague.value ? leagueMatchCount.value : isCup.value ? 8 : Number(advanceCount.value) - 1
     if (visualQa) {
-      const scope = { phase: 'confirmation-opened', tournamentId, divisionId: divisionId.value, type, teamCount: isCup.value ? cupAssignedCount.value : orderedTeams.value.length, generatedMatches, targetStatus: 'draft', published: false, deletedPublished: false, deletedCompleted: false, deletedArchived: false, deletedOtherDivisions: false, deletedOtherTypes: false }
+      const scope = { phase: 'confirmation-opened', tournamentId, divisionId: divisionId.value, type, teamCount: isCup.value ? cupAssignedCount.value : orderedTeams.value.length,leaguePairingMode:leaguePairingChoice.value,loopType:leagueLoopType.value, generatedMatches, targetStatus: 'draft', published: false, deletedPublished: false, deletedCompleted: false, deletedArchived: false, deletedOtherDivisions: false, deletedOtherTypes: false }
       window.__sxfQuickLeagueAction = scope
       if (isCup.value) window.__sxfQuickCupAction = scope
       if (isHybrid.value) window.__sxfQuickHybridAction = scope
@@ -507,7 +506,7 @@ async function confirm() {
     await Promise.all(replaceableMatches.map(item => deleteRecord('matches', item._id)))
     const rankedSource = isLeague.value ? leagueSlots.value.filter(Boolean) : orderedTeams.value
     const ranked = rankedSource.map((team, index) => ({ teamId: team.id, teamName: team.name, position: index + 1, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }))
-    if (!isCup.value) await addRecord('tournament_league_tables', { tournamentId, divisionId: divisionId.value, divisionName: divisionName.value, tableName: isLeague.value ? '快速联赛排序' : '混合制联赛阶段', tableCode: isLeague.value ? 'LEAGUE' : 'HYBRID', teams: ranked, teamCount: ranked.length, advanceCount: isHybrid.value ? Number(advanceCount.value) : undefined, type, loopType: 'single', status: 'draft', source: `quick-${type}-draft`, createTime: now, updateTime: now })
+    if (!isCup.value) await addRecord('tournament_league_tables', { tournamentId, divisionId: divisionId.value, divisionName: divisionName.value, tableName: isLeague.value ? '快速联赛排序' : '混合制联赛阶段', tableCode: isLeague.value ? 'LEAGUE' : 'HYBRID', teams: ranked, teamCount: ranked.length, advanceCount: isHybrid.value ? Number(advanceCount.value) : undefined, type, loopType: leagueLoopType.value,leaguePairingMode:leaguePairingChoice.value, status: 'draft', source: `quick-${type}-draft`, createTime: now, updateTime: now })
     if (isCup.value) await addRecord('tournament_bracket', { tournamentId, divisionId: divisionId.value, divisionName: divisionName.value, type: 'cup', name: '快速淘汰赛签位', round: 1, capacity: cupSlots.value.length, teamCount: cupAssignedCount.value, slots: cupSlots.value.map((team, index) => ({ slotCode: `${index < cupSlots.value.length / 2 ? 'A' : 'B'}${index % (cupSlots.value.length / 2) + 1}`, teamId: team?.id || '', teamName: team?.name || '', bye: !team })), matches: Array.from({ length: cupSlots.value.length / 2 }, (_, index) => ({ matchId: `cup-r1-${index + 1}`, round: 1, slot1: cupSlots.value[index * 2] ? { teamId: cupSlots.value[index * 2].id, teamName: cupSlots.value[index * 2].name } : null, slot2: cupSlots.value[index * 2 + 1] ? { teamId: cupSlots.value[index * 2 + 1].id, teamName: cupSlots.value[index * 2 + 1].name } : null, winner: null })), status: 'draft', confirmed: false, source: 'quick-cup-draft', createTime: now, updateTime: now })
     if (isHybrid.value) {
       const brackets = await queryList('tournament_bracket', { where: { tournamentId }, limit: 1000 })

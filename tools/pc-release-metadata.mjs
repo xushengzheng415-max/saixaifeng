@@ -1,7 +1,7 @@
 import {execFileSync} from 'node:child_process'
 import {createHash} from 'node:crypto'
 
-export const PC_SOURCE_PATHS = ['web-admin-vue','desktop-windows','index.html','shared/player-card','cloudfunctions/dataCenter/shared','cloudfunctions/tournamentRegistrationFlow/importPersonFields.cjs','tools/pc-release-metadata.mjs']
+export const PC_SOURCE_PATHS = ['web-admin-vue','desktop-windows','index.html','shared/player-card','cloudfunctions/dataCenter/shared','cloudfunctions/tournamentRegistrationFlow/importPersonFields.cjs','tools/pc-release-metadata.mjs','cloudfunctions/generateSchedule/pairingTemplates.js','cloudfunctions/generateSchedule/topology.js','cloudfunctions/generateSchedule/confirmedPairings.js']
 const git=(root,args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim()
 export function pcSourceHash(root,ref='HEAD'){
   const tree=git(root,['ls-tree','-r',ref,'--',...PC_SOURCE_PATHS])

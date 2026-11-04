@@ -449,3 +449,7 @@ TeamDetail新建/编辑→teamPlayerDocument→同源importPersonFields校验→
 ## 2026-11-04 球队主账号显示（待发布）
 
 TeamDetail工作人员→organizerClaimInvite.listTeamAccess→teamAccountDirectory，只读补齐ownerId和有效团队成员关系，不按联系人猜测主账号、不自动授予权限，分页到空页并显式限制预算。工作表主账号虚拟行不进入球员统计或历史名单。指定联系人/管理员的数据维护由用户明确授权、逐条读回，个人资料不入Git。见[记录](../releases/team-owner-display-20261104.md)。
+
+## 2026-11-04 联赛首轮对阵方式（待发布）
+
+QuickHybridConsole→tournament_league_tables.leaguePairingMode→generateSchedule.pairingTemplates/confirmedPairings。首轮相邻/首尾模式共用一个轮转函数，默认保留旧后端adjacent；预览、投屏、保存及生成同步，已有对阵签名冲突拒绝。无新增统计、无真实赛程迁移。见[记录](../releases/league-first-round-mode-20261104.md)。
