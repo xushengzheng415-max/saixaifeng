@@ -1,0 +1,2253 @@
+{
+  "generatedAt": "2026-11-04T04:29:25.043802+00:00",
+  "formalFrontendBuild": "83d77656d01a80a7e5890493ce04b6091d9e7c45",
+  "previewFrontendBuild": "166b585b60391d50aae666bea3b1753a46fde120",
+  "ownerBackendSource": "05344f6f",
+  "leagueBackend": {
+    "function": "generateSchedule",
+    "files": [
+      {
+        "file": "index.js",
+        "sha256": "79053637660b1c15759930b4b1e14c4faa3a44da9bec31e09017057552b87ba6"
+      },
+      {
+        "file": "pairingTemplates.js",
+        "sha256": "86a8be13fcdd95dd590c70db4ad10c88382d5306b1f263a4890221ffc97052d1"
+      },
+      {
+        "file": "confirmedPairings.js",
+        "sha256": "3369ca361aa003427e181f6879ae05a3ed958256aca3138d22416a4f9f39e65e"
+      }
+    ],
+    "originalDependenciesAndOtherSourcePreserved": true
+  },
+  "ownerBackend": {
+    "function": "organizerClaimInvite",
+    "files": [
+      {
+        "file": "index.js",
+        "sha256": "00c783e3cf9dc3b380668192ee1ab8c3438ed728e917e90c923b379b96ca5490"
+      },
+      {
+        "file": "teamAccountDirectory.cjs",
+        "sha256": "b51e92cacd339315a680780feb568d5b05e2cce372bd203da4ff44ffc6065f0b"
+      }
+    ],
+    "originalDependenciesAndOtherSourcePreserved": true
+  },
+  "leagueConfiguration": {
+    "protectedConfigurationAndEnvironmentPreserved": true,
+    "installDependencyBefore": true,
+    "installDependencyAfter": false,
+    "reason": "preserve packaged original dependencies"
+  },
+  "ownerConfiguration": {
+    "protectedConfigurationAndEnvironmentPreserved": true,
+    "installDependencyBefore": true,
+    "installDependencyAfter": false,
+    "reason": "preserve packaged original dependencies"
+  },
+  "productionAssets": {
+    "url": "https://www.sxffootball.cn/admin/",
+    "checkedAt": "2026-11-04T04:07:48.369Z",
+    "assetCount": 209,
+    "checks": [
+      {
+        "file": "index.html",
+        "http": 200,
+        "sha256": "31f17f9708a0d2463cea20bb9ace8abd7ecefb386820fd76abf2168714b3ccfc"
+      },
+      {
+        "file": "pc-release.json",
+        "http": 200,
+        "sha256": "f5c370a47f119044c58dfa1a7e346e7d24b5426074aa43df0134d3d0f4635d00"
+      },
+      {
+        "file": "assets/areaData-D7hq9CNT.js",
+        "http": 200,
+        "sha256": "17b4510d14d0b57edcf245219a21917bc6d1cb0d5861a2c19b1c38402005291f"
+      },
+      {
+        "file": "assets/AssistanceAuthorization-BoZV-V-0.js",
+        "http": 200,
+        "sha256": "1cd171062069002f79cd51163acc2e40994c3b93bc63a9216f527f2b0c8b0df8"
+      },
+      {
+        "file": "assets/AssistanceAuthorization-Bx0n6Atn.css",
+        "http": 200,
+        "sha256": "7ed57eb433696a085690aa30cb38a149336fe10971aa9084e3ded1ba51b36a36"
+      },
+      {
+        "file": "assets/base-BhyKBIh7.css",
+        "http": 200,
+        "sha256": "cae1a2225ef66c7c2ecc9b92b1eae61c27e67c832eb665a0d66276cc0907250e"
+      },
+      {
+        "file": "assets/BindPhoneView-DkDw4cdo.js",
+        "http": 200,
+        "sha256": "c9c429533e4c7b9056ccc7e6badde642a3f3a337742495aa2bf72d0619290775"
+      },
+      {
+        "file": "assets/BindPhoneView-DzwJReGi.css",
+        "http": 200,
+        "sha256": "d3568401b831403286e73e90fd47bed4fe0ac1a4dedc858c7df557df10d8c371"
+      },
+      {
+        "file": "assets/browser-CBFMFOK_.js",
+        "http": 200,
+        "sha256": "5cec14ea7e74943a6a822434f29b9df1423f6431b37251585bcf1885e56217ef"
+      },
+      {
+        "file": "assets/ChatPage-CBxPhuVu.css",
+        "http": 200,
+        "sha256": "7cd287007fa6d7c09bf214e09e60b8bdfd4f8c1d4f182798066c0dc1ecef1b96"
+      },
+      {
+        "file": "assets/ChatPage-Df8fJWsP.js",
+        "http": 200,
+        "sha256": "d7039639b881e163649cfaa9d999985d2d0aadf4d51d33cb3e3d1a08aee69613"
+      },
+      {
+        "file": "assets/ClaimReviewBoard-CCrzojvk.js",
+        "http": 200,
+        "sha256": "7f677ae40dba5ff068be61bd50a268a0c6dbb2f72bd3532197e6e0c6831eb559"
+      },
+      {
+        "file": "assets/ClaimReviewBoard-DZnkW78a.css",
+        "http": 200,
+        "sha256": "128b2aebbfc15e2e24f24347dc4f79deea52be0431e887e6c7baa481636fd889"
+      },
+      {
+        "file": "assets/cloud-Cud494pi.js",
+        "http": 200,
+        "sha256": "29e0c5d784a1a2b4f6df7cfddace7554036961a3a0d9366255470f43eefb8261"
+      },
+      {
+        "file": "assets/commercialPartners-B2LX99CV.css",
+        "http": 200,
+        "sha256": "a7e0ec61af200dfb9af613a08d684e9f3bb6fb76b8571433d56af81a16f08ade"
+      },
+      {
+        "file": "assets/commercialPartners-BX79Tu-I.js",
+        "http": 200,
+        "sha256": "694230f33d30c4d03cde9aa0c75c7ff49f689a4ef5e8fbd6ca48a478d8f2dfbc"
+      },
+      {
+        "file": "assets/DataCenter-C7FLgoeq.js",
+        "http": 200,
+        "sha256": "9e05b7098dd34c732e29474f67c739a6707bc39c4ba023232cfe67012e2b4dea"
+      },
+      {
+        "file": "assets/DataCenter-Cmitb0QO.css",
+        "http": 200,
+        "sha256": "89fbd5a8eeeb0429cbf084f78ac79ec7ad30bc42bab273d1667d5121ef28220e"
+      },
+      {
+        "file": "assets/demoRegulations-B63NziUj.js",
+        "http": 200,
+        "sha256": "baf667373ae59a1d452145dbfc06a6b8a8668e2b2ded1c9dc4afcc4de1bd5abb"
+      },
+      {
+        "file": "assets/divisionBasics-B-PPPa8F.js",
+        "http": 200,
+        "sha256": "bb27de45e48b5674f8f9b8bb944caea9e169a3ce1d768f1794b84a2c608ef2ed"
+      },
+      {
+        "file": "assets/DivisionManagement-DezYDQBd.css",
+        "http": 200,
+        "sha256": "78e0bb95856be4c2e719fc87836c81a7d0c6fd5ebde51808e101d7fd890bf5fd"
+      },
+      {
+        "file": "assets/DivisionManagement-DF5Dh7T-.js",
+        "http": 200,
+        "sha256": "2bd74f5acc0fcf79b2c747c5f58fb918ff1e298769f51c6974b280c671b64f1e"
+      },
+      {
+        "file": "assets/DivisionRulesWizard-C_VAkmrl.js",
+        "http": 200,
+        "sha256": "89348e08134f84c16cda2d549ee4926680ed306f5b47ddfab2f02ceb7b570940"
+      },
+      {
+        "file": "assets/DivisionRulesWizard-S-ogPN3g.css",
+        "http": 200,
+        "sha256": "b1a3e25f9f5f031b7558b747925750f04d8f806a05b5957d0190b2b5744d93e9"
+      },
+      {
+        "file": "assets/DrawScreenProjection-C0rcY7s5.css",
+        "http": 200,
+        "sha256": "6754aae2cd820e0fc905d33a1c9ad50d562cdc3300fbad9631d047498f091c0f"
+      },
+      {
+        "file": "assets/DrawScreenProjection-CVzETlhA.js",
+        "http": 200,
+        "sha256": "4e0cf3d31cb4472a0929b13648c20c07d716626f9d67dfa08094128d9adac470"
+      },
+      {
+        "file": "assets/el-alert-B6UgayC7.css",
+        "http": 200,
+        "sha256": "2809bd9f303ebb408b8453aaca3852ed8830ee32469c5b5436dc01c6e9dc361f"
+      },
+      {
+        "file": "assets/el-avatar-DOlF0Z_P.css",
+        "http": 200,
+        "sha256": "5b54edc03ec961c6efae5561d1b858b8baa3f888582fdc4b76b9ea6002811f5b"
+      },
+      {
+        "file": "assets/el-button-DITZ5HsB.css",
+        "http": 200,
+        "sha256": "072c97d46f86cbe89eda7cc547484891a746eae9340162275c13c52c0b5b263e"
+      },
+      {
+        "file": "assets/el-button-group-B09mLjuS.css",
+        "http": 200,
+        "sha256": "644ed68791fcc18c249d99ebd1457f20b31b390602bce818d2ce64b3ef4c7f1b"
+      },
+      {
+        "file": "assets/el-checkbox-CzNtyWdF.css",
+        "http": 200,
+        "sha256": "fa10637bcf2fc245c410dbe74a7846d9380df27b20421423e95c8c9cf7435f1f"
+      },
+      {
+        "file": "assets/el-checkbox-group-D_6SYB2i.css",
+        "http": 200,
+        "sha256": "987ef89c214778b3e7bd57395d96c6a6ad594cd3bc4c2598511d780eaf4e4985"
+      },
+      {
+        "file": "assets/el-col-BWEC13sA.css",
+        "http": 200,
+        "sha256": "76b1f7c525034e53915b3a98190b679f65316842e3543b9938da4b00441bf13d"
+      },
+      {
+        "file": "assets/el-collapse-item-BvmEG8Qn.css",
+        "http": 200,
+        "sha256": "7ecdab75bbb756cc271758f330494cf5d94ae28211b6d8fdea656ff9eb0e8ab8"
+      },
+      {
+        "file": "assets/el-collapse-item-uplJnX_j.js",
+        "http": 200,
+        "sha256": "2d2a58443f131bc3b17b9e13ac8c6ddfa103c35e2ea41e7a0e01366827417f9c"
+      },
+      {
+        "file": "assets/el-date-picker-CwXc3eov.css",
+        "http": 200,
+        "sha256": "fef244fe9382dda20ca217a5c0f74d7cc11b69d73c1a3377ed6f2f77d4c563db"
+      },
+      {
+        "file": "assets/el-descriptions-BpDzfuC8.css",
+        "http": 200,
+        "sha256": "b59c8d737ed198eeeba0d5dced06797af6a68a701c8ed8d82ade9ec83654292f"
+      },
+      {
+        "file": "assets/el-dialog-BIfDN5q_.css",
+        "http": 200,
+        "sha256": "1fa7131bf5e47d46f2751ce5a17091b0c5930c34c72256ce5e023f1393bc5a59"
+      },
+      {
+        "file": "assets/el-drawer-4RO73nWn.css",
+        "http": 200,
+        "sha256": "c7ef8f93b5c9a6f2c24cfa7697a97f3fca4b86bb16ea8424e4ae48d9a364e70a"
+      },
+      {
+        "file": "assets/el-dropdown-item-CtcKg9JC.css",
+        "http": 200,
+        "sha256": "9bf6dbffbd45c5fc4ef53cfd2e6a34c5ab9fa30e18e0451d5dce931f5e2544af"
+      },
+      {
+        "file": "assets/el-empty-S7fQQ3B8.css",
+        "http": 200,
+        "sha256": "691fbbed21e9c4279f70c333db58305fa2fb0f6aa36b070c21f85b7b2d316dc0"
+      },
+      {
+        "file": "assets/el-form-Bxp7jqOU.css",
+        "http": 200,
+        "sha256": "fbd10c78d301da92afb27d2ae2e80b23eaee3d5afcbea9672f60ec1037730010"
+      },
+      {
+        "file": "assets/el-form-item-DISmtGdO.css",
+        "http": 200,
+        "sha256": "92d4a1b7e706fef241e2de57e6c172739bce2ec331b23b353f6c8f2e7a732a15"
+      },
+      {
+        "file": "assets/el-input-number-DExoAqKP.css",
+        "http": 200,
+        "sha256": "4fae55c95aa19abf68e8cde47e4861f9ca968b01471ca18683a1f9189bcab669"
+      },
+      {
+        "file": "assets/el-input-xaztPnzw.css",
+        "http": 200,
+        "sha256": "264fb15eebf6b4409a2dddf8196146a22a7e823b62ccc96f74f6d770039423aa"
+      },
+      {
+        "file": "assets/el-loading-C-X_DDFa.css",
+        "http": 200,
+        "sha256": "737fd072e246b5b7ce1359c4ce09254bfbd1b5e4bec2673004c09f3b19fedbea"
+      },
+      {
+        "file": "assets/el-page-header-DTLAZad3.css",
+        "http": 200,
+        "sha256": "5d4c9a8fca6b7fa2bb5a46d3f5cbec4c12b67e57dab43b4758ef4be24a432fc2"
+      },
+      {
+        "file": "assets/el-pagination-CDeFZDGO.css",
+        "http": 200,
+        "sha256": "0d58744dcd36b4f9387c1b27e8e7c7db3d1627a065df678c65fa3815c9762c6a"
+      },
+      {
+        "file": "assets/el-popper-C8-vPSoj.css",
+        "http": 200,
+        "sha256": "2c59039a3f64c5efcee72597a473fae3518aff2c78d87d2e75b6b072858aecfd"
+      },
+      {
+        "file": "assets/el-progress-apgqz2By.css",
+        "http": 200,
+        "sha256": "09056e35e0e12d36445b16014aa6b717ef246d51a559a3f5983fccaa9782f127"
+      },
+      {
+        "file": "assets/el-radio-button-BDEDkXh7.css",
+        "http": 200,
+        "sha256": "f57d5498bdb4854292d648184d4f5f53a6481974f6e5e8d9bfe8ad5f0c794327"
+      },
+      {
+        "file": "assets/el-radio-group-iy_biC8N.css",
+        "http": 200,
+        "sha256": "923b0dd0424c8251b1d5e582d1825cc4e29ed0685ed7fdd7560f4f932f0cb896"
+      },
+      {
+        "file": "assets/el-result-CF-sYK2h.css",
+        "http": 200,
+        "sha256": "e9d1f07bf020c17e230db38760a5addca32edd8a8f1d8fd395b558b29a50e3da"
+      },
+      {
+        "file": "assets/el-select-CK58rX4v.css",
+        "http": 200,
+        "sha256": "763b2fe9559d0359953c77e6b09b411d5d147ea3b4dacdaca133768d6e87e28f"
+      },
+      {
+        "file": "assets/el-skeleton-BjvgS5Bk.css",
+        "http": 200,
+        "sha256": "3929baaccd1d2ed5119d683df6b34c0a0018a5b7af5bdc35d5b0f16d5e04d569"
+      },
+      {
+        "file": "assets/el-switch-DpR9-s4E.css",
+        "http": 200,
+        "sha256": "0675796f81b3e8496a489f1cf8e4888ee81a01630102b451d446e56f62cb7831"
+      },
+      {
+        "file": "assets/el-tab-pane-C5lGmld3.css",
+        "http": 200,
+        "sha256": "cbe683535bcc712e122101ddb96403c4b92e90c03571450b0c9b4ddd7e87529c"
+      },
+      {
+        "file": "assets/el-table-column-Dp73S2HR.css",
+        "http": 200,
+        "sha256": "44e956ea9d84ceac5c64f63ba0e11743b84ee356a8655e3343f8e4193b53ddcd"
+      },
+      {
+        "file": "assets/el-tag-1VV9QMa7.css",
+        "http": 200,
+        "sha256": "f1047013b3fa8085cfd287f3ca8ff7aee99ec7375677cf7486e1a455abf58c5f"
+      },
+      {
+        "file": "assets/el-tooltip-l0sNRNKZ.js",
+        "http": 200,
+        "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      },
+      {
+        "file": "assets/el-upload-Bit6Pm_l.css",
+        "http": 200,
+        "sha256": "a79d121282ffd9bcc8f4a6d6fc5a8efc84cefeba4621d3c8d529f4d503895222"
+      },
+      {
+        "file": "assets/element-plus-C-45cwOh.js",
+        "http": 200,
+        "sha256": "5c397718a1f8a7511ba68b0cbe6c26dd6880d09d87887826b7027af3d14cc8bd"
+      },
+      {
+        "file": "assets/EmptyState-CeC4DUb0.css",
+        "http": 200,
+        "sha256": "0747bc32d48e8e77e8e972763aec144ae8ed4ba16451f2635722d2f931c7972c"
+      },
+      {
+        "file": "assets/EmptyState-ERqiYWUv.js",
+        "http": 200,
+        "sha256": "8dfbdace079be5e90b422c874c86ec80cdcb2e15eed9c0200ba38cdfde307d9d"
+      },
+      {
+        "file": "assets/exceljs.min-DeQJnK0E.js",
+        "http": 200,
+        "sha256": "b58e9480c2721c0422264045f933f4922126b5c6444a6ba64cb14c3737927d1f"
+      },
+      {
+        "file": "assets/HeadRefereeManagement-D-2OGe-w.css",
+        "http": 200,
+        "sha256": "f780e569488f1db1b889dcec4925c9b6557f37e96dd6b6eb9fc6f4b432952d28"
+      },
+      {
+        "file": "assets/HeadRefereeManagement-ulZOEasH.js",
+        "http": 200,
+        "sha256": "9536bb8a72519c96af553bbe5abc3700b147b2a3434b04f7dc8044446be5f128"
+      },
+      {
+        "file": "assets/html2canvas.esm-CBrSDip1.js",
+        "http": 200,
+        "sha256": "b4f3add809a6d59f46260e8fd56cab240f3153def977386b230a839e8cb0b281"
+      },
+      {
+        "file": "assets/IdentityReviewBoard-6_joxAhQ.js",
+        "http": 200,
+        "sha256": "a6530a4bd917333303fe1a040e5c9242987f3e5c8e5670339319d20da556df41"
+      },
+      {
+        "file": "assets/IdentityReviewBoard-BiMhzwme.css",
+        "http": 200,
+        "sha256": "d847c7575e613a64dc175e59f72fcb67bb1cdf5289f61b30c71fabeb04dfadbf"
+      },
+      {
+        "file": "assets/ImageCropper-BX20Aq08.css",
+        "http": 200,
+        "sha256": "ec81d0fea5795e5fe103431a7491b88775af9d7519e8688458cd757519f8667c"
+      },
+      {
+        "file": "assets/ImageCropper-ZX6oezGS.js",
+        "http": 200,
+        "sha256": "25a138901e162b5b8a283c0ec164d97bb6c47835390bf5a4b55649b2124129ca"
+      },
+      {
+        "file": "assets/index-2u7riYJu.css",
+        "http": 200,
+        "sha256": "2eb466826157bf241d89e92645c78b850702df1f7f8998b02707c4789a95e3d9"
+      },
+      {
+        "file": "assets/index-CPIeSNk9.js",
+        "http": 200,
+        "sha256": "262c5e01d4ce742b49c1951f624a583f978017022056e389bc224c319ab3635e"
+      },
+      {
+        "file": "assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "file": "assets/index-xUFA-fgS.js",
+        "http": 200,
+        "sha256": "60da638ab9b2e98d0a5c1633d71c0f2a341916f1b205a6c0aea3e78138bed289"
+      },
+      {
+        "file": "assets/index.es-BMoQhot6.js",
+        "http": 200,
+        "sha256": "0253c891f4083797b6a8deb3afe5fdf7d63e07968112ba04451746d8afd59b99"
+      },
+      {
+        "file": "assets/jspdf.es.min-Hj0C7ANI.js",
+        "http": 200,
+        "sha256": "c90d106ebcf128910b1ffaed649cabe1ef6cd8430aa346dfc463f9ca3feaf4da"
+      },
+      {
+        "file": "assets/jszip.min-CzQP5Dcg.js",
+        "http": 200,
+        "sha256": "95937dcea212b548608d9b24ef01cb61d15375cf7465154b5eab1ebef0963397"
+      },
+      {
+        "file": "assets/KnockoutDrawTree-CHgkgjPR.js",
+        "http": 200,
+        "sha256": "4e846dda74952414fbfcb949d77da0a3e402bf00b6592c5cd36b5c902db8de16"
+      },
+      {
+        "file": "assets/KnockoutDrawTree-DE6DPS2y.css",
+        "http": 200,
+        "sha256": "4be6a552b456566505962878422976c4eca617d3d7d33182820d6ee44c5150e9"
+      },
+      {
+        "file": "assets/LayoutView-DrITXp5d.js",
+        "http": 200,
+        "sha256": "dd46c4cf672865f29ec56b98d86959ae532f38b32e5eeaffab7bd8a927c8875b"
+      },
+      {
+        "file": "assets/LayoutView-VN6ijxYE.css",
+        "http": 200,
+        "sha256": "a91b196c1b96d61579793b8036f5bc68be04d046658f03b76facda39a51af08c"
+      },
+      {
+        "file": "assets/lightweightMode-ZrWMB7Ps.js",
+        "http": 200,
+        "sha256": "5f22a5aa28e95521792406572b52ff6ae34a3b982193ba9559a66ddc2a9f40da"
+      },
+      {
+        "file": "assets/LoginView-pQjnYB3h.js",
+        "http": 200,
+        "sha256": "ccca94039200ccf9fd68414d09eb41e275b1743c187b11cfff54ec96a70bba20"
+      },
+      {
+        "file": "assets/LoginView-VnccF0PD.css",
+        "http": 200,
+        "sha256": "4176fb6d36786f5fef61b119cf0d6219e18bace8a352a3d130ff947f0bd92ba3"
+      },
+      {
+        "file": "assets/logo-saixiaofeng-C-n05rdj.js",
+        "http": 200,
+        "sha256": "d5c28ce5ae44658e8b68daae1e751e3c3bb74ef895beeefc3079f46e851a3336"
+      },
+      {
+        "file": "assets/mammoth.browser-CBbLrGiA.js",
+        "http": 200,
+        "sha256": "526c969d741fb3dfece1b26a3def5c8cf6d77708606ce4067e8807536c426dfe"
+      },
+      {
+        "file": "assets/match-score-Bg5V6fnm.js",
+        "http": 200,
+        "sha256": "129d9379eaf70f6f4cb4655bbc4c06f92ad5e5defeacdf1593f6ce827d305a9b"
+      },
+      {
+        "file": "assets/MatchCard-DNo-SMAQ.css",
+        "http": 200,
+        "sha256": "3c48af9fecfeed5c21223ecb31c2c20044711c138f1609945d84ccc6ebfcd419"
+      },
+      {
+        "file": "assets/MatchCard-J3pu7rIg.js",
+        "http": 200,
+        "sha256": "ca0ffb8bbd2a89f06412f7c93328e29051bff3cb8297e948fdd8689952f2de4d"
+      },
+      {
+        "file": "assets/MatchDecision-C9EiMCbx.css",
+        "http": 200,
+        "sha256": "a2dc41f0ce767fe85d9dbe9b8c5eb86ed34a59dbe07a26e349ee253f40f4cd1c"
+      },
+      {
+        "file": "assets/MatchDecision-Cz2RJcnk.js",
+        "http": 200,
+        "sha256": "5aa0044701b54c3126811dd1d2e614a2013ca5c43bb786c131155911a664745a"
+      },
+      {
+        "file": "assets/MatchDetail-40d6dNLo.js",
+        "http": 200,
+        "sha256": "bf4029a7bd928037d743e5d4c6ba8be6422a0512342ed987599098a124d90223"
+      },
+      {
+        "file": "assets/MatchDetail-DD03Sy4u.css",
+        "http": 200,
+        "sha256": "9246ed844ef8dd1834e149b60eb98e2262abe2dc3f69b967ebd5d8e034737550"
+      },
+      {
+        "file": "assets/MatchDetailPage-CTMmZMN4.js",
+        "http": 200,
+        "sha256": "a884e4e7f5032bfacca6d160d387bb7bd970df73844ea757960e96e5f36b208e"
+      },
+      {
+        "file": "assets/MatchDetailPage-CZGUMQiY.css",
+        "http": 200,
+        "sha256": "fa59e1e12b8f3d0fe3c8ee5c025513a0ceec7f8fd5e85e2eaf7a44b1071d5806"
+      },
+      {
+        "file": "assets/matchEvent-B8LGNTgP.js",
+        "http": 200,
+        "sha256": "698a091dc09bfdc0530df136f8090a6db699d0fe87296b499ca4ca1cf53a5cb5"
+      },
+      {
+        "file": "assets/matchListContext-C5dAEWKt.js",
+        "http": 200,
+        "sha256": "de849bd1ce44358b9edaa25847d80a19f08704b0983a037e80d65e85718dad44"
+      },
+      {
+        "file": "assets/MatchLiveMonitor-B3TAv0st.js",
+        "http": 200,
+        "sha256": "5fa81c11a1b3c970f09e1cf41d06dbe7665b5669de30761ca744680686f7a9fe"
+      },
+      {
+        "file": "assets/MatchLiveMonitor-CrwVjCA5.css",
+        "http": 200,
+        "sha256": "4d866a4888159121a333cd79726a78bd5c00628b2ecf27ac74b716450fa7729f"
+      },
+      {
+        "file": "assets/MatchPostMatchReview-DAcGJfZH.css",
+        "http": 200,
+        "sha256": "9c1d5ef839ff73c9cc3c897c2cade1bcb97810572c7024e514d4c0c9382b72fb"
+      },
+      {
+        "file": "assets/MatchPostMatchReview-DKPfKn8i.js",
+        "http": 200,
+        "sha256": "33822ec04981e9584e47284fa2b1583771385692aaab72a3482dadb76b0a047d"
+      },
+      {
+        "file": "assets/MatchReviewWorkspace-4RPLAniC.js",
+        "http": 200,
+        "sha256": "99654328a13c9c6280248ef6a49f57af66f1953e108aa16c864635655ed04fbe"
+      },
+      {
+        "file": "assets/MatchReviewWorkspace-TmMk6i7Q.css",
+        "http": 200,
+        "sha256": "b4a6e33b4eab39029b687425b50bf27e7246c69b56fa94d9ebb62a2a249dd60e"
+      },
+      {
+        "file": "assets/OperationTutorials-BaQSbltw.js",
+        "http": 200,
+        "sha256": "0aec87da6e0612bfce32a233d585b38f22509ad4f1f6e82ff176703b7ac4a675"
+      },
+      {
+        "file": "assets/operationTutorials-D5YGDWzv.js",
+        "http": 200,
+        "sha256": "c3b4a275298624be6ed3a32d3f8f46a9120e1bbae474167dfb3f0b4b64e445ea"
+      },
+      {
+        "file": "assets/OperationTutorials-jD7lYGdK.css",
+        "http": 200,
+        "sha256": "398a941ce6b357daf28b040fad8fb3bb92ff65fcc9440a84a6f843b338126f64"
+      },
+      {
+        "file": "assets/OrganizationOnboarding-C7x9x7P0.css",
+        "http": 200,
+        "sha256": "faafd62b68a8db2baecefdcdd7e0540da223b8f063b4f478de2baa45640bd522"
+      },
+      {
+        "file": "assets/OrganizationOnboarding-DDltk56T.js",
+        "http": 200,
+        "sha256": "d58f469506569b6239f105a09659342bb09fb4437e036872d6c58951340a3290"
+      },
+      {
+        "file": "assets/OrganizerInboxView-07AO2kWq.js",
+        "http": 200,
+        "sha256": "a00c99129599798f0befa633eff90e8eaf4edbb6eec1d9abbd8037e4b85914a3"
+      },
+      {
+        "file": "assets/OrganizerInboxView-BhITx4jn.css",
+        "http": 200,
+        "sha256": "c1eea209e3e7cdafcf7072f949a202e537605a8285db4ebc8623b5fa35ab3bbc"
+      },
+      {
+        "file": "assets/OrganizerServiceBinding-aLXFrf0q.js",
+        "http": 200,
+        "sha256": "e95f81f4c6b82f932f1ad1dfcea79928de8d0e9c9601b801c733ad74e72b3117"
+      },
+      {
+        "file": "assets/OrganizerServiceBinding-BrPtBlax.css",
+        "http": 200,
+        "sha256": "a3c5264ce6f2b93acf122d1bcf12a3feb4794a6688474c5c0a1c842256be173f"
+      },
+      {
+        "file": "assets/PenaltyShootoutEditor-BTvvBJwj.css",
+        "http": 200,
+        "sha256": "3906c5956a3952129e5b9aa2f72c6c1f65b78585bf2e346c71cec1a6d6a729af"
+      },
+      {
+        "file": "assets/PenaltyShootoutEditor-DF5TWLKh.js",
+        "http": 200,
+        "sha256": "291644b017315d949d95b9548e3714dd692ca948fd643b639bc81e7d2d004a89"
+      },
+      {
+        "file": "assets/permissions-BfN54-XZ.js",
+        "http": 200,
+        "sha256": "d0679db42cbdbfad97d001402d17befbd5f893b9bee1be6ded2f8e7a6d50726e"
+      },
+      {
+        "file": "assets/PlatformLoginView-Blt9UMem.css",
+        "http": 200,
+        "sha256": "c3145055af3561d067639297435c17ca462b396ce26c30291238d64156af411a"
+      },
+      {
+        "file": "assets/PlatformLoginView-Bp9VVL7i.js",
+        "http": 200,
+        "sha256": "1828a392db7f01709d9d24b1084d9917aa602c77f1daf7af5f34bb64f3ee5ac9"
+      },
+      {
+        "file": "assets/PlayerCard-Dc--TZso.css",
+        "http": 200,
+        "sha256": "e8f4fd3b5298392770423ae9e22cfcebb1b54452fa396f8e38ff71c70a7745db"
+      },
+      {
+        "file": "assets/PlayerCard-DpiTwg6c.js",
+        "http": 200,
+        "sha256": "30a2a3666563cc59a509c694aa843c0295bba226c6cdd671f03f27ad0222bc51"
+      },
+      {
+        "file": "assets/PlayerDetail-BHWVd9jn.js",
+        "http": 200,
+        "sha256": "9cc0e41e1c653960e0aedf9f84bd741941bda18b39e8bfabfbcc3af15cf07acf"
+      },
+      {
+        "file": "assets/PlayerDetail-fSeIZ3Rh.css",
+        "http": 200,
+        "sha256": "8d30367930a620cd9d0126103563c887aceb70b1d94baa82ccb424f95890dd49"
+      },
+      {
+        "file": "assets/PortalLayout-9EWiZN1i.js",
+        "http": 200,
+        "sha256": "480cf1213587437eff35cc003b3b91127f201e070817aa8334a43d16561c94ec"
+      },
+      {
+        "file": "assets/PortalLayout-mhYsjCg7.css",
+        "http": 200,
+        "sha256": "16f7b56a588cd77510c555f63ca84ae64841b8daa7059d202f7fd751c63674df"
+      },
+      {
+        "file": "assets/ProfessionalTournamentRoster-CA2PNXbp.css",
+        "http": 200,
+        "sha256": "0a4814e80fa42fd223f0d9b4efe0969b9af5100d527669a4e4d8be3463883172"
+      },
+      {
+        "file": "assets/ProfessionalTournamentRoster-CJDY3_qy.js",
+        "http": 200,
+        "sha256": "9fa679f0eafea2befd7844b33d9493ee2ac0509d35f5846494435c597f5741bb"
+      },
+      {
+        "file": "assets/ProfilePage-BGYpO47Q.js",
+        "http": 200,
+        "sha256": "8153dcd3a277d3cd9a778cdb79d7a8f84da2cb73880a2110b0ce29f86005541c"
+      },
+      {
+        "file": "assets/ProfilePage-CDFPiz-n.css",
+        "http": 200,
+        "sha256": "971a33ca55481ef399a78831d11e7e2c124d9f57335e0bc9768f2a7617fd8d69"
+      },
+      {
+        "file": "assets/PublicTournamentHub-DFXH092y.js",
+        "http": 200,
+        "sha256": "6c9585f1fab2d61887ef076c76a1aae65b48fc6bac2f09c62479aab059762b40"
+      },
+      {
+        "file": "assets/PublicTournamentHub-DXy6g3NQ.css",
+        "http": 200,
+        "sha256": "b4aa47aadebe61f67c7dced8c91569372a42fd817ca77fe2923d7084cb06c7c8"
+      },
+      {
+        "file": "assets/purify.es-8E279hYE.js",
+        "http": 200,
+        "sha256": "0e04e6e10eced0ad9af353ad1362c9aecb2f183518ff5ffe795ccae94119ec42"
+      },
+      {
+        "file": "assets/QuickTournamentConsole-CWbZ0A9R.css",
+        "http": 200,
+        "sha256": "75fad4822bdbb8ae3e2fb51516753d9cbb2d385f5cb592a698d0bda33f9106af"
+      },
+      {
+        "file": "assets/QuickTournamentConsole-D6Viy5iB.js",
+        "http": 200,
+        "sha256": "c61001db9275b40b77056bc8d2ec1350f9b724184f389ad699b63895cd9b7c77"
+      },
+      {
+        "file": "assets/registrationKitColors-BEEJ09mp.css",
+        "http": 200,
+        "sha256": "72877c553ec020fd9c2ce3142483a5efe94c43ab44280ad1de4229bd79b90bdb"
+      },
+      {
+        "file": "assets/registrationKitColors-C90Oy1iA.js",
+        "http": 200,
+        "sha256": "f1fda7f020d9044b5b0c631fd03c2d23b3af4501f00546d32a38fd7d5601d2dc"
+      },
+      {
+        "file": "assets/regulationRecognition-D5QORpQf.js",
+        "http": 200,
+        "sha256": "f185d66ab066bfca73e327131f2db65ecb0f658c7b0f46ebc2373d00c6e36eef"
+      },
+      {
+        "file": "assets/removeBg-VBq4fPca.js",
+        "http": 200,
+        "sha256": "cf5faf144a186fa38a4192bf69e0d2b3dabb38be3dcb90c84a5f2fceb9bb3370"
+      },
+      {
+        "file": "assets/RemoveBgProcessor-Dt60qXuP.css",
+        "http": 200,
+        "sha256": "78d3b6d5b2762337055755176faad4fe142c0baf15593ae9258fc6edb5f1242a"
+      },
+      {
+        "file": "assets/RemoveBgProcessor-_OGP0K8f.js",
+        "http": 200,
+        "sha256": "8300ea82e0d2b58a006cdd4e0cdff420d6e66c1eb5c71a5183352d74d9a29dd9"
+      },
+      {
+        "file": "assets/RosterChangeReview-DAw7ox1h.css",
+        "http": 200,
+        "sha256": "470cd70197b2869e0af37aebc28c7cd3b3a4d3a9df57cdd3243e13ee70ddb40a"
+      },
+      {
+        "file": "assets/RosterChangeReview-DcubCUTw.js",
+        "http": 200,
+        "sha256": "e268750b0e32ee907cbf403526078bec210138e728496bb416c46692926d35d9"
+      },
+      {
+        "file": "assets/RosterExceptionBoard-BruAqKkh.css",
+        "http": 200,
+        "sha256": "68c384a2abd6e78d38f94d268913f9267c46f31ebbcbbcf10f9bbc73cd672530"
+      },
+      {
+        "file": "assets/RosterExceptionBoard-BXhTPh4F.js",
+        "http": 200,
+        "sha256": "6bc1d2b59d8672ef29e8243d6b41ee119adc40236ff664a560a5ea12b7ec5a65"
+      },
+      {
+        "file": "assets/rosterHelper-CyIEaekh.js",
+        "http": 200,
+        "sha256": "a3406b4d90b32521eb5c582755feb40ffc2e0a70f466893c4890bff9b4b85618"
+      },
+      {
+        "file": "assets/rosterHelper-DXXlHy2w.css",
+        "http": 200,
+        "sha256": "c9270f79d60486f11c904526172808f8615425de57ea0f53452305dc21a971ee"
+      },
+      {
+        "file": "assets/SignatureView-BlFaXAjG.css",
+        "http": 200,
+        "sha256": "2ff2904899d7ae0dd5f6c2941d3fab6ed2eb0e523b474c007c349214eeec23bd"
+      },
+      {
+        "file": "assets/SignatureView-CmcSGHr8.js",
+        "http": 200,
+        "sha256": "48e5aae91711feea66e4a6bd542c7484473414b655b40e137c3553380160311a"
+      },
+      {
+        "file": "assets/staffRecords-C-INFPtd.js",
+        "http": 200,
+        "sha256": "874d4db39e9b93fb684d6d758e683c8871472601d544bf58f5061b6c22bb6238"
+      },
+      {
+        "file": "assets/staffRecords-C5mDCGOX.css",
+        "http": 200,
+        "sha256": "873fde93b5fd971de4d4f29dc8e40c2665ea688a0743d1fe6eebf7a667e52590"
+      },
+      {
+        "file": "assets/substitution-B7mwcGw0.js",
+        "http": 200,
+        "sha256": "c4cff6506d1843226030ba83cb4dca653530ca141fe6b20df33e3f1fb7917368"
+      },
+      {
+        "file": "assets/teamCodeRegions-D3iATgh0.js",
+        "http": 200,
+        "sha256": "db3f8dca4b3274380fdc3ec0f693ab7440696836d90f00c72bfd058c9ab60c6b"
+      },
+      {
+        "file": "assets/TeamDetail-C8HKXns_.js",
+        "http": 200,
+        "sha256": "f065aef1bcf4b1e969cc5f332f87d74d3056e6216a3d3b36004aac6a2b0fa472"
+      },
+      {
+        "file": "assets/TeamDetail-DBg8SktF.css",
+        "http": 200,
+        "sha256": "da2f49934065cbb96e3abac5ac74fc10345105bfa10d4ad73174e2824e5904ee"
+      },
+      {
+        "file": "assets/TeamList-BNoGyynu.css",
+        "http": 200,
+        "sha256": "edc6504fe9aef93ed6538e90f4cdce4c6feec9b7213e06b52b2be8ab06225acd"
+      },
+      {
+        "file": "assets/TeamList-CX_2meVY.js",
+        "http": 200,
+        "sha256": "27bdc4ec4e23e539297eec07819c6a329190a444a50b91c0503f598a1871d5af"
+      },
+      {
+        "file": "assets/teamRegistrationDocx-AmN6uU9H.js",
+        "http": 200,
+        "sha256": "f48ace4b5326103019b1be4a2310d721cabb8d31b0f55b1ec5713db19566a221"
+      },
+      {
+        "file": "assets/TournamentCenter-BdrtflE2.js",
+        "http": 200,
+        "sha256": "45bc6bcb6879a4c95e8f457efae23b420a7756c211797fa184f62183694f3489"
+      },
+      {
+        "file": "assets/TournamentCenter-D2dc3UDl.css",
+        "http": 200,
+        "sha256": "b4ff93fe54b750dd19ed4628aed7d579fe5a0946d53709f191a844adc4abfbc3"
+      },
+      {
+        "file": "assets/TournamentCenterAdmin-BpFlxyjm.js",
+        "http": 200,
+        "sha256": "709c1442e36e1b5a00a3b547ea1c3d6d6b7ec02849df9721844b8b42f872653b"
+      },
+      {
+        "file": "assets/TournamentCenterAdmin-CRWkUPFr.css",
+        "http": 200,
+        "sha256": "4bab69ff61b3e0b72ea9e3c6d9f8be471a6bf3f46ca7bc6acbdb040456097978"
+      },
+      {
+        "file": "assets/TournamentConsole-DSFI3Lcw.js",
+        "http": 200,
+        "sha256": "72c8e4c4623e910d1863df0612eb49237465d06139fab5d59ed5c71ef4aa6699"
+      },
+      {
+        "file": "assets/TournamentConsole-DU883FPi.css",
+        "http": 200,
+        "sha256": "bfbdf9eebfdedcddb2e7413e17865ab8c810e5e1bc0171d453115b5f8bd1125e"
+      },
+      {
+        "file": "assets/TournamentCreateBasic-2SPf090P.js",
+        "http": 200,
+        "sha256": "803b8c88753ceb08775a8ed3ec16e646dcc8c7418f1e2df2c7b07d7475ca56f5"
+      },
+      {
+        "file": "assets/TournamentCreateBasic-SvXgzfab.css",
+        "http": 200,
+        "sha256": "d478f43dfffb4f17a3cfcd1d054f625e3c74e3b5cf3cf822d5cd0e1c160d7671"
+      },
+      {
+        "file": "assets/TournamentDetailPage-BZzzcA-z.js",
+        "http": 200,
+        "sha256": "69b5d5311f68b558a10587328fc0bfd2bf4653d4254f1628529cf91ca0c62e16"
+      },
+      {
+        "file": "assets/TournamentDetailPage-C-jQwRq5.css",
+        "http": 200,
+        "sha256": "8c0bd52d7a2797500ecb5ad4bfeae6dcfc5018cbd6475da6cd9775d4f06293ac"
+      },
+      {
+        "file": "assets/TournamentDiscipline-CzHl5ZCs.js",
+        "http": 200,
+        "sha256": "00cf59aac1a5f5b01173979c0afa2ad03715d89eb39de0a58174a3e4dd0cf4be"
+      },
+      {
+        "file": "assets/TournamentDiscipline-DvdlPWRi.css",
+        "http": 200,
+        "sha256": "407e88d78140c4d96dbe07271c9ccefe9a0acc0191f6fe565a278af83f0fcc5c"
+      },
+      {
+        "file": "assets/TournamentDivisionCreate-5ofgBADM.js",
+        "http": 200,
+        "sha256": "bcbe612fc977b67a411ac6d4515b7e39425449f7c21886dd497ed9b3c3f77751"
+      },
+      {
+        "file": "assets/TournamentDivisionCreate-I2z3qZMH.css",
+        "http": 200,
+        "sha256": "8042571e5917ebb8949e0ef304e58e4fa7162358a58de4a1e116392d8b3ee49b"
+      },
+      {
+        "file": "assets/TournamentDraw-BXO3yuiJ.css",
+        "http": 200,
+        "sha256": "0baaaa56facb8b36ab03a1c1c68c2a0d4688f366dc42c3e4b2cb9fefd403149a"
+      },
+      {
+        "file": "assets/TournamentDraw-D9pFRfad.js",
+        "http": 200,
+        "sha256": "bdc23c789c8f6ae701bf97eebb56935fd0dab088663d538493a48efa23e471d2"
+      },
+      {
+        "file": "assets/TournamentEditBasic-BRuCzSqW.css",
+        "http": 200,
+        "sha256": "131c4cec69fb698ee8890bcd9ddcd74b836ea0244de30f18bafa69980a27a08d"
+      },
+      {
+        "file": "assets/TournamentEditBasic-DMRygK3_.js",
+        "http": 200,
+        "sha256": "75b9f0e208bd4f463198935761e3c79bfc6cd1ca699c3dacf7ecdf5941de1376"
+      },
+      {
+        "file": "assets/TournamentList-DrgELWEU.css",
+        "http": 200,
+        "sha256": "4fee11441c7ae38a2031018d075bf75224b68cc8cf0d82e6ba8d73343c5f6e1a"
+      },
+      {
+        "file": "assets/TournamentList-HlnAUS0x.js",
+        "http": 200,
+        "sha256": "786a04c1f8436a746f41541c9fdcc2f61aee1fa30714c52f0f6189fb7945960a"
+      },
+      {
+        "file": "assets/TournamentListPage-B-YuqANM.css",
+        "http": 200,
+        "sha256": "01e25efdfe64c45de9f5c7229a7aefce6f2a2bc5f467d4252005ea962d181bf4"
+      },
+      {
+        "file": "assets/TournamentListPage-CWuaZbrN.js",
+        "http": 200,
+        "sha256": "e2c59a43bb39a985443fbd43a52476f0dd05f2776faa9048d700c56332f91eb1"
+      },
+      {
+        "file": "assets/TournamentNewsCenterPreview-7ExA74uP.js",
+        "http": 200,
+        "sha256": "64b3efe54cad4b70b02a0336987f49deb4acb03eac8e88ab54b4c30d3c7335fd"
+      },
+      {
+        "file": "assets/TournamentNewsCenterPreview-Bj0Ocgd-.css",
+        "http": 200,
+        "sha256": "e4aba2ffe5fa64453414a7f8e6277382463dae90179ef5f14034392bd3cddd59"
+      },
+      {
+        "file": "assets/tournamentPlayerStats-Chm1vtA9.js",
+        "http": 200,
+        "sha256": "a6f3641867e808c15e1c98d56f9c94f23cc4ddf6221886fb9c9c47fc4cfc87a0"
+      },
+      {
+        "file": "assets/TournamentResultCenter-BPcGEg5j.js",
+        "http": 200,
+        "sha256": "093909da8907e5c533ca728d6a2ee176cb4063b200fd8cd8ee99e693727db18e"
+      },
+      {
+        "file": "assets/TournamentResultCenter-Cx_LPOSa.css",
+        "http": 200,
+        "sha256": "b73508ff7b1bd50f46eeaa9aad89686105f45bf12b2a848b3544e0c45ac5e086"
+      },
+      {
+        "file": "assets/TournamentScheduleV2-BPQQulqU.js",
+        "http": 200,
+        "sha256": "4f838ebfb25e9b803fcc05174c079788db3a37476c1ca02e91b2e4a08a1f001c"
+      },
+      {
+        "file": "assets/TournamentScheduleV2-CNTB0Ja2.css",
+        "http": 200,
+        "sha256": "1274ac9fc653a9d26ed0a7a90b13dd9fba9d1fee53989d0208eb960a07c9a0c4"
+      },
+      {
+        "file": "assets/TournamentSignups-CX4PkJZD.css",
+        "http": 200,
+        "sha256": "de2fd5589d8c86415edf8cec878c0bda542efb7e3d620b9efd666ec9bdc1f81f"
+      },
+      {
+        "file": "assets/TournamentSignups-DjxG9Fro.js",
+        "http": 200,
+        "sha256": "132222b7859879c040fd950664aa37ed94038b7aed2b7aac464bd0bb4e23670a"
+      },
+      {
+        "file": "assets/TournamentSpace-CrdYrbRB.css",
+        "http": 200,
+        "sha256": "fd5c0fa1aee476ac23292009fe45731cff8f9ff8248d3035ecb3c286d012d63e"
+      },
+      {
+        "file": "assets/TournamentSpace-Cwc0h7ln.js",
+        "http": 200,
+        "sha256": "46de91a763fc02f110226793c7c39be1e429c420a1e53a61a0c9f681be9b1068"
+      },
+      {
+        "file": "assets/TournamentStaffAccess--p5KCuqR.js",
+        "http": 200,
+        "sha256": "9d21dbd177cc1304cad76ac57dfcf56e73f0f02c44b22c99a086a40d8fb086ab"
+      },
+      {
+        "file": "assets/TournamentStaffAccess-Dq2wAI8w.css",
+        "http": 200,
+        "sha256": "44ae1b462b6ee8da4ec17bb9d65c7b20910000bbc1caea1299cb555ea875e17d"
+      },
+      {
+        "file": "assets/TournamentStaffResults-BCkPfLhY.css",
+        "http": 200,
+        "sha256": "384f0084ab5717bab4a0c9b1028d6f91acac13fe92a5769505bfce5b72a00f10"
+      },
+      {
+        "file": "assets/TournamentStaffResults-CBiedOAS.js",
+        "http": 200,
+        "sha256": "42b46a449305e57426f82f2e7c9398034ad18325c6184521bc1d22885bac0750"
+      },
+      {
+        "file": "assets/TournamentTeams-Bpczgcme.css",
+        "http": 200,
+        "sha256": "68aef7a445bbf84b1eef0df30773c1d20fe3d2c810f3f4d9d93cca7ad63c18f5"
+      },
+      {
+        "file": "assets/TournamentTeams-DlkTrv1c.js",
+        "http": 200,
+        "sha256": "fdcf5185ff80c00fda8f24c6a9fb9a289b97133880097dd399bc675b6d6d3a90"
+      },
+      {
+        "file": "assets/TournamentWebsite-DlS7Wg6v.js",
+        "http": 200,
+        "sha256": "c0a29c716fcce3b1a858be2e18b8a19a40678f8ce51634b061b92e0a33b4f5bb"
+      },
+      {
+        "file": "assets/TournamentWebsite-lORfzd1f.css",
+        "http": 200,
+        "sha256": "aa1d5e9939d8186d1606b7d5543fb5772349bd985e742c324d5ab61b07a288e0"
+      },
+      {
+        "file": "assets/upload-DhCP35Dz.js",
+        "http": 200,
+        "sha256": "948aa75569e52a32ac92453d0779790cb9b055c68a8635420146c3c7fe4ae2f7"
+      },
+      {
+        "file": "assets/UserAvatar-8xZAthHj.css",
+        "http": 200,
+        "sha256": "591df712544b5499a41c651aff1c0c4dee66696458429708c1a80e375e3973d4"
+      },
+      {
+        "file": "assets/UserAvatar-DDckLv4r.js",
+        "http": 200,
+        "sha256": "311a30fc51457320427e15de6c00d0e537c2f29cfa668514773fad013343db47"
+      },
+      {
+        "file": "assets/useReadCacheRefresh-BE3_7Z33.js",
+        "http": 200,
+        "sha256": "4acc82ce9ef41bda13e162ea0017bc345da16cd80c1b23e326b5fecc6151a8a5"
+      },
+      {
+        "file": "assets/visualQaFixtures-RIib5RRB.js",
+        "http": 200,
+        "sha256": "c6e959e8879abfd1553df8ceb12d2ac4b3c18e6473791ba9f77ab09bd32e8128"
+      },
+      {
+        "file": "assets/vue-vendor-b1JROl9D.js",
+        "http": 200,
+        "sha256": "7b809a25089cfe9c73f82a9b48e4332ce4a428115f384b6a9ff0ef3a09ff1fbd"
+      },
+      {
+        "file": "assets/WechatCallbackView-DQE3uIF9.js",
+        "http": 200,
+        "sha256": "74d79d58aca0388a44fbd42c8359064bc317b0480d93c8e23057186001960a9f"
+      },
+      {
+        "file": "assets/WechatCallbackView-iRn90B73.css",
+        "http": 200,
+        "sha256": "129eb175a6369b45c5857c2bc45c49d5bd88a2213fa043df1a51b7282c305f4b"
+      },
+      {
+        "file": "assets/whiteBgRemover-BRLYonqS.js",
+        "http": 200,
+        "sha256": "a904776f1bf962397b886b0738da7f11bb8960c8fd7f16ff9c33effd2a355fd7"
+      },
+      {
+        "file": "assets/xlsx-D_0l8YDs.js",
+        "http": 200,
+        "sha256": "0b43b64c8e0a7bbecfd4ef17ca5cc32e2102adcc74ededa912fd380637dd6f2e"
+      },
+      {
+        "file": "assets/_commonjs-dynamic-modules-TDtrdbi3.js",
+        "http": 200,
+        "sha256": "590ab8057bc032c3e14f9f1a76aaeffd01da609413fb12888819ca0433c1fae9"
+      }
+    ]
+  },
+  "previewAssets": {
+    "url": "https://www.sxffootball.cn/preview/admin/",
+    "checkedAt": "2026-11-04T04:21:32.713Z",
+    "assetCount": 209,
+    "checks": [
+      {
+        "file": "index.html",
+        "http": 200,
+        "sha256": "5677a0163fe104edab7fc86f3583755f5a8ef8ba573f6ad1ec26ea92475b8290"
+      },
+      {
+        "file": "pc-release.json",
+        "http": 200,
+        "sha256": "2ab7d56d69f127ebf70b66c9f4b12e163b4ee3e85be7951631ea9800f2c00c70"
+      },
+      {
+        "file": "assets/areaData-D7hq9CNT.js",
+        "http": 200,
+        "sha256": "17b4510d14d0b57edcf245219a21917bc6d1cb0d5861a2c19b1c38402005291f"
+      },
+      {
+        "file": "assets/AssistanceAuthorization-Bx0n6Atn.css",
+        "http": 200,
+        "sha256": "7ed57eb433696a085690aa30cb38a149336fe10971aa9084e3ded1ba51b36a36"
+      },
+      {
+        "file": "assets/AssistanceAuthorization-DsRGh0vH.js",
+        "http": 200,
+        "sha256": "6ccb6bf1863169d230045c9eb2195660dd5bacc1bc4a01cef4d26c538b578d25"
+      },
+      {
+        "file": "assets/base-BhyKBIh7.css",
+        "http": 200,
+        "sha256": "cae1a2225ef66c7c2ecc9b92b1eae61c27e67c832eb665a0d66276cc0907250e"
+      },
+      {
+        "file": "assets/BindPhoneView-CASMOraa.js",
+        "http": 200,
+        "sha256": "d60aee066c51603b24c40ceccb3a326e6968ced340a90db87066a81cabdbf01f"
+      },
+      {
+        "file": "assets/BindPhoneView-DzwJReGi.css",
+        "http": 200,
+        "sha256": "d3568401b831403286e73e90fd47bed4fe0ac1a4dedc858c7df557df10d8c371"
+      },
+      {
+        "file": "assets/browser-CBFMFOK_.js",
+        "http": 200,
+        "sha256": "5cec14ea7e74943a6a822434f29b9df1423f6431b37251585bcf1885e56217ef"
+      },
+      {
+        "file": "assets/ChatPage--Ov5KKiJ.js",
+        "http": 200,
+        "sha256": "c4c6317d0821281ca8fbbfae07b0ced9e5601c75bb84468d172d8989292e3d0a"
+      },
+      {
+        "file": "assets/ChatPage-CBxPhuVu.css",
+        "http": 200,
+        "sha256": "7cd287007fa6d7c09bf214e09e60b8bdfd4f8c1d4f182798066c0dc1ecef1b96"
+      },
+      {
+        "file": "assets/ClaimReviewBoard-BuzI2puJ.js",
+        "http": 200,
+        "sha256": "b25f9eedbe5dc9df4cf74b3df81ac8be40961d39094cee9ed6ac102592172bb0"
+      },
+      {
+        "file": "assets/ClaimReviewBoard-DZnkW78a.css",
+        "http": 200,
+        "sha256": "128b2aebbfc15e2e24f24347dc4f79deea52be0431e887e6c7baa481636fd889"
+      },
+      {
+        "file": "assets/cloud-B1QD2qxs.js",
+        "http": 200,
+        "sha256": "b478efa57abfe11a5d9787129936649b8d87206fdf9b8e24826ecc6be5ff9366"
+      },
+      {
+        "file": "assets/commercialPartners-B2LX99CV.css",
+        "http": 200,
+        "sha256": "a7e0ec61af200dfb9af613a08d684e9f3bb6fb76b8571433d56af81a16f08ade"
+      },
+      {
+        "file": "assets/commercialPartners-C0f_GnDB.js",
+        "http": 200,
+        "sha256": "46a3d89bafc105277623ac06ad46b8cf61d7ea83bf91d3a49ad4b2410aa90d7a"
+      },
+      {
+        "file": "assets/DataCenter-Cmitb0QO.css",
+        "http": 200,
+        "sha256": "89fbd5a8eeeb0429cbf084f78ac79ec7ad30bc42bab273d1667d5121ef28220e"
+      },
+      {
+        "file": "assets/DataCenter-D2ZPMBoY.js",
+        "http": 200,
+        "sha256": "7cb7ca1ce81b7049fd85e53bed55001e7c0a905ce59e3d5f137e3ec8a4656e3f"
+      },
+      {
+        "file": "assets/demoRegulations-BtaSsBU_.js",
+        "http": 200,
+        "sha256": "fb0c6a28742ab1337e57fdde5980c7124a9bc2530c341158001d8a258ed9c042"
+      },
+      {
+        "file": "assets/divisionBasics-B-PPPa8F.js",
+        "http": 200,
+        "sha256": "bb27de45e48b5674f8f9b8bb944caea9e169a3ce1d768f1794b84a2c608ef2ed"
+      },
+      {
+        "file": "assets/DivisionManagement-DezYDQBd.css",
+        "http": 200,
+        "sha256": "78e0bb95856be4c2e719fc87836c81a7d0c6fd5ebde51808e101d7fd890bf5fd"
+      },
+      {
+        "file": "assets/DivisionManagement-DhiJKL6K.js",
+        "http": 200,
+        "sha256": "8c6c08ae19c14a42f44a04300f20482538d2c05f855c70f252653475907b0cd2"
+      },
+      {
+        "file": "assets/DivisionRulesWizard-BtREFIWu.js",
+        "http": 200,
+        "sha256": "42158c9fb518a30309d43e574e6690d21383c5e74fe1fa89ec451e21c7fcc27e"
+      },
+      {
+        "file": "assets/DivisionRulesWizard-S-ogPN3g.css",
+        "http": 200,
+        "sha256": "b1a3e25f9f5f031b7558b747925750f04d8f806a05b5957d0190b2b5744d93e9"
+      },
+      {
+        "file": "assets/DrawScreenProjection-BuMxc6-t.js",
+        "http": 200,
+        "sha256": "e883517d7356a577b2067223a8995586b216d649c2344a3c211a9bc1e65ed0ec"
+      },
+      {
+        "file": "assets/DrawScreenProjection-C0rcY7s5.css",
+        "http": 200,
+        "sha256": "6754aae2cd820e0fc905d33a1c9ad50d562cdc3300fbad9631d047498f091c0f"
+      },
+      {
+        "file": "assets/el-alert-B6UgayC7.css",
+        "http": 200,
+        "sha256": "2809bd9f303ebb408b8453aaca3852ed8830ee32469c5b5436dc01c6e9dc361f"
+      },
+      {
+        "file": "assets/el-avatar-DOlF0Z_P.css",
+        "http": 200,
+        "sha256": "5b54edc03ec961c6efae5561d1b858b8baa3f888582fdc4b76b9ea6002811f5b"
+      },
+      {
+        "file": "assets/el-button-DITZ5HsB.css",
+        "http": 200,
+        "sha256": "072c97d46f86cbe89eda7cc547484891a746eae9340162275c13c52c0b5b263e"
+      },
+      {
+        "file": "assets/el-button-group-B09mLjuS.css",
+        "http": 200,
+        "sha256": "644ed68791fcc18c249d99ebd1457f20b31b390602bce818d2ce64b3ef4c7f1b"
+      },
+      {
+        "file": "assets/el-checkbox-CzNtyWdF.css",
+        "http": 200,
+        "sha256": "fa10637bcf2fc245c410dbe74a7846d9380df27b20421423e95c8c9cf7435f1f"
+      },
+      {
+        "file": "assets/el-checkbox-group-D_6SYB2i.css",
+        "http": 200,
+        "sha256": "987ef89c214778b3e7bd57395d96c6a6ad594cd3bc4c2598511d780eaf4e4985"
+      },
+      {
+        "file": "assets/el-col-BWEC13sA.css",
+        "http": 200,
+        "sha256": "76b1f7c525034e53915b3a98190b679f65316842e3543b9938da4b00441bf13d"
+      },
+      {
+        "file": "assets/el-collapse-item-BvmEG8Qn.css",
+        "http": 200,
+        "sha256": "7ecdab75bbb756cc271758f330494cf5d94ae28211b6d8fdea656ff9eb0e8ab8"
+      },
+      {
+        "file": "assets/el-collapse-item-uplJnX_j.js",
+        "http": 200,
+        "sha256": "2d2a58443f131bc3b17b9e13ac8c6ddfa103c35e2ea41e7a0e01366827417f9c"
+      },
+      {
+        "file": "assets/el-date-picker-CwXc3eov.css",
+        "http": 200,
+        "sha256": "fef244fe9382dda20ca217a5c0f74d7cc11b69d73c1a3377ed6f2f77d4c563db"
+      },
+      {
+        "file": "assets/el-descriptions-BpDzfuC8.css",
+        "http": 200,
+        "sha256": "b59c8d737ed198eeeba0d5dced06797af6a68a701c8ed8d82ade9ec83654292f"
+      },
+      {
+        "file": "assets/el-dialog-BIfDN5q_.css",
+        "http": 200,
+        "sha256": "1fa7131bf5e47d46f2751ce5a17091b0c5930c34c72256ce5e023f1393bc5a59"
+      },
+      {
+        "file": "assets/el-drawer-4RO73nWn.css",
+        "http": 200,
+        "sha256": "c7ef8f93b5c9a6f2c24cfa7697a97f3fca4b86bb16ea8424e4ae48d9a364e70a"
+      },
+      {
+        "file": "assets/el-dropdown-item-CtcKg9JC.css",
+        "http": 200,
+        "sha256": "9bf6dbffbd45c5fc4ef53cfd2e6a34c5ab9fa30e18e0451d5dce931f5e2544af"
+      },
+      {
+        "file": "assets/el-empty-S7fQQ3B8.css",
+        "http": 200,
+        "sha256": "691fbbed21e9c4279f70c333db58305fa2fb0f6aa36b070c21f85b7b2d316dc0"
+      },
+      {
+        "file": "assets/el-form-Bxp7jqOU.css",
+        "http": 200,
+        "sha256": "fbd10c78d301da92afb27d2ae2e80b23eaee3d5afcbea9672f60ec1037730010"
+      },
+      {
+        "file": "assets/el-form-item-DISmtGdO.css",
+        "http": 200,
+        "sha256": "92d4a1b7e706fef241e2de57e6c172739bce2ec331b23b353f6c8f2e7a732a15"
+      },
+      {
+        "file": "assets/el-input-number-DExoAqKP.css",
+        "http": 200,
+        "sha256": "4fae55c95aa19abf68e8cde47e4861f9ca968b01471ca18683a1f9189bcab669"
+      },
+      {
+        "file": "assets/el-input-xaztPnzw.css",
+        "http": 200,
+        "sha256": "264fb15eebf6b4409a2dddf8196146a22a7e823b62ccc96f74f6d770039423aa"
+      },
+      {
+        "file": "assets/el-loading-C-X_DDFa.css",
+        "http": 200,
+        "sha256": "737fd072e246b5b7ce1359c4ce09254bfbd1b5e4bec2673004c09f3b19fedbea"
+      },
+      {
+        "file": "assets/el-page-header-DTLAZad3.css",
+        "http": 200,
+        "sha256": "5d4c9a8fca6b7fa2bb5a46d3f5cbec4c12b67e57dab43b4758ef4be24a432fc2"
+      },
+      {
+        "file": "assets/el-pagination-CDeFZDGO.css",
+        "http": 200,
+        "sha256": "0d58744dcd36b4f9387c1b27e8e7c7db3d1627a065df678c65fa3815c9762c6a"
+      },
+      {
+        "file": "assets/el-popper-C8-vPSoj.css",
+        "http": 200,
+        "sha256": "2c59039a3f64c5efcee72597a473fae3518aff2c78d87d2e75b6b072858aecfd"
+      },
+      {
+        "file": "assets/el-progress-apgqz2By.css",
+        "http": 200,
+        "sha256": "09056e35e0e12d36445b16014aa6b717ef246d51a559a3f5983fccaa9782f127"
+      },
+      {
+        "file": "assets/el-radio-button-BDEDkXh7.css",
+        "http": 200,
+        "sha256": "f57d5498bdb4854292d648184d4f5f53a6481974f6e5e8d9bfe8ad5f0c794327"
+      },
+      {
+        "file": "assets/el-radio-group-iy_biC8N.css",
+        "http": 200,
+        "sha256": "923b0dd0424c8251b1d5e582d1825cc4e29ed0685ed7fdd7560f4f932f0cb896"
+      },
+      {
+        "file": "assets/el-result-CF-sYK2h.css",
+        "http": 200,
+        "sha256": "e9d1f07bf020c17e230db38760a5addca32edd8a8f1d8fd395b558b29a50e3da"
+      },
+      {
+        "file": "assets/el-select-CK58rX4v.css",
+        "http": 200,
+        "sha256": "763b2fe9559d0359953c77e6b09b411d5d147ea3b4dacdaca133768d6e87e28f"
+      },
+      {
+        "file": "assets/el-skeleton-BjvgS5Bk.css",
+        "http": 200,
+        "sha256": "3929baaccd1d2ed5119d683df6b34c0a0018a5b7af5bdc35d5b0f16d5e04d569"
+      },
+      {
+        "file": "assets/el-switch-DpR9-s4E.css",
+        "http": 200,
+        "sha256": "0675796f81b3e8496a489f1cf8e4888ee81a01630102b451d446e56f62cb7831"
+      },
+      {
+        "file": "assets/el-tab-pane-C5lGmld3.css",
+        "http": 200,
+        "sha256": "cbe683535bcc712e122101ddb96403c4b92e90c03571450b0c9b4ddd7e87529c"
+      },
+      {
+        "file": "assets/el-table-column-Dp73S2HR.css",
+        "http": 200,
+        "sha256": "44e956ea9d84ceac5c64f63ba0e11743b84ee356a8655e3343f8e4193b53ddcd"
+      },
+      {
+        "file": "assets/el-tag-1VV9QMa7.css",
+        "http": 200,
+        "sha256": "f1047013b3fa8085cfd287f3ca8ff7aee99ec7375677cf7486e1a455abf58c5f"
+      },
+      {
+        "file": "assets/el-tooltip-l0sNRNKZ.js",
+        "http": 200,
+        "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      },
+      {
+        "file": "assets/el-upload-Bit6Pm_l.css",
+        "http": 200,
+        "sha256": "a79d121282ffd9bcc8f4a6d6fc5a8efc84cefeba4621d3c8d529f4d503895222"
+      },
+      {
+        "file": "assets/element-plus-C-45cwOh.js",
+        "http": 200,
+        "sha256": "5c397718a1f8a7511ba68b0cbe6c26dd6880d09d87887826b7027af3d14cc8bd"
+      },
+      {
+        "file": "assets/EmptyState-CeC4DUb0.css",
+        "http": 200,
+        "sha256": "0747bc32d48e8e77e8e972763aec144ae8ed4ba16451f2635722d2f931c7972c"
+      },
+      {
+        "file": "assets/EmptyState-DLQrlbEX.js",
+        "http": 200,
+        "sha256": "51d99568dbd3177bf89c5914bd2ffd395df889389090f9b6fc50abe5837aae99"
+      },
+      {
+        "file": "assets/exceljs.min-DeQJnK0E.js",
+        "http": 200,
+        "sha256": "b58e9480c2721c0422264045f933f4922126b5c6444a6ba64cb14c3737927d1f"
+      },
+      {
+        "file": "assets/HeadRefereeManagement-C7CyfLfL.js",
+        "http": 200,
+        "sha256": "668e306ba9a653405cc764da2519985bd5bab33c6ff4d751ab758643a864435f"
+      },
+      {
+        "file": "assets/HeadRefereeManagement-D-2OGe-w.css",
+        "http": 200,
+        "sha256": "f780e569488f1db1b889dcec4925c9b6557f37e96dd6b6eb9fc6f4b432952d28"
+      },
+      {
+        "file": "assets/html2canvas.esm-CBrSDip1.js",
+        "http": 200,
+        "sha256": "b4f3add809a6d59f46260e8fd56cab240f3153def977386b230a839e8cb0b281"
+      },
+      {
+        "file": "assets/IdentityReviewBoard-BiMhzwme.css",
+        "http": 200,
+        "sha256": "d847c7575e613a64dc175e59f72fcb67bb1cdf5289f61b30c71fabeb04dfadbf"
+      },
+      {
+        "file": "assets/IdentityReviewBoard-Sl-2qR5P.js",
+        "http": 200,
+        "sha256": "ef4876059802a1042dcf84619e9c07e12acd1965bfe92a8a76dfeb4df0ca569e"
+      },
+      {
+        "file": "assets/ImageCropper-B5kyZaox.js",
+        "http": 200,
+        "sha256": "6c0a13c6bd7619ecbaed3a219d47dae3bd7b098c8573991419cb3b9a393f05e3"
+      },
+      {
+        "file": "assets/ImageCropper-BX20Aq08.css",
+        "http": 200,
+        "sha256": "ec81d0fea5795e5fe103431a7491b88775af9d7519e8688458cd757519f8667c"
+      },
+      {
+        "file": "assets/index-2u7riYJu.css",
+        "http": 200,
+        "sha256": "2eb466826157bf241d89e92645c78b850702df1f7f8998b02707c4789a95e3d9"
+      },
+      {
+        "file": "assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "file": "assets/index-i6uS4pID.js",
+        "http": 200,
+        "sha256": "8f1409a356f35a40bedbcefcfc66448ee058177090e9cd651e8c0db9c267fbf3"
+      },
+      {
+        "file": "assets/index-xUFA-fgS.js",
+        "http": 200,
+        "sha256": "60da638ab9b2e98d0a5c1633d71c0f2a341916f1b205a6c0aea3e78138bed289"
+      },
+      {
+        "file": "assets/index.es-Y-B-sJTe.js",
+        "http": 200,
+        "sha256": "9e492b9a116318d5ede424011c5186ae7ea8cd825bdc080ec72924394040a4d8"
+      },
+      {
+        "file": "assets/jspdf.es.min-CHcY_sKD.js",
+        "http": 200,
+        "sha256": "ef3ea774a32dfecea89836328a3fa518d8d2fe1cb2f4df859fa04dd0cdab6800"
+      },
+      {
+        "file": "assets/jszip.min-CzQP5Dcg.js",
+        "http": 200,
+        "sha256": "95937dcea212b548608d9b24ef01cb61d15375cf7465154b5eab1ebef0963397"
+      },
+      {
+        "file": "assets/KnockoutDrawTree-DE6DPS2y.css",
+        "http": 200,
+        "sha256": "4be6a552b456566505962878422976c4eca617d3d7d33182820d6ee44c5150e9"
+      },
+      {
+        "file": "assets/KnockoutDrawTree-XFz-YcfZ.js",
+        "http": 200,
+        "sha256": "bc468e4d210fa0c7c281a168026a2a232e23af73f7faba1b6d9c1e6b42591fda"
+      },
+      {
+        "file": "assets/LayoutView-BbSLgpBO.css",
+        "http": 200,
+        "sha256": "55a2fe0fa70185e0a66020028f63551a5d9dcca138c889b2eafe481176b6e8b2"
+      },
+      {
+        "file": "assets/LayoutView-CH1Q7VQU.js",
+        "http": 200,
+        "sha256": "cb459c376ec7f9ded7689bc1e985888ae2f8563600839115bfa5c705aa246b80"
+      },
+      {
+        "file": "assets/lightweightMode-ZrWMB7Ps.js",
+        "http": 200,
+        "sha256": "5f22a5aa28e95521792406572b52ff6ae34a3b982193ba9559a66ddc2a9f40da"
+      },
+      {
+        "file": "assets/LoginView-i-kbvMkE.js",
+        "http": 200,
+        "sha256": "1d74b3fc342f4518a97c004ac5d2822a08c8aa05a6ac113d1f9ab985b6d74f81"
+      },
+      {
+        "file": "assets/LoginView-VnccF0PD.css",
+        "http": 200,
+        "sha256": "4176fb6d36786f5fef61b119cf0d6219e18bace8a352a3d130ff947f0bd92ba3"
+      },
+      {
+        "file": "assets/logo-saixiaofeng-BsSTzpmR.js",
+        "http": 200,
+        "sha256": "b68e51ddc9f8f94ad7e763ac1e352dabf5c23f5efef9963ccd4fa1dc4ee49596"
+      },
+      {
+        "file": "assets/mammoth.browser-CBbLrGiA.js",
+        "http": 200,
+        "sha256": "526c969d741fb3dfece1b26a3def5c8cf6d77708606ce4067e8807536c426dfe"
+      },
+      {
+        "file": "assets/match-score-Bg5V6fnm.js",
+        "http": 200,
+        "sha256": "129d9379eaf70f6f4cb4655bbc4c06f92ad5e5defeacdf1593f6ce827d305a9b"
+      },
+      {
+        "file": "assets/MatchCard-Dej25jdY.js",
+        "http": 200,
+        "sha256": "cbb364b9e8efc555e7237822c425b03b5194308c0507f5bd470d820c7cdea0e7"
+      },
+      {
+        "file": "assets/MatchCard-DNo-SMAQ.css",
+        "http": 200,
+        "sha256": "3c48af9fecfeed5c21223ecb31c2c20044711c138f1609945d84ccc6ebfcd419"
+      },
+      {
+        "file": "assets/MatchDecision-C9EiMCbx.css",
+        "http": 200,
+        "sha256": "a2dc41f0ce767fe85d9dbe9b8c5eb86ed34a59dbe07a26e349ee253f40f4cd1c"
+      },
+      {
+        "file": "assets/MatchDecision-CG9IS2Tn.js",
+        "http": 200,
+        "sha256": "45e39c97e62a16cab1402d30bc5b4ddc5a7459d5869c51698acf08d9982a7894"
+      },
+      {
+        "file": "assets/MatchDetail-CzRz1Oab.js",
+        "http": 200,
+        "sha256": "783c5fb856399c449ed05f448bc859984bab5d6b5933e32095ead7ab31a65765"
+      },
+      {
+        "file": "assets/MatchDetail-DD03Sy4u.css",
+        "http": 200,
+        "sha256": "9246ed844ef8dd1834e149b60eb98e2262abe2dc3f69b967ebd5d8e034737550"
+      },
+      {
+        "file": "assets/MatchDetailPage-CS53YiPz.js",
+        "http": 200,
+        "sha256": "3aa226504dcc5c6bcc4b3b1272ef233749ca940f367eef5c863a30af22787f39"
+      },
+      {
+        "file": "assets/MatchDetailPage-CZGUMQiY.css",
+        "http": 200,
+        "sha256": "fa59e1e12b8f3d0fe3c8ee5c025513a0ceec7f8fd5e85e2eaf7a44b1071d5806"
+      },
+      {
+        "file": "assets/matchEvent-B8LGNTgP.js",
+        "http": 200,
+        "sha256": "698a091dc09bfdc0530df136f8090a6db699d0fe87296b499ca4ca1cf53a5cb5"
+      },
+      {
+        "file": "assets/matchListContext-C5dAEWKt.js",
+        "http": 200,
+        "sha256": "de849bd1ce44358b9edaa25847d80a19f08704b0983a037e80d65e85718dad44"
+      },
+      {
+        "file": "assets/MatchLiveMonitor-BoFVaKC_.js",
+        "http": 200,
+        "sha256": "e8c6bdca3b26298081d5c3f1c4d08b35ab178e76f2e0524e23282fcd34cea644"
+      },
+      {
+        "file": "assets/MatchLiveMonitor-CrwVjCA5.css",
+        "http": 200,
+        "sha256": "4d866a4888159121a333cd79726a78bd5c00628b2ecf27ac74b716450fa7729f"
+      },
+      {
+        "file": "assets/MatchPostMatchReview-DAcGJfZH.css",
+        "http": 200,
+        "sha256": "9c1d5ef839ff73c9cc3c897c2cade1bcb97810572c7024e514d4c0c9382b72fb"
+      },
+      {
+        "file": "assets/MatchPostMatchReview-eH-6BJnM.js",
+        "http": 200,
+        "sha256": "a1134423478fa1ad8c16d75e8ea5c413ad1bb9cdc0bf98e9112b7b57035a882e"
+      },
+      {
+        "file": "assets/MatchReviewWorkspace-Bt3uL8y2.js",
+        "http": 200,
+        "sha256": "158ba6bd9c8fc3ff053e69d8ccaf721225763d3d3f5d982de2a73dfe7852c215"
+      },
+      {
+        "file": "assets/MatchReviewWorkspace-TmMk6i7Q.css",
+        "http": 200,
+        "sha256": "b4a6e33b4eab39029b687425b50bf27e7246c69b56fa94d9ebb62a2a249dd60e"
+      },
+      {
+        "file": "assets/OperationTutorials-BX2wIFO_.js",
+        "http": 200,
+        "sha256": "dc37a335d9259ecd422419000311ce995a611f842d262a354bab8c1ab456edf0"
+      },
+      {
+        "file": "assets/operationTutorials-D5YGDWzv.js",
+        "http": 200,
+        "sha256": "c3b4a275298624be6ed3a32d3f8f46a9120e1bbae474167dfb3f0b4b64e445ea"
+      },
+      {
+        "file": "assets/OperationTutorials-jD7lYGdK.css",
+        "http": 200,
+        "sha256": "398a941ce6b357daf28b040fad8fb3bb92ff65fcc9440a84a6f843b338126f64"
+      },
+      {
+        "file": "assets/OrganizationOnboarding-C7x9x7P0.css",
+        "http": 200,
+        "sha256": "faafd62b68a8db2baecefdcdd7e0540da223b8f063b4f478de2baa45640bd522"
+      },
+      {
+        "file": "assets/OrganizationOnboarding-DWYslL6f.js",
+        "http": 200,
+        "sha256": "93f9e56ca111c8699b3cd46f4434fed1cb3617980b0940a34e94b98a03787e90"
+      },
+      {
+        "file": "assets/OrganizerInboxView-BhITx4jn.css",
+        "http": 200,
+        "sha256": "c1eea209e3e7cdafcf7072f949a202e537605a8285db4ebc8623b5fa35ab3bbc"
+      },
+      {
+        "file": "assets/OrganizerInboxView-BjnQT9Nx.js",
+        "http": 200,
+        "sha256": "b28b44543595048dc504fea20a7eb5bf20a4eaaf73a32f4610c08311e349d6e2"
+      },
+      {
+        "file": "assets/OrganizerServiceBinding-BIzta7ZM.js",
+        "http": 200,
+        "sha256": "0ad1ea565361e4d97d731badb371db77b80ad4e20a8eb04e7046d125fcc583e8"
+      },
+      {
+        "file": "assets/OrganizerServiceBinding-BrPtBlax.css",
+        "http": 200,
+        "sha256": "a3c5264ce6f2b93acf122d1bcf12a3feb4794a6688474c5c0a1c842256be173f"
+      },
+      {
+        "file": "assets/PenaltyShootoutEditor-B7doD1bW.js",
+        "http": 200,
+        "sha256": "d8daa69714a8f76668b1e92536647c1176a46422d7f8d95bb76b226bd5cc33eb"
+      },
+      {
+        "file": "assets/PenaltyShootoutEditor-BTvvBJwj.css",
+        "http": 200,
+        "sha256": "3906c5956a3952129e5b9aa2f72c6c1f65b78585bf2e346c71cec1a6d6a729af"
+      },
+      {
+        "file": "assets/permissions-DCQDvKt1.js",
+        "http": 200,
+        "sha256": "9d0f2df431bcdd9bacd39b7c4426c07ed5c6ec36033c1bb922e5e8041a5d758c"
+      },
+      {
+        "file": "assets/PlatformLoginView--W39P9gV.js",
+        "http": 200,
+        "sha256": "789b9944b2d9fcd03a4c5185eda2ca4304032f9835bb10f01e307a98817eb42d"
+      },
+      {
+        "file": "assets/PlatformLoginView-Blt9UMem.css",
+        "http": 200,
+        "sha256": "c3145055af3561d067639297435c17ca462b396ce26c30291238d64156af411a"
+      },
+      {
+        "file": "assets/PlayerCard-ChXTzRuv.js",
+        "http": 200,
+        "sha256": "940c25858d4cb080c43a8925cb9e50fa66fb2899749521e33546659a7987723c"
+      },
+      {
+        "file": "assets/PlayerCard-Dc--TZso.css",
+        "http": 200,
+        "sha256": "e8f4fd3b5298392770423ae9e22cfcebb1b54452fa396f8e38ff71c70a7745db"
+      },
+      {
+        "file": "assets/PlayerDetail-B3nFl3HN.js",
+        "http": 200,
+        "sha256": "28c240deb806f9bbdb65be8795707bcb63a3a732044e1ce52b81c9b78061ae46"
+      },
+      {
+        "file": "assets/PlayerDetail-fSeIZ3Rh.css",
+        "http": 200,
+        "sha256": "8d30367930a620cd9d0126103563c887aceb70b1d94baa82ccb424f95890dd49"
+      },
+      {
+        "file": "assets/PortalLayout-mhYsjCg7.css",
+        "http": 200,
+        "sha256": "16f7b56a588cd77510c555f63ca84ae64841b8daa7059d202f7fd751c63674df"
+      },
+      {
+        "file": "assets/PortalLayout-tx4zzuXJ.js",
+        "http": 200,
+        "sha256": "e19169ab23c28b078fae7c8a5c05123733ecd6e67157ca866571c0034668f9ac"
+      },
+      {
+        "file": "assets/ProfessionalTournamentRoster-CA2PNXbp.css",
+        "http": 200,
+        "sha256": "0a4814e80fa42fd223f0d9b4efe0969b9af5100d527669a4e4d8be3463883172"
+      },
+      {
+        "file": "assets/ProfessionalTournamentRoster-DecscXGP.js",
+        "http": 200,
+        "sha256": "335d57327d6689561f24021f19387c86eca07662620e16b9d764369f8ffbee0b"
+      },
+      {
+        "file": "assets/ProfilePage-CDFPiz-n.css",
+        "http": 200,
+        "sha256": "971a33ca55481ef399a78831d11e7e2c124d9f57335e0bc9768f2a7617fd8d69"
+      },
+      {
+        "file": "assets/ProfilePage-CPHhcyYG.js",
+        "http": 200,
+        "sha256": "d980990fcb87ceeab4250b99dad2d0c58a31dc3bba30ede1fa2618a8d177842e"
+      },
+      {
+        "file": "assets/PublicTournamentHub-dp4meUpS.js",
+        "http": 200,
+        "sha256": "2f2eec304aa231b2e35db287fd37f89b37be9932cf701debd9eff69ff5ec1a47"
+      },
+      {
+        "file": "assets/PublicTournamentHub-DXy6g3NQ.css",
+        "http": 200,
+        "sha256": "b4aa47aadebe61f67c7dced8c91569372a42fd817ca77fe2923d7084cb06c7c8"
+      },
+      {
+        "file": "assets/purify.es-8E279hYE.js",
+        "http": 200,
+        "sha256": "0e04e6e10eced0ad9af353ad1362c9aecb2f183518ff5ffe795ccae94119ec42"
+      },
+      {
+        "file": "assets/QuickTournamentConsole-Av_YeKwA.js",
+        "http": 200,
+        "sha256": "4c7c19e24ef75e8419dcf36ad1e6a5f4aea6da8adcd467eb046072a56a4d1a00"
+      },
+      {
+        "file": "assets/QuickTournamentConsole-CWbZ0A9R.css",
+        "http": 200,
+        "sha256": "75fad4822bdbb8ae3e2fb51516753d9cbb2d385f5cb592a698d0bda33f9106af"
+      },
+      {
+        "file": "assets/registrationKitColors-BEEJ09mp.css",
+        "http": 200,
+        "sha256": "72877c553ec020fd9c2ce3142483a5efe94c43ab44280ad1de4229bd79b90bdb"
+      },
+      {
+        "file": "assets/registrationKitColors-CX6NpmDF.js",
+        "http": 200,
+        "sha256": "1e95de1260ccf60498a3c92c9e1b4a1930016327c4bcaef17598947198f9e28b"
+      },
+      {
+        "file": "assets/regulationRecognition-D5QORpQf.js",
+        "http": 200,
+        "sha256": "f185d66ab066bfca73e327131f2db65ecb0f658c7b0f46ebc2373d00c6e36eef"
+      },
+      {
+        "file": "assets/removeBg-VBq4fPca.js",
+        "http": 200,
+        "sha256": "cf5faf144a186fa38a4192bf69e0d2b3dabb38be3dcb90c84a5f2fceb9bb3370"
+      },
+      {
+        "file": "assets/RemoveBgProcessor-BO_ymxtu.js",
+        "http": 200,
+        "sha256": "19c1bf975561cb775a121860c52da1bdf5a231be0e58a53814b2b2cf1b9944a3"
+      },
+      {
+        "file": "assets/RemoveBgProcessor-Dt60qXuP.css",
+        "http": 200,
+        "sha256": "78d3b6d5b2762337055755176faad4fe142c0baf15593ae9258fc6edb5f1242a"
+      },
+      {
+        "file": "assets/RosterChangeReview-CvQlRHAH.js",
+        "http": 200,
+        "sha256": "ce989abdafe8a4e8d840d74cbeaf8579873189abe72ee63211821e54e4558316"
+      },
+      {
+        "file": "assets/RosterChangeReview-DAw7ox1h.css",
+        "http": 200,
+        "sha256": "470cd70197b2869e0af37aebc28c7cd3b3a4d3a9df57cdd3243e13ee70ddb40a"
+      },
+      {
+        "file": "assets/RosterExceptionBoard-BruAqKkh.css",
+        "http": 200,
+        "sha256": "68c384a2abd6e78d38f94d268913f9267c46f31ebbcbbcf10f9bbc73cd672530"
+      },
+      {
+        "file": "assets/RosterExceptionBoard-dzj6gXcG.js",
+        "http": 200,
+        "sha256": "40c0e58892b6b2194596ac3ba71f7f660b22e9d43b3fa7f63e683eee3ca14dde"
+      },
+      {
+        "file": "assets/rosterHelper-C1jCppXs.js",
+        "http": 200,
+        "sha256": "42270a14fff29a46ad809c88bac6af3a4b42aa3b9bfbba1881ce8e458110e048"
+      },
+      {
+        "file": "assets/rosterHelper-DXXlHy2w.css",
+        "http": 200,
+        "sha256": "c9270f79d60486f11c904526172808f8615425de57ea0f53452305dc21a971ee"
+      },
+      {
+        "file": "assets/SignatureView-BlFaXAjG.css",
+        "http": 200,
+        "sha256": "2ff2904899d7ae0dd5f6c2941d3fab6ed2eb0e523b474c007c349214eeec23bd"
+      },
+      {
+        "file": "assets/SignatureView-CfD2cgY7.js",
+        "http": 200,
+        "sha256": "0da3fb0568d151307b9937983a920f2e05707a3558a512135945a0eb40223acb"
+      },
+      {
+        "file": "assets/staffRecords-B5C36zqo.js",
+        "http": 200,
+        "sha256": "4d1d3b0e3f1555015021468578e7c68ca899697e7e1a9a3f3de59aa53761e9a6"
+      },
+      {
+        "file": "assets/staffRecords-C5mDCGOX.css",
+        "http": 200,
+        "sha256": "873fde93b5fd971de4d4f29dc8e40c2665ea688a0743d1fe6eebf7a667e52590"
+      },
+      {
+        "file": "assets/substitution-B7mwcGw0.js",
+        "http": 200,
+        "sha256": "c4cff6506d1843226030ba83cb4dca653530ca141fe6b20df33e3f1fb7917368"
+      },
+      {
+        "file": "assets/teamCodeRegions-D3iATgh0.js",
+        "http": 200,
+        "sha256": "db3f8dca4b3274380fdc3ec0f693ab7440696836d90f00c72bfd058c9ab60c6b"
+      },
+      {
+        "file": "assets/TeamDetail-B90T152O.js",
+        "http": 200,
+        "sha256": "a0b379478ab5ded0ed959d6065e65c7b4b08a8814feee66661f9a60dcc8ecdaa"
+      },
+      {
+        "file": "assets/TeamDetail-DBg8SktF.css",
+        "http": 200,
+        "sha256": "da2f49934065cbb96e3abac5ac74fc10345105bfa10d4ad73174e2824e5904ee"
+      },
+      {
+        "file": "assets/TeamList-BNoGyynu.css",
+        "http": 200,
+        "sha256": "edc6504fe9aef93ed6538e90f4cdce4c6feec9b7213e06b52b2be8ab06225acd"
+      },
+      {
+        "file": "assets/TeamList-j-X_aavK.js",
+        "http": 200,
+        "sha256": "8a2c9556a0c38bc9dbb531a1d4e1613d016b5ddee7c01e833ac8cb34979d3302"
+      },
+      {
+        "file": "assets/teamRegistrationDocx-dj4M7Fpo.js",
+        "http": 200,
+        "sha256": "28898d6f8cf022ab5a41938608aa53e7d53840d0760344645f7822e7a17faf8f"
+      },
+      {
+        "file": "assets/TournamentCenter-BPkk0dlt.js",
+        "http": 200,
+        "sha256": "d60735314adac891341a7e332ffaf7e56adfc29d213cf804dc82164fd680b1e4"
+      },
+      {
+        "file": "assets/TournamentCenter-D2dc3UDl.css",
+        "http": 200,
+        "sha256": "b4ff93fe54b750dd19ed4628aed7d579fe5a0946d53709f191a844adc4abfbc3"
+      },
+      {
+        "file": "assets/TournamentCenterAdmin-CRWkUPFr.css",
+        "http": 200,
+        "sha256": "4bab69ff61b3e0b72ea9e3c6d9f8be471a6bf3f46ca7bc6acbdb040456097978"
+      },
+      {
+        "file": "assets/TournamentCenterAdmin-DMNHwjdd.js",
+        "http": 200,
+        "sha256": "ee104460599c209e40eae89013a07534d6dca95ff6f02ba1703dd102a20ad608"
+      },
+      {
+        "file": "assets/TournamentConsole-CH8nmtda.js",
+        "http": 200,
+        "sha256": "a76d3f1ef039afa00c9b1018b3abafd1b66c7b57c575941ae22af70873bb0392"
+      },
+      {
+        "file": "assets/TournamentConsole-DU883FPi.css",
+        "http": 200,
+        "sha256": "bfbdf9eebfdedcddb2e7413e17865ab8c810e5e1bc0171d453115b5f8bd1125e"
+      },
+      {
+        "file": "assets/TournamentCreateBasic-DYG38k-R.js",
+        "http": 200,
+        "sha256": "c7516ef54f1c6e23150789159cb60977190d043d65d2e493f20a9beaa6bef74e"
+      },
+      {
+        "file": "assets/TournamentCreateBasic-SvXgzfab.css",
+        "http": 200,
+        "sha256": "d478f43dfffb4f17a3cfcd1d054f625e3c74e3b5cf3cf822d5cd0e1c160d7671"
+      },
+      {
+        "file": "assets/TournamentDetailPage-bNYTAnEl.js",
+        "http": 200,
+        "sha256": "5cf13090ce8fd82fcf8542c6a43854f3c87042cce41193c23059f22f1ead8d70"
+      },
+      {
+        "file": "assets/TournamentDetailPage-C-jQwRq5.css",
+        "http": 200,
+        "sha256": "8c0bd52d7a2797500ecb5ad4bfeae6dcfc5018cbd6475da6cd9775d4f06293ac"
+      },
+      {
+        "file": "assets/TournamentDiscipline-C7JvWtTn.js",
+        "http": 200,
+        "sha256": "1ca3ad787a2b146b2044b5f01386ad1da2ea460155a2c0a6de43a0b82277e519"
+      },
+      {
+        "file": "assets/TournamentDiscipline-DvdlPWRi.css",
+        "http": 200,
+        "sha256": "407e88d78140c4d96dbe07271c9ccefe9a0acc0191f6fe565a278af83f0fcc5c"
+      },
+      {
+        "file": "assets/TournamentDivisionCreate-C3ISSZmT.js",
+        "http": 200,
+        "sha256": "c5c9abff5b629e606122f2c434509b0bb6f06feefb1d29591d1f68f99074ef8c"
+      },
+      {
+        "file": "assets/TournamentDivisionCreate-I2z3qZMH.css",
+        "http": 200,
+        "sha256": "8042571e5917ebb8949e0ef304e58e4fa7162358a58de4a1e116392d8b3ee49b"
+      },
+      {
+        "file": "assets/TournamentDraw-DkA5jB1V.js",
+        "http": 200,
+        "sha256": "3f599d7c0acae15ee41c8ba256d9b9de31debf068562e1d19087e160c9892d82"
+      },
+      {
+        "file": "assets/TournamentDraw-WvsKKri_.css",
+        "http": 200,
+        "sha256": "4d473ec904805412411092785ecbcf7bd0e16a957fe6a985aa7d8894d6fc65da"
+      },
+      {
+        "file": "assets/TournamentEditBasic-BRuCzSqW.css",
+        "http": 200,
+        "sha256": "131c4cec69fb698ee8890bcd9ddcd74b836ea0244de30f18bafa69980a27a08d"
+      },
+      {
+        "file": "assets/TournamentEditBasic-C3CL0xNZ.js",
+        "http": 200,
+        "sha256": "3d7a4e13edffd9000530ad7e17f1b03f914033d1a12ba81f6635409fab600e3a"
+      },
+      {
+        "file": "assets/TournamentList-Brgw-i8i.js",
+        "http": 200,
+        "sha256": "a00c46ab37b8da338870cc70a1ba05503bdbee8680e813aaafeff4e427d13185"
+      },
+      {
+        "file": "assets/TournamentList-DrgELWEU.css",
+        "http": 200,
+        "sha256": "4fee11441c7ae38a2031018d075bf75224b68cc8cf0d82e6ba8d73343c5f6e1a"
+      },
+      {
+        "file": "assets/TournamentListPage-B-YuqANM.css",
+        "http": 200,
+        "sha256": "01e25efdfe64c45de9f5c7229a7aefce6f2a2bc5f467d4252005ea962d181bf4"
+      },
+      {
+        "file": "assets/TournamentListPage-Cz_OWIkv.js",
+        "http": 200,
+        "sha256": "aadeebe044e8bd4a187cee634baef4a9f5c2ea7d50dede20932a1c0cd183391e"
+      },
+      {
+        "file": "assets/TournamentNewsCenterPreview-Bj0Ocgd-.css",
+        "http": 200,
+        "sha256": "e4aba2ffe5fa64453414a7f8e6277382463dae90179ef5f14034392bd3cddd59"
+      },
+      {
+        "file": "assets/TournamentNewsCenterPreview-nXHoDdoD.js",
+        "http": 200,
+        "sha256": "a0a2543ddf20e6209ae7608d0d0596b9d1098baba944820388e4b33d5974372c"
+      },
+      {
+        "file": "assets/tournamentPlayerStats-Chm1vtA9.js",
+        "http": 200,
+        "sha256": "a6f3641867e808c15e1c98d56f9c94f23cc4ddf6221886fb9c9c47fc4cfc87a0"
+      },
+      {
+        "file": "assets/TournamentResultCenter-CquW6DSk.js",
+        "http": 200,
+        "sha256": "ee1b1443331559ab9fc2213d7abbf642c59ad3f45061c34d8162f9dbf10765b3"
+      },
+      {
+        "file": "assets/TournamentResultCenter-CVpN6laB.css",
+        "http": 200,
+        "sha256": "5a2422f217552bc6f9177352e56a45a03ce73ef3d3ac4bdedb9fbb50163111bb"
+      },
+      {
+        "file": "assets/TournamentScheduleV2-6HvqKXje.js",
+        "http": 200,
+        "sha256": "31401707a76be0e6b1fb565ab60268eae7dbecda0e614fffd29d4f073c3f09cf"
+      },
+      {
+        "file": "assets/TournamentScheduleV2-CNTB0Ja2.css",
+        "http": 200,
+        "sha256": "1274ac9fc653a9d26ed0a7a90b13dd9fba9d1fee53989d0208eb960a07c9a0c4"
+      },
+      {
+        "file": "assets/TournamentSignups-CX4PkJZD.css",
+        "http": 200,
+        "sha256": "de2fd5589d8c86415edf8cec878c0bda542efb7e3d620b9efd666ec9bdc1f81f"
+      },
+      {
+        "file": "assets/TournamentSignups-pnCqktOe.js",
+        "http": 200,
+        "sha256": "f59a31a7fb70c5eb64ad7d9f523a955d59eca4162fe303be5f2655e937ec2a99"
+      },
+      {
+        "file": "assets/TournamentSpace-BTEW0kT8.css",
+        "http": 200,
+        "sha256": "25f75c0f7f6cb1aa7d47050589c4083b3f2a12e5f075727dfe4d4e9de1f545c2"
+      },
+      {
+        "file": "assets/TournamentSpace-_uH1Qx7R.js",
+        "http": 200,
+        "sha256": "ea66cf9ab93f808b7f5d2b9e3989d44611c6243ac2d9ad9b6495ff3b608c0485"
+      },
+      {
+        "file": "assets/TournamentStaffAccess-C5EgjHqw.js",
+        "http": 200,
+        "sha256": "761540e6f13919d16d799d2bd34ebee60ffbb0abe358fc655a02f39030c21e24"
+      },
+      {
+        "file": "assets/TournamentStaffAccess-Dq2wAI8w.css",
+        "http": 200,
+        "sha256": "44ae1b462b6ee8da4ec17bb9d65c7b20910000bbc1caea1299cb555ea875e17d"
+      },
+      {
+        "file": "assets/TournamentStaffResults-BCkPfLhY.css",
+        "http": 200,
+        "sha256": "384f0084ab5717bab4a0c9b1028d6f91acac13fe92a5769505bfce5b72a00f10"
+      },
+      {
+        "file": "assets/TournamentStaffResults-D2y4EnLu.js",
+        "http": 200,
+        "sha256": "bbb7dac0441f5ce4d8137fb2b4d756f805a93201658a9c1bab84fe00978fb156"
+      },
+      {
+        "file": "assets/TournamentTeams-Bpczgcme.css",
+        "http": 200,
+        "sha256": "68aef7a445bbf84b1eef0df30773c1d20fe3d2c810f3f4d9d93cca7ad63c18f5"
+      },
+      {
+        "file": "assets/TournamentTeams-nYXYj9dp.js",
+        "http": 200,
+        "sha256": "2d085bb4b4745d7952c36b88192a3ffe3989e08012d59e8ea8a41122be2f2034"
+      },
+      {
+        "file": "assets/TournamentWebsite-CBnew81l.js",
+        "http": 200,
+        "sha256": "e52d82bc61018ceb4bc7aaf2934eec7514efb923f6dce8f00f1e2f22b87b92bf"
+      },
+      {
+        "file": "assets/TournamentWebsite-lORfzd1f.css",
+        "http": 200,
+        "sha256": "aa1d5e9939d8186d1606b7d5543fb5772349bd985e742c324d5ab61b07a288e0"
+      },
+      {
+        "file": "assets/upload-Bu_cEY9N.js",
+        "http": 200,
+        "sha256": "293ab22ca0d51e12304b99b4cc7b6ef8836a14db40a41ec53559e3a652f98aa9"
+      },
+      {
+        "file": "assets/UserAvatar-8xZAthHj.css",
+        "http": 200,
+        "sha256": "591df712544b5499a41c651aff1c0c4dee66696458429708c1a80e375e3973d4"
+      },
+      {
+        "file": "assets/UserAvatar-DfvPwsV6.js",
+        "http": 200,
+        "sha256": "c5ffdf5d04e177d2b9ecb702a70bb07664e5b8332655dac4b471a4d4add90ead"
+      },
+      {
+        "file": "assets/useReadCacheRefresh-BE3_7Z33.js",
+        "http": 200,
+        "sha256": "4acc82ce9ef41bda13e162ea0017bc345da16cd80c1b23e326b5fecc6151a8a5"
+      },
+      {
+        "file": "assets/visualQaFixtures-RIib5RRB.js",
+        "http": 200,
+        "sha256": "c6e959e8879abfd1553df8ceb12d2ac4b3c18e6473791ba9f77ab09bd32e8128"
+      },
+      {
+        "file": "assets/vue-vendor-b1JROl9D.js",
+        "http": 200,
+        "sha256": "7b809a25089cfe9c73f82a9b48e4332ce4a428115f384b6a9ff0ef3a09ff1fbd"
+      },
+      {
+        "file": "assets/WechatCallbackView-iRn90B73.css",
+        "http": 200,
+        "sha256": "129eb175a6369b45c5857c2bc45c49d5bd88a2213fa043df1a51b7282c305f4b"
+      },
+      {
+        "file": "assets/WechatCallbackView-YpfrFmCi.js",
+        "http": 200,
+        "sha256": "bad2d2eb3ced0a235fcfdabc98cccd00d96a35d57be3f85f434a864b6109f622"
+      },
+      {
+        "file": "assets/whiteBgRemover-BRLYonqS.js",
+        "http": 200,
+        "sha256": "a904776f1bf962397b886b0738da7f11bb8960c8fd7f16ff9c33effd2a355fd7"
+      },
+      {
+        "file": "assets/xlsx-D_0l8YDs.js",
+        "http": 200,
+        "sha256": "0b43b64c8e0a7bbecfd4ef17ca5cc32e2102adcc74ededa912fd380637dd6f2e"
+      },
+      {
+        "file": "assets/_commonjs-dynamic-modules-TDtrdbi3.js",
+        "http": 200,
+        "sha256": "590ab8057bc032c3e14f9f1a76aaeffd01da609413fb12888819ca0433c1fae9"
+      }
+    ]
+  },
+  "pcAlignment": {
+    "formalRef": "github/main",
+    "previewRef": "github/preview",
+    "formalSourceSha256": "e2a70b6d4a03b030afe1a65dad49c3e326ca335bf158b20396446c3337aefd75",
+    "previewSourceSha256": "e2a70b6d4a03b030afe1a65dad49c3e326ca335bf158b20396446c3337aefd75",
+    "checkedAt": "2026-11-04T04:21:39.397Z",
+    "sourceAligned": true,
+    "live": {
+      "production": {
+        "url": "https://www.sxffootball.cn/admin/pc-release.json",
+        "http": 200,
+        "app": "sxf-organizer-pc",
+        "channel": "production",
+        "sourceCommit": "83d77656d01a80a7e5890493ce04b6091d9e7c45",
+        "formalBaselineCommit": "83d77656d01a80a7e5890493ce04b6091d9e7c45",
+        "pcSourceSha256": "e2a70b6d4a03b030afe1a65dad49c3e326ca335bf158b20396446c3337aefd75",
+        "sourceDirty": false,
+        "builtAt": "2026-11-04T04:03:51.466Z"
+      },
+      "preview": {
+        "url": "https://www.sxffootball.cn/preview/admin/pc-release.json",
+        "http": 200,
+        "app": "sxf-organizer-pc",
+        "channel": "preview",
+        "sourceCommit": "166b585b60391d50aae666bea3b1753a46fde120",
+        "formalBaselineCommit": "83d77656d01a80a7e5890493ce04b6091d9e7c45",
+        "pcSourceSha256": "e2a70b6d4a03b030afe1a65dad49c3e326ca335bf158b20396446c3337aefd75",
+        "sourceDirty": false,
+        "builtAt": "2026-11-04T04:08:07.503Z"
+      }
+    },
+    "desktop": {
+      "sourceVersion": "0.2.8",
+      "publishedVersion": "0.2.8",
+      "url": "https://www.sxffootball.cn/desktop/windows/SxfFootball-Setup-0.2.8-x64.exe",
+      "sha256": "ace817167db4e8b917f4d5d8cc6986af18f91cd1015b38e2a5bba61eacd67fbb",
+      "bytes": 122431595
+    }
+  },
+  "authorizedMaintenance": {
+    "ownerReferenceUnchanged": true,
+    "contactCorrect": true,
+    "displayNameBound": true,
+    "requestedManagerAccepted": true,
+    "previousManagerKept": true
+  },
+  "businessValidation": {
+    "sizes": "2-32 teams",
+    "modes": [
+      "adjacent",
+      "head_tail"
+    ],
+    "loops": [
+      "single",
+      "double"
+    ],
+    "oddByes": true,
+    "eightTeamBrowserSaveReloadAndBackendMatch": true,
+    "confirmedReplacementBlocked": true,
+    "realDrawOrMatchRecordsChanged": false,
+    "realSecondDivisionRegistrationCreated": false
+  },
+  "miniProgramOrH5Uploaded": false,
+  "baselineLimits": [
+    "pre-existing full data-center copy mismatches",
+    "pre-existing data-center ready/unverified assertion at test-data-center.mjs:51"
+  ],
+  "desktopProduction": {
+    "channel": "production",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/admin/",
+    "status": "passed"
+  },
+  "desktopPreview": {
+    "channel": "preview",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/preview/admin/",
+    "status": "passed"
+  }
+}
