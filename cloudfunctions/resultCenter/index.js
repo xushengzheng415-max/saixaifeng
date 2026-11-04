@@ -797,7 +797,9 @@ async function buildDashboard(event, actor) {
     return map
   }, {})
   const awardOverrides = await listAll('award_overrides', { tournamentId }, 300).catch(() => [])
-  const awards = require('./data-center/awards.cjs').compute({
+  // 轻量模式是纯工具赛事：只保留赛事内比分与积分排名，不生成奖项/成绩册（显式标记，不靠 phase 或组名推断）
+  const lightweightMode = Boolean(tournament.lightweightMode)
+  const awards = lightweightMode ? {} : require('./data-center/awards.cjs').compute({
     matches: matches.map(item => ({ ...item, lineups: lineupsById[item.id] || null })),
     eventsByMatchId: effectiveEventsByMatchId,
     standings,
@@ -806,7 +808,7 @@ async function buildDashboard(event, actor) {
   })
   return {
     success: true,
-    tournament: { id: tournamentId, name: text(tournament.name) || '当前赛事', startDate: rawDate(tournament.startDate), endDate: rawDate(tournament.endDate), location: text(tournament.location || tournament.province), logo: text(tournament.logo || tournament.logoUrl) },
+    tournament: { id: tournamentId, name: text(tournament.name) || '当前赛事', startDate: rawDate(tournament.startDate), endDate: rawDate(tournament.endDate), location: text(tournament.location || tournament.province), logo: text(tournament.logo || tournament.logoUrl), lightweightMode },
     divisions: divisions.map(item => ({ id: text(item._id || item.id), name: text(item.name) || '未命名组别', pointsRule: pointsRule(item) })),
     matches,
     events: eventRows,
@@ -817,6 +819,7 @@ async function buildDashboard(event, actor) {
     knockout: buildKnockout(matches),
     publications,
     pairingResolution,
+    lightweightMode,
     generatedAt: new Date().toISOString()
   }
 }
@@ -857,6 +860,8 @@ async function clearAwardOverride(event, actor) {
 async function publishStandings(event, actor) {
   const dashboard = await buildDashboard(event, actor)
   const divisionId = text(event.divisionId)
+  // 轻量模式不发布正式积分快照，也不进入数据中心/成绩册体系
+  if (dashboard.lightweightMode) return { success: false, code: 'LIGHTWEIGHT_MODE_UNSUPPORTED', message: '轻量模式（只记比分、做排名）不需要发布积分快照，排名在本赛事内实时查看' }
   const standings = dashboard.standings.filter(item => !divisionId || item.divisionId === divisionId)
   if (!standings.some(item => item.officialMatchCount > 0)) return { success: false, code: 'NO_OFFICIAL_RESULTS', message: '当前范围还没有已复核赛果，不能发布积分榜' }
   if (dashboard.matches.some(item => (!divisionId || item.divisionId === divisionId) && item.resultStatus === 'warning')) return { success: false, code: 'RESULT_WARNING', message: '当前范围存在异常赛果，请先完成复核' }
