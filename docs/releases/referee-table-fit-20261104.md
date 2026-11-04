@@ -71,3 +71,14 @@
 - 用户需在平板应用内点「刷新」或重开应用，才会加载新的 `/preview/admin/` 资源；若平板打开的是正式 `/admin/`，需要合入 `main` 并单独授权发布。
 - 临时裁判认领的短信门禁已在共享正式后端生效，属于线上改动；如要回退，用上文保存的线上基线包重新 `fn code update` 即可。
 - `VisualQaHub` 中「裁判管理」跳转仍写作 `/referee/head-referee?tournamentId=…`，实际路由为 `/tournaments/:id/referees`，本次未改。
+
+## 三、正式发布（`/admin/`）
+
+用户 2026-11-04 明确要求「发布正式版」，本次只把平板布局与裁判页两轮修复合入 `main`，不整支 `preview` 覆盖正式（`preview` 上还有执行规则、轻量模式等其他会话改动，未在本次授权范围内）。
+
+- 基于 `github/main`（`eed912b90`）新建 `codex/formal-referee-pad-20261104`，按序 cherry-pick `6747dc727`、`5df740a98`、`35e22bc20`、`57410b920`，无冲突，得到 `fc9148a20`。
+- `npm ci` + `npm run build`（默认 base `/admin/`）通过（19.56s），`dist` 407 个文件；`dist/index.html` 只引用 `/admin/assets/`，不含 `/preview/admin/`。
+- 产物摘要：`assets/HeadRefereeManagement-GRIWgmBc.css`（SHA-256 `7836AD54B739C0C31476DC1B889CCD3E0CD3B0F3F1FB37847D1DEBBFCD6570AF`）、`assets/HeadRefereeManagement-AN9lk9KU.js`（SHA-256 `22FE1C2E62F47B9C0A408876CA085877C4E91689628ABCC46F184B57EDCA5004`）、`index.html`（SHA-256 `31C610054C66544D0A0B9AFE3C145FFF5460C5A73B367742D504B46B713EF0D6`）。
+- `hosting deploy … admin --concurrency 3 --retry-count 8 --retry-interval 3000` 成功，407 个文件。
+- 线上读回 `https://www.sxffootball.cn/admin/index.html`、`/admin/assets/HeadRefereeManagement-AN9lk9KU.js`、`/admin/assets/HeadRefereeManagement-GRIWgmBc.css`：三个摘要与本地逐字节一致；入口只引用 `/admin/assets/`；CSS 含 `min-width:940px`，JS 含「重新生成二维码」；`/admin/` 返回 HTTP 200。
+- 已推送 `github` 与 `origin`：`main` 由 `eed912b90` 快进到 `fc9148a20`；随后把已发布 `main` 合入最新 `preview`（合并提交 `8353228f8`），`git diff 57410b920..HEAD` 为空，预览内容无变化，无需重发 `/preview/admin/`。
