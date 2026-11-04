@@ -32,6 +32,9 @@
     jersey: '',
     jerseyImg: null,
     photoBusy: false,
+    // 裁剪后的照片解码完成前不要拼参考板，否则会拿空白图生成。
+    photoReady: null,
+    jerseyReady: null,
     // 上传自己的照片：ownPreview 是本地压缩图，ownTicket 是服务端抠图凭证。
     ownPreview: '',
     ownTicket: '',
@@ -180,23 +183,20 @@
       + (photoReplace.available === false ? '，余额不足' : '')
   }
 
-  // 选好照片先本地压缩，再交服务端抠图；返回的透明预览只有用户确认后才写进卡面。
-  function prepareOwn(file) {
-    if (!file || state.ownBusy) return
+  // 取景框调好后导出的竖版照片（已按框裁剪缩放到合适位置），再交服务端抠图；透明预览只有用户确认后才写进卡面。
+  function prepareOwnData(photoData) {
+    if (!photoData || state.ownBusy) return
     state.ownBusy = true
     ownNote('')
     $('btn-own-apply').disabled = true
     show('own-stage', false)
     show('own-actions', false)
     dropOwnTicket()
-    compress(file, 1600).then(function (photo) {
-      state.ownPreview = photo.data
-      $('own-preview').src = photo.data
-      show('own-preview', true)
-      show('own-empty', false)
-      ownNote('正在抠图，稍等几秒…')
-      return Api.prepareCardPhoto({ playerId: state.playerId, photoData: photo.data })
-    }).then(function (result) {
+    state.ownPreview = photoData
+    show('own-preview', true)
+    show('own-empty', false)
+    ownNote('正在抠图，稍等几秒…')
+    Api.prepareCardPhoto({ playerId: state.playerId, photoData: photoData }).then(function (result) {
       state.ownTicket = text(result.photoTicket)
       state.ownCut = text(result.preview)
       if (!state.ownTicket || !state.ownCut) throw new Error('抠图结果获取失败，请重新选择照片')
@@ -262,6 +262,7 @@
     state.ownCut = ''
     $('own-preview').src = ''
     $('own-cut').src = ''
+    clearFramer(ownFramer)
     show('own-preview', false)
     show('own-empty', true)
     show('own-stage', false)
@@ -368,38 +369,335 @@
     })
   }
 
-  function pickPhoto(file) {
-    if (!file) return
-    state.photoBusy = true
-    $('photo-note').hidden = true
-    compress(file, 1600).then(function (photo) {
-      state.photo = photo.data
-      state.photoImg = photo.image
-      $('photo-preview').src = photo.data
-      show('photo-preview', true)
-      show('photo-empty', false)
-      state.photoBusy = false
+  // ---------- 取景框：人物照 3:4 竖版、球衣 1:1，选完先拖到合适位置再用 ----------
+  // 比例取自平台后台「AI 形象照」的竖版预览与姿势预设，不再用横版把人物拦腰截断。
+  var FRAME_OUT_WIDTH = 1200
+  var FRAME_BACKGROUND = '#ffffff'
+  var FRAME_MAX_CHARS = 2200000
+
+  function frameSize(frame) {
+    var rect = null
+    try { rect = frame.getBoundingClientRect ? frame.getBoundingClientRect() : null } catch (error) { rect = null }
+    var width = (rect && rect.width) || frame.clientWidth || 300
+    var height = (rect && rect.height) || frame.clientHeight || 400
+    return { width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)) }
+  }
+
+  function framerBase(view) {
+    var size = frameSize(view.frame)
+    var cover = Math.max(size.width / view.naturalW, size.height / view.naturalH)
+    var contain = Math.min(size.width / view.naturalW, size.height / view.naturalH)
+    // 人物照默认铺满取景框；球衣默认整件放进框里，用户再按需要放大。
+    return { size: size, scale: view.options.fit === 'contain' ? contain : cover }
+  }
+
+  function layoutFramer(view) {
+    var img = view.preview
+    var editing = view.editing && view.naturalW > 0
+    view.frame.className = view.frameBaseClass + (editing ? ' is-editing' : '')
+    if (!editing) {
+      img.style.position = ''
+      img.style.left = ''
+      img.style.top = ''
+      img.style.width = ''
+      img.style.height = ''
+      img.style.maxWidth = ''
+      img.style.objectFit = ''
+      img.style.transform = ''
+      return
+    }
+    var info = framerBase(view)
+    var scale = info.scale * view.zoom
+    var destW = view.naturalW * scale
+    var destH = view.naturalH * scale
+    // 图比框大：最多移到刚好露出整框；图比框小：限制在框内，避免把图拖出画框。
+    var limitX = destW > info.size.width ? (destW - info.size.width) / 2 : (info.size.width - destW) / 2
+    var limitY = destH > info.size.height ? (destH - info.size.height) / 2 : (info.size.height - destH) / 2
+    view.dx = Math.max(-limitX, Math.min(limitX, view.dx))
+    view.dy = Math.max(-limitY, Math.min(limitY, view.dy))
+    img.style.position = 'absolute'
+    img.style.left = '50%'
+    img.style.top = '50%'
+    img.style.width = view.naturalW + 'px'
+    img.style.height = view.naturalH + 'px'
+    img.style.maxWidth = 'none'
+    img.style.objectFit = 'fill'
+    img.style.transformOrigin = '50% 50%'
+    img.style.transform = 'translate(-50%, -50%) translate(' + view.dx + 'px, ' + view.dy + 'px) scale(' + scale + ')'
+  }
+
+  // 按当前取景框导出：白底、指定宽度，不静默降成小图。
+  function exportFramer(view) {
+    var info = framerBase(view)
+    var outW = view.options.outWidth || FRAME_OUT_WIDTH
+    var outH = Math.round(outW * info.size.height / info.size.width)
+    var factor = outW / info.size.width
+    var canvas = document.createElement('canvas')
+    canvas.width = outW
+    canvas.height = outH
+    var context = canvas.getContext('2d')
+    context.fillStyle = FRAME_BACKGROUND
+    context.fillRect(0, 0, outW, outH)
+    var scale = info.scale * view.zoom * factor
+    var destW = view.naturalW * scale
+    var destH = view.naturalH * scale
+    var centerX = outW / 2 + view.dx * factor
+    var centerY = outH / 2 + view.dy * factor
+    context.drawImage(view.img, centerX - destW / 2, centerY - destH / 2, destW, destH)
+    var data = ''
+    var quality = 0.92
+    while (quality >= 0.6) {
+      try { data = canvas.toDataURL('image/jpeg', quality) } catch (error) { data = '' }
+      if (data && data.length <= FRAME_MAX_CHARS) break
+      quality -= 0.06
+      data = ''
+    }
+    if (!data) throw new Error('照片处理后仍然过大，请换一张更小的照片')
+    return data
+  }
+
+  function enterFramer(view) {
+    if (!view.img) return
+    view.editing = true
+    if (view.options.bar) show(view.options.bar, true)
+    if (view.options.badge) show(view.options.badge, true)
+    if (view.options.confirm) {
+      var confirm = $(view.options.confirm)
+      confirm.textContent = view.options.confirmLabel || '调整好了'
+      confirm.hidden = false
+    }
+    if (view.options.reset) $(view.options.reset).hidden = false
+    layoutFramer(view)
+  }
+
+  function resetFramer(view) {
+    view.zoom = 1
+    view.dx = 0
+    view.dy = 0
+    layoutFramer(view)
+  }
+
+  // 确认后把取景框内的画面导出成一张竖版照片，后续上传/抠图都用这张，不再用原图。
+  function confirmFramer(view) {
+    if (view.busy || !view.img) return
+    var data = ''
+    try { data = exportFramer(view) } catch (error) {
+      toast((error && error.message) || '照片处理失败，请换一张')
+      return
+    }
+    view.editing = false
+    view.result = data
+    view.preview.src = data
+    layoutFramer(view)
+    if (view.options.badge) show(view.options.badge, false)
+    if (view.options.reset) $(view.options.reset).hidden = true
+    if (view.options.confirm) {
+      var confirm = $(view.options.confirm)
+      confirm.textContent = view.options.reopenLabel || '重新调整'
+      confirm.hidden = false
+    }
+    if (view.options.bar) show(view.options.bar, true)
+    if (typeof view.options.onDone === 'function') view.options.onDone(data, view)
+  }
+
+  function toggleFramer(view) {
+    if (view.busy || !view.img) return
+    if (view.editing) { confirmFramer(view); return }
+    if (view.result) view.preview.src = view.sourceData
+    enterFramer(view)
+  }
+
+  function pickFramer(view, file) {
+    if (!file || view.busy) return
+    view.busy = true
+    var noteEl = view.options.note ? $(view.options.note) : null
+    if (noteEl) noteEl.hidden = true
+    view.result = ''
+    compress(file, view.options.maxSide || 1800).then(function (photo) {
+      view.sourceData = photo.data
+      view.img = photo.image
+      view.naturalW = Math.max(1, photo.image.naturalWidth || photo.image.width || 1)
+      view.naturalH = Math.max(1, photo.image.naturalHeight || photo.image.height || 1)
+      view.preview.src = photo.data
+      show(view.options.preview, true)
+      show(view.options.empty, false)
+      view.zoom = 1
+      view.dx = 0
+      view.dy = 0
+      view.busy = false
+      enterFramer(view)
     }).catch(function (error) {
-      state.photoBusy = false
-      $('photo-note').textContent = (error && error.message) || '照片处理失败，请重新选择'
-      $('photo-note').hidden = false
+      view.busy = false
+      if (noteEl) {
+        noteEl.textContent = (error && error.message) || '照片处理失败，请重新选择'
+        noteEl.hidden = false
+      }
     })
   }
 
-  function pickJersey(file) {
-    if (!file) return
-    $('jersey-note').hidden = true
-    compress(file, 1200).then(function (jersey) {
-      state.jersey = jersey.data
-      state.jerseyImg = jersey.image
-      $('jersey-preview').src = jersey.data
-      show('jersey-preview', true)
-      show('jersey-empty', false)
-    }).catch(function (error) {
-      $('jersey-note').textContent = (error && error.message) || '球衣照片处理失败，请重新选择'
-      $('jersey-note').hidden = false
+  // 单指拖动改位置，双指捏合缩放；全部本地完成，不发请求。
+  function bindFramer(view) {
+    var pointers = {}
+    var ids = []
+    var gesture = null
+
+    function updatePoint(event) {
+      var id = event.pointerId == null ? 0 : event.pointerId
+      pointers[id] = { x: event.clientX || 0, y: event.clientY || 0 }
+      if (ids.indexOf(id) < 0) ids.push(id)
+      return id
+    }
+    function distance() {
+      var first = pointers[ids[0]]
+      var second = pointers[ids[1]]
+      if (!first || !second) return 0
+      var dx = first.x - second.x
+      var dy = first.y - second.y
+      return Math.sqrt(dx * dx + dy * dy)
+    }
+    function midpoint() {
+      var first = pointers[ids[0]] || { x: 0, y: 0 }
+      var second = pointers[ids[1]] || { x: 0, y: 0 }
+      return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+    }
+    function snapshot() {
+      if (ids.length >= 2) {
+        var middle = midpoint()
+        gesture = { mode: 'pinch', dist: distance() || 1, midX: middle.x, midY: middle.y, zoom: view.zoom, dx: view.dx, dy: view.dy }
+        return
+      }
+      if (ids.length === 1 && pointers[ids[0]]) {
+        gesture = { mode: 'drag', x: pointers[ids[0]].x, y: pointers[ids[0]].y, dx: view.dx, dy: view.dy }
+        return
+      }
+      gesture = null
+    }
+    function follow() {
+      if (!gesture) return
+      if (gesture.mode === 'pinch') {
+        var middle = midpoint()
+        var dist = distance() || 1
+        view.zoom = Math.max(1, Math.min(4, gesture.zoom * (dist / gesture.dist)))
+        view.dx = gesture.dx + (middle.x - gesture.midX)
+        view.dy = gesture.dy + (middle.y - gesture.midY)
+      } else {
+        var point = pointers[ids[0]]
+        if (!point) return
+        view.dx = gesture.dx + (point.x - gesture.x)
+        view.dy = gesture.dy + (point.y - gesture.y)
+      }
+      layoutFramer(view)
+    }
+
+    view.frame.addEventListener('pointerdown', function (event) {
+      if (!view.editing) return
+      if (event.preventDefault) event.preventDefault()
+      var id = updatePoint(event)
+      snapshot()
+      if (view.frame.setPointerCapture) { try { view.frame.setPointerCapture(id) } catch (error) { /* ignore */ } }
+    })
+    view.frame.addEventListener('pointermove', function (event) {
+      if (!view.editing || !gesture) return
+      if (event.preventDefault) event.preventDefault()
+      updatePoint(event)
+      follow()
+    })
+    function release(event) {
+      var id = event.pointerId == null ? 0 : event.pointerId
+      delete pointers[id]
+      var index = ids.indexOf(id)
+      if (index >= 0) ids.splice(index, 1)
+      snapshot()
+    }
+    view.frame.addEventListener('pointerup', release)
+    view.frame.addEventListener('pointercancel', release)
+  }
+
+  function createFramer(options) {
+    var view = {
+      options: options,
+      frame: $(options.frame),
+      preview: $(options.preview),
+      empty: $(options.empty),
+      frameBaseClass: $(options.frame).className || 'upload',
+      img: null,
+      sourceData: '',
+      result: '',
+      naturalW: 0,
+      naturalH: 0,
+      zoom: 1,
+      dx: 0,
+      dy: 0,
+      editing: false,
+      busy: false
+    }
+    bindFramer(view)
+    return view
+  }
+
+  var ownFramer = createFramer({
+    frame: 'own-frame', preview: 'own-preview', empty: 'own-empty',
+    bar: 'own-edit', badge: 'own-badge', confirm: 'btn-own-confirm', reset: 'btn-own-reset',
+    note: 'own-note', maxSide: 1800, confirmLabel: '调整好了，去背景',
+    onDone: function (dataUrl) { prepareOwnData(dataUrl) }
+  })
+
+  var photoFramer = createFramer({
+    frame: 'photo-frame', preview: 'photo-preview', empty: 'photo-empty',
+    bar: 'photo-edit', badge: 'photo-badge', confirm: 'btn-photo-confirm', reset: 'btn-photo-reset',
+    note: 'photo-note', maxSide: 1800,
+    onDone: function (dataUrl, view) {
+      state.photo = dataUrl
+      state.photoImg = view.img
+      state.photoReady = loadImage(dataUrl, function (image) { state.photoImg = image })
+    }
+  })
+
+  var jerseyFramer = createFramer({
+    frame: 'jersey-frame', preview: 'jersey-preview', empty: 'jersey-empty',
+    bar: 'jersey-edit', badge: 'jersey-badge', confirm: 'btn-jersey-confirm', reset: 'btn-jersey-reset',
+    note: 'jersey-note', maxSide: 1600, outWidth: 1000, fit: 'contain',
+    onDone: function (dataUrl, view) {
+      state.jersey = dataUrl
+      state.jerseyImg = view.img
+      state.jerseyReady = loadImage(dataUrl, function (image) { state.jerseyImg = image })
+    }
+  })
+
+  // 参考板用裁剪后的图：等图片解码完再拼，避免拿还没加载完的图空白出图。
+  function loadImage(dataUrl, apply) {
+    return new Promise(function (resolve) {
+      var image = new Image()
+      image.onload = function () { apply(image); resolve(image) }
+      image.onerror = function () { resolve(null) }
+      image.src = dataUrl
     })
   }
+
+  function clearFramer(view) {
+    view.img = null
+    view.sourceData = ''
+    view.result = ''
+    view.naturalW = 0
+    view.naturalH = 0
+    view.zoom = 1
+    view.dx = 0
+    view.dy = 0
+    view.editing = false
+    layoutFramer(view)
+    if (view.options.bar) show(view.options.bar, false)
+    if (view.options.badge) show(view.options.badge, false)
+    if (view.options.reset) $(view.options.reset).hidden = true
+  }
+
+  function pickPhoto(file) {
+    pickFramer(photoFramer, file)
+  }
+
+  function pickJersey(file) {
+    pickFramer(jerseyFramer, file)
+  }
+
 
   // 参考板：纯白底，左边人脸铺满高度（占宽 62%），右边球衣整张等比放进 34% 的方块。
   function drawSheet(size) {
@@ -516,9 +814,17 @@
 
   function generate() {
     if (state.busy) return
-    if (!state.photo || !state.photoImg) { toast('请先上传一张你自己的单人照片'); return }
-    if (!state.jerseyImg) { toast('请再上传一张球衣照片'); return }
+    if (!state.photo) { toast('请先上传一张你自己的单人照片'); return }
+    if (!state.jersey) { toast('请再上传一张球衣照片'); return }
     if (state.price && state.price.available === false) { toast('蜂蜜不足，暂时不能生成'); return }
+    // 等取景框导出的照片解码完成再拼参考板，避免用还没加载好的图出空白。
+    Promise.all([state.photoReady || Promise.resolve(), state.jerseyReady || Promise.resolve()]).then(function () {
+      if (!state.photoImg || !state.jerseyImg) { toast('照片还没处理好，请稍等再点生成'); return }
+      runGenerate()
+    })
+  }
+
+  function runGenerate() {
     setBusy(true, '正在准备…')
     note('')
     startGenAnim()
@@ -624,9 +930,14 @@
       var file = event.target.files && event.target.files[0]
       // 清空 value，允许连续选同一张照片时仍触发 change。
       try { event.target.value = '' } catch (error) { /* ignore */ }
-      prepareOwn(file)
+      pickFramer(ownFramer, file)
     })
-    $('own-preview').addEventListener('click', function () { $('own-input').click() })
+    $('btn-own-confirm').addEventListener('click', function () { toggleFramer(ownFramer) })
+    $('btn-own-reset').addEventListener('click', function () { resetFramer(ownFramer) })
+    $('own-preview').addEventListener('click', function () {
+      if (ownFramer.editing) return
+      $('own-input').click()
+    })
     $('own-empty').addEventListener('click', function () { $('own-input').click() })
     $('btn-own-retry').addEventListener('click', retryOwn)
     $('btn-own-apply').addEventListener('click', applyOwn)
@@ -636,14 +947,24 @@
       try { event.target.value = '' } catch (error) { /* ignore */ }
       pickPhoto(file)
     })
-    $('photo-preview').addEventListener('click', function () { $('photo-input').click() })
+    $('btn-photo-confirm').addEventListener('click', function () { toggleFramer(photoFramer) })
+    $('btn-photo-reset').addEventListener('click', function () { resetFramer(photoFramer) })
+    $('photo-preview').addEventListener('click', function () {
+      if (photoFramer.editing) return
+      $('photo-input').click()
+    })
     $('photo-empty').addEventListener('click', function () { $('photo-input').click() })
     $('jersey-input').addEventListener('change', function (event) {
       var file = event.target.files && event.target.files[0]
       try { event.target.value = '' } catch (error) { /* ignore */ }
       pickJersey(file)
     })
-    $('jersey-preview').addEventListener('click', function () { $('jersey-input').click() })
+    $('btn-jersey-confirm').addEventListener('click', function () { toggleFramer(jerseyFramer) })
+    $('btn-jersey-reset').addEventListener('click', function () { resetFramer(jerseyFramer) })
+    $('jersey-preview').addEventListener('click', function () {
+      if (jerseyFramer.editing) return
+      $('jersey-input').click()
+    })
     $('jersey-empty').addEventListener('click', function () { $('jersey-input').click() })
     $('btn-generate').addEventListener('click', generate)
     $('btn-regenerate').addEventListener('click', regenerate)

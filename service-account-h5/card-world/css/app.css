@@ -370,18 +370,21 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .slider-row input { flex: 1; accent-color: var(--gold); }
 
 /* ---------- AI 形象照（portrait.html） ---------- */
+/* 取景框与平台后台「AI 形象照」的竖版预览、姿势预设同一比例：人物 3:4，球衣 1:1。 */
 .upload {
   position: relative;
   margin-top: 12px;
   border-radius: 14px;
   border: 1px dashed rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.03);
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
   display: grid;
   place-items: center;
+  touch-action: pan-y;
 }
-.upload__empty { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+.upload--square { aspect-ratio: 1 / 1; }
+.upload__empty { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; padding: 0 18px; text-align: center; }
 .upload__preview { width: 100%; height: 100%; object-fit: cover; display: block; }
 .upload__input {
   position: absolute; inset: 0;
@@ -389,6 +392,21 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
   cursor: pointer;
   font-size: 0;
 }
+/* 调整中：让手指拖图而不是去点文件选择；图片由脚本按缩放/位移摆放。 */
+.upload.is-editing { border-style: solid; border-color: rgba(232, 197, 106, 0.5); touch-action: none; }
+.upload.is-editing .upload__input { pointer-events: none; }
+.upload.is-editing .upload__preview { touch-action: none; cursor: grab; }
+.upload__badge {
+  position: absolute; left: 10px; top: 10px; z-index: 2;
+  padding: 4px 8px; border-radius: 999px;
+  font-size: 11px; letter-spacing: 0.03em;
+  color: #0a0d14; background: rgba(232, 197, 106, 0.92);
+}
+.upload-edit { margin-top: 10px; display: grid; gap: 8px; }
+.upload-edit__tip { font-size: 11px; line-height: 1.6; color: var(--muted); }
+.upload-edit__bar { display: flex; gap: 8px; }
+.upload-edit__bar .btn { flex: 1; }
+.btn--sm { padding: 9px 12px; font-size: 12px; border-radius: 10px; }
 
 /* 换照片方式切换：上传自己的照片 / AI 生成形象照 */
 .mode-tabs {

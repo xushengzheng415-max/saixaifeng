@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>换形象照 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261104-ai7" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai8" />
 </head>
 <body>
   <div class="app">
@@ -55,11 +55,19 @@
             <h2>上传你自己的照片</h2>
             <span class="hint">服务端自动抠图</span>
           </div>
-          <p class="field__hint">选一张正对镜头、光线均匀的单人照；服务端会去掉背景做成透明形象照，确认后才写进卡面。</p>
-          <div class="upload">
+          <p class="field__hint">选一张正对镜头、光线均匀的单人照；先在下框里把人放到合适位置，服务端再去掉背景做成透明形象照，确认后才写进卡面。</p>
+          <div class="upload" id="own-frame">
             <img class="upload__preview" id="own-preview" alt="自己的照片" hidden />
             <div class="upload__empty" id="own-empty">点这里选择照片</div>
+            <span class="upload__badge" id="own-badge" hidden>拖动调整</span>
             <input class="upload__input" type="file" id="own-input" accept="image/*" />
+          </div>
+          <div class="upload-edit" id="own-edit" hidden>
+            <p class="upload-edit__tip">按住照片拖动，把人物放到框中间；双指可以放大缩小。调好再点「调整好了」。</p>
+            <div class="upload-edit__bar">
+              <button type="button" class="btn btn--ghost btn--sm" id="btn-own-reset">重置</button>
+              <button type="button" class="btn btn--gold btn--sm" id="btn-own-confirm">调整好了，去背景</button>
+            </div>
           </div>
           <p class="ai-panel__note" id="own-note" hidden></p>
           <div class="result-stage" id="own-stage" hidden>
@@ -80,11 +88,19 @@
             <span class="ai-panel__badge">第 1 步</span>
             <h2>上传你自己的单人照片</h2>
           </div>
-          <p class="ai-panel__text">一张能看清脸的单人照片即可：光线均匀、正对镜头；头肩照/半身照最好，不要全身远景。</p>
-          <div class="upload">
+          <p class="ai-panel__text">一张能看清脸的单人照片即可：光线均匀、正对镜头；头肩照/半身照最好，不要全身远景。选好后可以先拖动调整位置。</p>
+          <div class="upload" id="photo-frame">
             <img class="upload__preview" id="photo-preview" alt="单人照片" hidden />
             <div class="upload__empty" id="photo-empty">点这里选择照片</div>
+            <span class="upload__badge" id="photo-badge" hidden>拖动调整</span>
             <input class="upload__input" type="file" id="photo-input" accept="image/*" />
+          </div>
+          <div class="upload-edit" id="photo-edit" hidden>
+            <p class="upload-edit__tip">按住照片拖动，把脸和肩膀放到框里；双指可以放大缩小。</p>
+            <div class="upload-edit__bar">
+              <button type="button" class="btn btn--ghost btn--sm" id="btn-photo-reset">重置</button>
+              <button type="button" class="btn btn--gold btn--sm" id="btn-photo-confirm">调整好了</button>
+            </div>
           </div>
           <p class="ai-panel__note" id="photo-note" hidden></p>
         </article>
@@ -95,11 +111,19 @@
             <span class="ai-panel__badge">第 2 步</span>
             <h2>上传球衣照片</h2>
           </div>
-          <p class="ai-panel__text">把球衣平铺拍一张正面照上传，AI 会按这张球衣的款式和颜色给形象照换装；球衣上的文字、号码由后期模板叠加，不要求拍清晰。</p>
-          <div class="upload">
+          <p class="ai-panel__text">把球衣平铺拍一张正面照上传，AI 会按这张球衣的款式和颜色给形象照换装；球衣上的文字、号码由后期模板叠加，不要求拍清晰。选好后也可以拖动调整位置。</p>
+          <div class="upload upload--square" id="jersey-frame">
             <img class="upload__preview" id="jersey-preview" alt="球衣照片" hidden />
             <div class="upload__empty" id="jersey-empty">点这里上传球衣照片</div>
+            <span class="upload__badge" id="jersey-badge" hidden>拖动调整</span>
             <input class="upload__input" type="file" id="jersey-input" accept="image/*" />
+          </div>
+          <div class="upload-edit" id="jersey-edit" hidden>
+            <p class="upload-edit__tip">按住球衣拖动，让整件球衣完整落在框里；双指可以放大缩小。</p>
+            <div class="upload-edit__bar">
+              <button type="button" class="btn btn--ghost btn--sm" id="btn-jersey-reset">重置</button>
+              <button type="button" class="btn btn--gold btn--sm" id="btn-jersey-confirm">调整好了</button>
+            </div>
           </div>
           <p class="ai-panel__note" id="jersey-note" hidden></p>
         </article>
@@ -158,7 +182,7 @@
   <div class="toast" id="toast" hidden></div>
 
   <script src="js/api.js?v=20261104-ai7"></script>
-  <script src="js/portrait.js?v=20261104-ai7"></script>
+  <script src="js/portrait.js?v=20261104-ai8"></script>
 </body>
 </html>
 
