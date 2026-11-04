@@ -1,24 +1,22 @@
 (function () {
   'use strict'
   // 服务号 H5 · 球员卡「AI 形象照」页：
-  // 本页只做一件事——上传参考照片、选姿势、生成透明形象照，点「使用这张」直接写进球员卡面。
+  // 流程只有两步上传——① 本人单人照 ② 球衣照片——再把两张拼成一张参考板，
+  // 上传参考板后出透明形象照，点「使用这张」直接写进球员卡面。
   // 扣费、凭证、入库都在服务端（cardAiPortraitPrepare / cardAiPortraitApply），本页不决定金额。
   var Api = window.CardWorldApi
   var AI_HTTP = 'https://www.sxffootball.cn/aiPortraitDemo'
   var PENDING_KEY = 'sxf_card_ai_portrait_player'
+  // 模型只接受 1 张参考图：左边人脸、右边球衣拼成一张参考板（几何沿用已验证的
+  // service-account-h5/ai-portrait-demo.html：纯白底、脸 62%、球衣 34%）。
+  // 球衣整张送，不猜正面/背面，避免把单件球衣照片裁掉一半。
+  var SHEET_SIZE = 2048
+  var SHEET_STEPS = [[2048, 0.92], [1800, 0.9], [1600, 0.9], [1440, 0.88]]
+  var SHEET_MAX_CHARS = 3900000
   var POSES = [
     { key: 'front', label: '正面抱膀', desc: '身体正对镜头' },
     { key: 'side', label: '半侧抱膀', desc: '三分之二侧身' },
     { key: 'low', label: '低位抱膀', desc: '双手交叠在下腹' }
-  ]
-  var COLORS = [
-    { value: '', label: '原照片' },
-    { value: '#ffffff', label: '白色' },
-    { value: '#d92f2f', label: '红色' },
-    { value: '#1b4fb3', label: '蓝色' },
-    { value: '#1f8b4c', label: '绿色' },
-    { value: '#111111', label: '黑色' },
-    { value: '#f2c200', label: '黄色' }
   ]
 
   var state = {
@@ -26,13 +24,16 @@
     name: '',
     teamName: '',
     pose: 'front',
-    color: '',
     photo: '',
+    photoImg: null,
+    jersey: '',
+    jerseyImg: null,
     photoBusy: false,
     price: null,
     busy: false,
     requestId: '',
     ticket: '',
+    referenceTicket: '',
     result: '',
     resultId: '',
     timer: null,
@@ -111,25 +112,6 @@
     })
   }
 
-  function renderColors() {
-    var list = $('color-list')
-    list.innerHTML = ''
-    COLORS.forEach(function (item) {
-      var button = document.createElement('button')
-      button.type = 'button'
-      button.className = 'color-option' + (state.color === item.value ? ' is-active' : '')
-      button.innerHTML = (item.value
-        ? '<i class="color-dot" style="background:' + item.value + '"></i>'
-        : '<i class="color-dot color-dot--none">—</i>') + '<span>' + item.label + '</span>'
-      button.addEventListener('click', function () {
-        if (state.busy) return
-        state.color = item.value
-        renderColors()
-      })
-      list.appendChild(button)
-    })
-  }
-
   function renderPrice(info) {
     var price = (info && info.aiPortrait) || info || null
     if (!price) return
@@ -170,8 +152,9 @@
     }, 1000)
   }
 
-  // 参考照片统一缩成 1024 以内的白底 JPEG：既避免透明底变黑，也保证请求体不被网关截断。
-  function compress(file) {
+  // 上传前统一转成白底 JPEG：避免透明底变黑，也让参考板里的脸保持够大。
+  // 体积不再受网关限制：参考板走云存储上传（prepareReference），这里只控制画质。
+  function compress(file, maxSide) {
     return new Promise(function (resolve, reject) {
       var reader = new FileReader()
       reader.onerror = function () { reject(new Error('照片读取失败，请重新选择')) }
@@ -179,7 +162,7 @@
         var image = new Image()
         image.onerror = function () { reject(new Error('照片无法识别，请换一张')) }
         image.onload = function () {
-          var max = 1024
+          var max = maxSide || 1600
           var scale = Math.min(1, max / Math.max(image.width || 1, image.height || 1))
           var width = Math.max(1, Math.round((image.width || 1) * scale))
           var height = Math.max(1, Math.round((image.height || 1) * scale))
@@ -190,14 +173,19 @@
           context.fillStyle = '#ffffff'
           context.fillRect(0, 0, width, height)
           context.drawImage(image, 0, 0, width, height)
-          var quality = 0.86
-          var data = canvas.toDataURL('image/jpeg', quality)
-          while (data.length > 1100000 && quality > 0.5) {
-            quality -= 0.08
-            data = canvas.toDataURL('image/jpeg', quality)
+          var data = ''
+          var quality = 0.92
+          while (quality >= 0.6) {
+            try { data = canvas.toDataURL('image/jpeg', quality) } catch (error) { data = '' }
+            if (data && data.length <= 2200000) break
+            quality -= 0.06
+            data = ''
           }
-          if (data.length > 1150000) { reject(new Error('照片处理后仍然过大，请换一张更小的照片')); return }
-          resolve(data)
+          if (!data) { reject(new Error('照片处理后仍然过大，请换一张更小的照片')); return }
+          var loaded = new Image()
+          loaded.onerror = function () { reject(new Error('照片无法识别，请换一张')) }
+          loaded.onload = function () { resolve({ data: data, image: loaded }) }
+          loaded.src = data
         }
         image.src = String(reader.result || '')
       }
@@ -209,9 +197,10 @@
     if (!file) return
     state.photoBusy = true
     $('photo-note').hidden = true
-    compress(file).then(function (data) {
-      state.photo = data
-      $('photo-preview').src = data
+    compress(file, 1600).then(function (photo) {
+      state.photo = photo.data
+      state.photoImg = photo.image
+      $('photo-preview').src = photo.data
       show('photo-preview', true)
       show('photo-empty', false)
       state.photoBusy = false
@@ -220,6 +209,107 @@
       $('photo-note').textContent = (error && error.message) || '照片处理失败，请重新选择'
       $('photo-note').hidden = false
     })
+  }
+
+  function pickJersey(file) {
+    if (!file) return
+    $('jersey-note').hidden = true
+    compress(file, 1200).then(function (jersey) {
+      state.jersey = jersey.data
+      state.jerseyImg = jersey.image
+      $('jersey-preview').src = jersey.data
+      show('jersey-preview', true)
+      show('jersey-empty', false)
+    }).catch(function (error) {
+      $('jersey-note').textContent = (error && error.message) || '球衣照片处理失败，请重新选择'
+      $('jersey-note').hidden = false
+    })
+  }
+
+  // 参考板：纯白底，左边人脸铺满高度（占宽 62%），右边球衣整张等比放进 34% 的方块。
+  function drawSheet(size) {
+    var canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    var context = canvas.getContext('2d')
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, size, size)
+    var faceW = Math.round(size * 0.62)
+    var image = state.photoImg
+    if (image && image.naturalWidth && image.naturalHeight) {
+      var scale = Math.max(faceW / image.naturalWidth, size / image.naturalHeight)
+      var width = image.naturalWidth * scale
+      var height = image.naturalHeight * scale
+      context.save()
+      context.beginPath()
+      context.rect(0, 0, faceW, size)
+      context.clip()
+      context.drawImage(image, (faceW - width) / 2, (size - height) / 2, width, height)
+      context.restore()
+    }
+    var jersey = state.jerseyImg
+    if (jersey && jersey.naturalWidth && jersey.naturalHeight) {
+      var boxW = Math.round(size * 0.34)
+      var boxX = size - boxW - Math.round(size * 0.02)
+      var boxY = Math.round(size * 0.18)
+      var jerseyScale = Math.min(boxW / jersey.naturalWidth, boxW / jersey.naturalHeight)
+      var jw = jersey.naturalWidth * jerseyScale
+      var jh = jersey.naturalHeight * jerseyScale
+      context.drawImage(jersey, boxX + (boxW - jw) / 2, boxY + (boxW - jh) / 2, jw, jh)
+    }
+    return canvas
+  }
+
+  // 逐级降尺寸/画质，直到 base64 长度在云存储 3MB 上限以内，不静默交白底小图。
+  function encodeSheet() {
+    var index = 0
+    while (index < SHEET_STEPS.length) {
+      var canvas = drawSheet(SHEET_STEPS[index][0])
+      var data = canvas.toDataURL('image/jpeg', SHEET_STEPS[index][1])
+      if (data.length <= SHEET_MAX_CHARS) return data
+      index += 1
+    }
+    throw new Error('参考图体积过大，请换一张更小的照片后重试')
+  }
+
+  function sheetBytes(dataUrl) {
+    var prefix = 'data:image/jpeg;base64,'
+    var base64 = dataUrl.indexOf(prefix) === 0 ? dataUrl.slice(prefix.length) : ''
+    return Math.round(base64.length * 0.75)
+  }
+
+  // 参考板先上传云存储换一张一次性凭证，再把凭证号交给生图接口：
+  // 这样请求体只有几十字节，不受 HTTP 网关体积限制，画质也不会被压成小图。
+  function uploadReference(dataUrl) {
+    var bytes = sheetBytes(dataUrl)
+    return postAi({ action: 'cardPortraitPrepareReference', cardTicket: state.ticket, bytes: bytes }).then(function (result) {
+      var info = (result && result.data) || {}
+      if (!info.url || !info.ticket) throw new Error('参考图上传准备失败，请重试')
+      return fetch(info.url, { method: 'PUT', headers: info.headers || {}, body: convertBlob(dataUrl) }).then(function (response) {
+        if (!response || !response.ok) throw new Error('参考图上传失败，请检查网络后重试')
+        state.referenceTicket = text(info.ticket)
+        return state.referenceTicket
+      })
+    })
+  }
+
+  function convertBlob(dataUrl) {
+    var parts = String(dataUrl || '').split(',')
+    var meta = parts[0] || ''
+    var base64 = parts[1] || ''
+    var mime = (meta.match(/data:([^;]+)/) || [])[1] || 'image/jpeg'
+    var binary = atob(base64)
+    var length = binary.length
+    var bytes = new Uint8Array(length)
+    for (var i = 0; i < length; i++) bytes[i] = binary.charCodeAt(i)
+    return new Blob([bytes], { type: mime })
+  }
+
+  function dropReference() {
+    if (!state.referenceTicket || !state.ticket) return Promise.resolve(null)
+    var payload = { action: 'cardPortraitCancelReference', cardTicket: state.ticket, ticket: state.referenceTicket }
+    state.referenceTicket = ''
+    return postAi(payload).catch(function () { return null })
   }
 
   function postAi(payload) {
@@ -251,7 +341,8 @@
 
   function generate() {
     if (state.busy) return
-    if (!state.photo) { toast('请先选择一张参考照片'); return }
+    if (!state.photo || !state.photoImg) { toast('请先上传一张你自己的单人照片'); return }
+    if (!state.jerseyImg) { toast('请再上传一张球衣照片'); return }
     if (state.price && state.price.available === false) { toast('蜂蜜不足，暂时不能生成'); return }
     setBusy(true, '正在准备…')
     note('')
@@ -263,16 +354,20 @@
       if (!state.ticket) throw new Error('生图凭证签发失败，请重试')
       renderPrice(result.aiPortrait)
       startTimer()
-      var payload = {
-        action: 'cardPortraitGenerate',
-        cardTicket: state.ticket,
-        pose: state.pose,
-        photo: state.photo,
-        transparentOutput: true,
-        preserveOriginal: true
-      }
-      if (state.color) { payload.jerseyColor = state.color; payload.jerseyPreset = true }
-      return postAi(payload)
+      // 1) 单人照 + 球衣照拼参考板 2) 上传参考板换一次性凭证 3) 用凭证出图。
+      setBusy(true, '正在上传参考图…')
+      return uploadReference(encodeSheet()).then(function (referenceTicket) {
+        var payload = {
+          action: 'cardPortraitGenerate',
+          cardTicket: state.ticket,
+          pose: state.pose,
+          referenceTicket: referenceTicket,
+          jerseyRef: true,
+          transparentOutput: true,
+          preserveOriginal: true
+        }
+        return postAi(payload)
+      })
     }).then(function (result) {
       var data = (result && result.data) || {}
       if (!data.image) throw new Error('没有拿到成片，请重新生成')
@@ -289,7 +384,8 @@
       $('btn-generate').hidden = false
       note((error && error.message) || '生成失败，请稍后重试')
       toast((error && error.message) || '生成失败，请稍后重试')
-      // 生成没有拿到成片：本次扣费原路退回，避免用户为失败付费。
+      // 生成没有拿到成片：参考图凭证作废，本次扣费原路退回，避免用户为失败付费。
+      dropReference()
       if (!state.result) refund()
     })
   }
@@ -320,6 +416,7 @@
   function leave() {
     var done = function () { location.href = backUrl() }
     if (state.applied || !state.requestId) { done(); return }
+    dropReference()
     refund().then(done, done)
   }
 
@@ -331,6 +428,7 @@
     state.requestId = ''
     state.ticket = ''
     forgetRequestId()
+    dropReference()
     show('result-stage', false)
     show('result-actions', false)
     $('btn-generate').hidden = false
@@ -347,6 +445,13 @@
     })
     $('photo-preview').addEventListener('click', function () { $('photo-input').click() })
     $('photo-empty').addEventListener('click', function () { $('photo-input').click() })
+    $('jersey-input').addEventListener('change', function (event) {
+      var file = event.target.files && event.target.files[0]
+      try { event.target.value = '' } catch (error) { /* ignore */ }
+      pickJersey(file)
+    })
+    $('jersey-preview').addEventListener('click', function () { $('jersey-input').click() })
+    $('jersey-empty').addEventListener('click', function () { $('jersey-input').click() })
     $('btn-generate').addEventListener('click', generate)
     $('btn-regenerate').addEventListener('click', regenerate)
     $('btn-use').addEventListener('click', useResult)
@@ -383,7 +488,7 @@
       state.teamName = text(result.teamName)
       $('player-name').textContent = state.name || '球员'
       $('player-team').textContent = state.teamName || '—'
-      $('portrait-sub').textContent = (state.name || '球员') + ' · 上传照片直接生成'
+      $('portrait-sub').textContent = (state.name || '球员') + ' · 上传单人照和球衣直接生成'
       show('state-loading', false)
       show('content', true)
       renderPrice(result)
@@ -400,6 +505,5 @@
 
   bind()
   renderPoses()
-  renderColors()
   init()
 })()

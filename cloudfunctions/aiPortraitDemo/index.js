@@ -983,14 +983,16 @@ exports.main = async function (event) {
     body.transparentOutput = true
     body.preserveOriginal = true
   }
-  // 卡面「AI 定妆照」：凭证由 webLoginApi 的 cardPortraitAi.prepare 签发（已先扣蜂蜜），
+  // 卡面「AI 形象照」：凭证由 webLoginApi 的 cardPortraitAi.prepare 签发（已先扣蜂蜜），
   // 这里只校验凭证归属并出透明成片；成片只写回该凭证，不入库、不碰登记会话。
+  // 参考图上传（单人照 + 球衣拼板）也走同一张卡面凭证，临时文件归属 card:<playerId>，
+  // 这样请求体只有几十字节，不受 HTTP 网关体积限制。
   let cardContext = null
-  if (String(body.action || '') === 'cardPortraitGenerate') {
-    if (!/^[a-f0-9]{64}$/.test(String(body.cardTicket || ''))) return reply(403, { success: false, error: 'AI 定妆照会话已失效，请回到页面重新生成' })
+  if (['cardPortraitGenerate', 'cardPortraitPrepareReference', 'cardPortraitCancelReference'].includes(String(body.action || ''))) {
+    if (!/^[a-f0-9]{64}$/.test(String(body.cardTicket || ''))) return reply(403, { success: false, error: 'AI 形象照会话已失效，请回到页面重新生成' })
     cardContext = await cardPortrait.verify(tcb.init({ env: tcb.SYMBOL_CURRENT_ENV, timeout: 6000 }).database(), body.cardTicket)
-    if (!cardContext) return reply(403, { success: false, error: 'AI 定妆照会话已失效，请回到页面重新生成' })
-    body.action = 'generate'
+    if (!cardContext) return reply(403, { success: false, error: 'AI 形象照会话已失效，请回到页面重新生成' })
+    body.action = { cardPortraitGenerate: 'generate', cardPortraitPrepareReference: 'prepareReference', cardPortraitCancelReference: 'cancelReference' }[body.action]
     body.transparentOutput = true
     body.preserveOriginal = true
   }
@@ -1035,17 +1037,19 @@ exports.main = async function (event) {
   }
 
   if (body.action === 'prepareReference' || body.action === 'cancelReference') {
-    if (!adminTool && !registrationContext) return reply(403, { success: false, error: '高清生图工具需要已验证会话' })
+    if (!adminTool && !registrationContext && !cardContext) return reply(403, { success: false, error: '高清生图工具需要已验证会话' })
     if (body.action === 'prepareReference' && rateLimited()) return reply(429, { success: false, error: '上传过于频繁，请稍后再试' })
     const secret = referenceSigningKey()
     if (!secret) return reply(503, { success: false, error: '高清上传暂不可用，请稍后重试' })
+    // 临时参考图按会话归属：后台 ''、登记会话 sessionId、卡面会话 card:<playerId>。
+    const referenceOwner = adminTool ? '' : registrationContext ? registrationContext.sessionId : 'card:' + cardContext.playerId
     try {
       const app = tcb.init({ env: tcb.SYMBOL_CURRENT_ENV, timeout: 15000 })
       if (body.action === 'cancelReference') {
-        await referenceUpload.cancel(app, secret, body.ticket, registrationContext ? registrationContext.sessionId : '')
+        await referenceUpload.cancel(app, secret, body.ticket, referenceOwner)
         return reply(200, { success: true })
       }
-      return reply(200, { success: true, data: await referenceUpload.initiate(app, secret, body.bytes, registrationContext ? registrationContext.sessionId : '') })
+      return reply(200, { success: true, data: await referenceUpload.initiate(app, secret, body.bytes, referenceOwner) })
     } catch (error) {
       return reply(400, { success: false, error: '参考图上传未完成，请重新选择照片后重试' })
     }

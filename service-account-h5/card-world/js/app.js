@@ -132,6 +132,7 @@
         (isMain ? '<span class="lib-card__badge">当前主卡</span>' : '') +
         '<div class="lib-card__btns">' +
         '<button type="button" class="btn btn--ghost lib-card__btn" data-edit="' + escapeHtml(player.id) + '">编辑卡面</button>' +
+        '<button type="button" class="btn btn--ghost lib-card__btn" data-photo="' + escapeHtml(player.id) + '">换形象照</button>' +
         '<button type="button" class="btn btn--ghost lib-card__btn" data-player="' + escapeHtml(player.id) + '"' + (isMain ? ' disabled' : '') + '>' +
         (isMain ? '已是主卡' : '设为主卡') + '</button>' +
         '</div>' +
@@ -140,6 +141,9 @@
     })
     Array.prototype.forEach.call(list.querySelectorAll('button[data-edit]'), function (button) {
       button.addEventListener('click', function () { gotoDesign(button.getAttribute('data-edit')) })
+    })
+    Array.prototype.forEach.call(list.querySelectorAll('button[data-photo]'), function (button) {
+      button.addEventListener('click', function () { gotoPortrait(button.getAttribute('data-photo')) })
     })
     Array.prototype.forEach.call(list.querySelectorAll('button[data-player]'), function (button) {
       button.addEventListener('click', function () { setMainCard(button.getAttribute('data-player'), button) })
@@ -187,6 +191,14 @@
 
   /* AI 形象照：直接进独立的 portrait.html 生成页，不再绕「球员登记 · 形象照」。
      扣费、凭证与卡面素材入库都在服务端，本页只负责跳转。 */
+  function gotoPortrait(playerId) {
+    var id = String(playerId || '')
+    if (!id) {
+      toast('还没有球员卡，先去足球世界签约')
+      return
+    }
+    location.href = './portrait.html?playerId=' + encodeURIComponent(id)
+  }
   function aiPortraitPlayerId() {
     if (state.main && !state.main.empty && state.main.playerId) return state.main.playerId
     if (state.main && !state.main.empty && state.main.id) return state.main.id
@@ -298,6 +310,8 @@
       document.getElementById('library-panel').scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
     $('btn-ai-portrait').addEventListener('click', openAiPortrait)
+    // 卡面页直接给「换形象照」入口：不用先点「编辑卡面」再找 AI。
+    $('btn-change-photo').addEventListener('click', openAiPortrait)
     $('weapp-fallback').addEventListener('click', function () { toast('请使用微信打开本页后进入小程序') })
   }
 

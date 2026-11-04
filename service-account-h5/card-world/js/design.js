@@ -295,6 +295,7 @@
     $('btn-retry').addEventListener('click', function () { init() })
     $('btn-ai-portrait').addEventListener('click', openAiPortrait)
     $('btn-edit-crop').addEventListener('click', focusCropPanel)
+    $('btn-change-photo').addEventListener('click', openAiPortrait)
     $('btn-ai-error').addEventListener('click', openAiPortrait)
     $('btn-back').addEventListener('click', function () { location.href = './index.html' })
     $('btn-save').addEventListener('click', saveCard)

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>我的球员卡 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261104-ai4" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai5" />
   <link rel="stylesheet" href="css/holo-cosmos.css?v=20261101-holo4" />
 </head>
 <body>
@@ -73,7 +73,8 @@
           <p class="hero__note" id="hero-note" hidden></p>
 
           <div class="actions">
-            <button type="button" class="btn btn--gold" id="btn-settings">设计卡面</button>
+            <button type="button" class="btn btn--gold" id="btn-settings">编辑卡面</button>
+            <button type="button" class="btn btn--ghost" id="btn-change-photo">换形象照</button>
             <button type="button" class="btn btn--ghost" id="btn-library">我的卡库</button>
           </div>
         </article>
@@ -85,7 +86,7 @@
             <h2>对背景或形象照不满意？</h2>
           </div>
           <p class="ai-panel__text">
-            点下面的按钮直接生成 <strong>AI 形象照</strong>：上传头像和球服、选好姿势就生成，
+            点下面的按钮直接生成 <strong>AI 形象照</strong>：上传你自己的单人照和球衣照片就生成，
             点「使用这张形象照」回来就把卡面上的形象照替换掉。
           </p>
           <button type="button" class="btn btn--gold ai-panel__btn" id="btn-ai-portrait">直接生成 AI 形象照</button>
@@ -140,8 +141,8 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="js/api.js?v=20261104-ai4"></script>
+  <script src="js/api.js?v=20261104-ai5"></script>
   <script src="js/holo.js?v=20261101-holo4"></script>
-  <script src="js/app.js?v=20261104-ai4"></script>
+  <script src="js/app.js?v=20261104-ai5"></script>
 </body>
 </html>

@@ -274,7 +274,6 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 
 .design-actions { display: flex; gap: 10px; margin-top: 16px; }
 .design-actions .btn { flex: 1; }
-.design-actions--single { margin-top: 12px; }
 
 /* 照片构图被「编辑构图」定位到时的短暂高亮，避免用户找不到滑块 */
 .panel.is-focused { box-shadow: 0 0 0 1px rgba(232, 197, 106, 0.6), 0 0 18px rgba(232, 197, 106, 0.25); }
@@ -357,21 +356,6 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .pose-option strong { font-size: 12px; font-weight: 600; }
 .pose-option small { font-size: 10px; color: var(--muted); line-height: 1.4; text-align: center; }
 .pose-option.is-active { border-color: rgba(232, 197, 106, 0.7); background: rgba(232, 197, 106, 0.12); }
-
-.color-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.color-option {
-  appearance: none;
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 12px 7px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--panel-line);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text);
-  font-size: 12px;
-}
-.color-option.is-active { border-color: rgba(232, 197, 106, 0.7); background: rgba(232, 197, 106, 0.12); }
-.color-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255, 255, 255, 0.25); }
-.color-dot--none { display: grid; place-items: center; color: var(--muted); font-size: 10px; line-height: 1; background: transparent; }
 
 .result-stage {
   margin-top: 12px;

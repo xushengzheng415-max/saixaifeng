@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>AI 形象照 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261104-ai4" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai5" />
 </head>
 <body>
   <div class="app">
@@ -14,7 +14,7 @@
       <img class="topbar__logo" src="assets/card-world-icon.jpg" alt="赛小蜂" />
       <div class="topbar__title">
         <strong>AI 形象照</strong>
-        <span id="portrait-sub">上传照片 · 选姿势 · 直接生成</span>
+        <span id="portrait-sub">上传单人照 · 上传球衣 · 直接生成</span>
       </div>
     </header>
 
@@ -43,41 +43,46 @@
           <p class="field__hint" id="player-hint">生成后点「使用这张形象照」，会直接成为这张球员卡的卡面形象照。</p>
         </article>
 
-        <!-- 参考照片 -->
+        <!-- 第 1 步：本人单人照片 -->
         <article class="panel ai-panel">
           <div class="ai-panel__head">
             <span class="ai-panel__badge">第 1 步</span>
-            <h2>上传参考照片</h2>
+            <h2>上传你自己的单人照片</h2>
           </div>
-          <p class="ai-panel__text">一张能看清脸的照片即可：光线均匀、单人、正对镜头。球衣可以另选颜色。</p>
+          <p class="ai-panel__text">一张能看清脸的单人照片即可：光线均匀、正对镜头；头肩照/半身照最好，不要全身远景。</p>
           <div class="upload">
-            <img class="upload__preview" id="photo-preview" alt="参考照片" hidden />
+            <img class="upload__preview" id="photo-preview" alt="单人照片" hidden />
             <div class="upload__empty" id="photo-empty">点这里选择照片</div>
             <input class="upload__input" type="file" id="photo-input" accept="image/*" />
           </div>
           <p class="ai-panel__note" id="photo-note" hidden></p>
         </article>
 
-        <!-- 姿势 -->
+        <!-- 第 2 步：球衣照片 -->
+        <article class="panel ai-panel">
+          <div class="ai-panel__head">
+            <span class="ai-panel__badge">第 2 步</span>
+            <h2>上传球衣照片</h2>
+          </div>
+          <p class="ai-panel__text">把球衣平铺拍一张正面照上传，AI 会按这张球衣的款式和颜色给形象照换装；球衣上的文字、号码由后期模板叠加，不要求拍清晰。</p>
+          <div class="upload">
+            <img class="upload__preview" id="jersey-preview" alt="球衣照片" hidden />
+            <div class="upload__empty" id="jersey-empty">点这里上传球衣照片</div>
+            <input class="upload__input" type="file" id="jersey-input" accept="image/*" />
+          </div>
+          <p class="ai-panel__note" id="jersey-note" hidden></p>
+        </article>
+
+        <!-- 第 3 步：姿势（可选） -->
         <article class="panel">
           <div class="panel__head">
-            <h2>第 2 步 · 姿势</h2>
-            <span class="hint">抱膀形象照</span>
+            <h2>第 3 步 · 姿势</h2>
+            <span class="hint">可不改</span>
           </div>
           <div class="pose-list" id="pose-list"></div>
         </article>
 
-        <!-- 球衣颜色 -->
-        <article class="panel">
-          <div class="panel__head">
-            <h2>第 3 步 · 球衣颜色</h2>
-            <span class="hint">可不选</span>
-          </div>
-          <div class="color-list" id="color-list"></div>
-          <p class="field__hint">不选就按参考照片里的球衣处理；选颜色时按纯色圆领球衣合成。</p>
-        </article>
-
-        <!-- 生成 -->
+        <!-- 第 4 步：生成 -->
         <article class="panel ai-panel" id="generate-panel">
           <div class="ai-panel__head">
             <span class="ai-panel__badge">生成</span>
@@ -106,7 +111,7 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="js/api.js?v=20261104-ai4"></script>
-  <script src="js/portrait.js?v=20261104-ai4"></script>
+  <script src="js/api.js?v=20261104-ai5"></script>
+  <script src="js/portrait.js?v=20261104-ai5"></script>
 </body>
 </html>
