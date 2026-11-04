@@ -131,7 +131,7 @@
         '<span class="lib-card__meta">' + escapeHtml(meta || '数据中心未提供位置') + '</span>' +
         (isMain ? '<span class="lib-card__badge">当前主卡</span>' : '') +
         '<div class="lib-card__btns">' +
-        '<button type="button" class="btn btn--ghost lib-card__btn" data-edit="' + escapeHtml(player.id) + '">编辑卡面</button>' +
+        '<button type="button" class="btn btn--ghost lib-card__btn" data-edit="' + escapeHtml(player.id) + '">编辑球员卡</button>' +
         '<button type="button" class="btn btn--ghost lib-card__btn" data-photo="' + escapeHtml(player.id) + '">换形象照</button>' +
         '<button type="button" class="btn btn--ghost lib-card__btn" data-player="' + escapeHtml(player.id) + '"' + (isMain ? ' disabled' : '') + '>' +
         (isMain ? '已是主卡' : '设为主卡') + '</button>' +

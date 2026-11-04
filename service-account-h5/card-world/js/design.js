@@ -127,7 +127,7 @@
   function handleError(error) {
     var code = (error && error.code) || ''
     if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') {
-      showError('该球员还没有标准形象照，先用「直接生成 AI 形象照」生成一张再回来设计卡面。', true)
+      showError('该球员还没有标准形象照，先用「直接生成 AI 形象照」生成一张再回来编辑球员卡。', true)
       return
     }
     if (code === 'PLAYER_CARD_BACKGROUND_LOCKED') { toast((error && error.message) || '该背景尚未解锁'); setPreviewState('背景未解锁', true); return }
@@ -352,7 +352,7 @@
       if (fallbackFrom) toast('原卡面背景超出当前卡级，已按' + BACKGROUNDS[currentRank].name + '预览，需要积分达标后才能保存')
     }).catch(function (error) {
       var code = (error && error.code) || ''
-      if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') { showError('该球员还没有标准形象照，先用「直接生成 AI 形象照」生成一张再回来设计卡面。', true); return }
+      if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') { showError('该球员还没有标准形象照，先用「直接生成 AI 形象照」生成一张再回来编辑球员卡。', true); return }
       if (code === 'PLAYER_CARD_FORBIDDEN') { showError('只能设计本人或已绑定孩子的球员卡'); return }
       showError((error && error.message) || '卡面读取失败，请稍后重试')
     })
