@@ -93,7 +93,24 @@ SHA-256 全部与本地一致（`ALL MATCH`）；`index.html` 7089、`design.htm
 重置回到居中、确认后退出取景并可「重新调整」、导出为裁剪图、球衣同样进入取景）；
 正式与测试端各 16 个文件重新发布，HTTP 回读 SHA-256 `ALL MATCH`。
 
-## 八、后续注意
+## 九、追加（同日）：换照片方式由入口决定，形象照页不再二次选择
+
+用户反馈「都已经是一键形象照了，怎么还有一个上传自己的照片」。原因：从编辑页「更换照片」选了
+「一键形象照」后进入 `portrait.html?mode=ai`，页内仍保留「上传自己的照片 / AI 生成形象照」两个页签。
+
+- 删除形象照页的页签与 `mode-upload` / `mode-ai` 切换，`setMode` 只按入口 `mode` 显示一种流程：
+  `mode=upload` 显示「上传自己的照片（自动抠图）」，其余（含卡面页旧链接）显示「一键形象照」。
+- 顶部副标题与球员说明卡按方式分别改写，不再出现「两种方式都能换」的说明与另一方式的流程。
+- 卡面页「换形象照」改为进编辑页并带 `photo=1`，进页后自动弹出「更换照片」的两个选项；
+  「直接生成 AI 形象照」固定带 `mode=ai`；编辑页「更换照片」两个选项分别带 `mode=upload` / `mode=ai`。
+- 清理 `.mode-tabs` / `.mode-tab` 样式；`portrait.html`、`js/portrait.js`、`js/app.js`、`js/design.js`、
+  `css/app.css`、`index.html`、`design.html` 版本升到 `20261104-ai9`。
+
+验证：`node --check` `app.js`/`design.js`/`portrait.js` 通过；6 套测试全通过（新增「形象照页不再有方式切换标签」
+「方式只由入口 mode 决定」「页内只显示一种流程」「卡面页换形象照进编辑页并弹更换照片」「编辑页支持 photo=1」
+等断言）；两端 16 文件重新发布，HTTP 回读 SHA-256 `ALL MATCH`，并线上回读确认两端均无页签、版本为 `ai9`。
+
+## 十、后续注意
 
 - `service-account-h5/card-world/js/dynamic-card-renderer.js` 是 `service-account-h5/dynamic-card-renderer.js`
   的字节一致副本（SHA-256 相同），共享渲染器改动后必须同步副本再发布。
