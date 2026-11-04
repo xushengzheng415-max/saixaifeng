@@ -4234,7 +4234,10 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
       // 规程识别包含文件解析和大模型抽取，不能使用 SDK 默认的短超时。
       // 保持在 parseTournamentRegulations 的 240 秒执行上限之外留出返回余量，
       // 让中转层能够拿到并返回明确错误，而不是提前报 ESOCKETTIMEDOUT。
-      ...(functionName === 'parseTournamentRegulations' ? { timeout: 270000 } : {})
+      ...(functionName === 'parseTournamentRegulations' ? { timeout: 270000 } : {}),
+      // 混元生图正常 15–40 秒，SDK 默认超时会让中转层在 15 秒就报 ESOCKETTIMEDOUT，
+      // 生图结果被丢弃、前端只能看到失败；这里给生图单独留足余量（云函数自身超时另行限制）。
+      ...(functionName === 'generateAIImage' ? { timeout: 180000 } : {})
     })
     console.log('[webApi] 云函数调用成功:', functionName, 'result:', result.result ? '有返回' : '无返回')
     const relayResult = result.result || { success: false, error: '云函数无返回结果' }
