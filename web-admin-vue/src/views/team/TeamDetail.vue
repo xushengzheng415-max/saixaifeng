@@ -83,12 +83,12 @@
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
-          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="!canManageTeamAccess"> · 当前赛事未授权</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffDisplayRows.length }} 人<span v-if="!canManageTeamAccess"> · 当前赛事未授权</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffDisplayRows" v-loading="loading || teamAccessLoading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table staff-roster-table">
             <el-table-column label="头像" width="44" align="center"><template #default="{ row }"><PlayerAvatar :player="row" class="player-avatar-img" /></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="76" />
             <el-table-column label="球衣名" min-width="84"><template #default="{ row }">{{ row._accountHolderRow ? '—' : displayJerseyName(row) }}</template></el-table-column>
-            <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag><el-tag v-if="row._accountHolderRow" size="small" type="info" class="dual-role-tag">非编制工作人员</el-tag></template></el-table-column>
+            <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag></template></el-table-column>
             <el-table-column label="出生日期" min-width="98"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="籍贯" min-width="76" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || resolveNativePlace(row.idCard || row.idNumber)?.nativePlace || '—' }}</template></el-table-column>
             <el-table-column v-if="sourceTournamentId" label="手机号" min-width="108"><template #default="{ row }">{{ teamStaffPhone(row, staffAccount(row)) || '未填写' }}<small v-if="canManageTeamAccess && staffAccount(row)" class="staff-account-phone">{{ staffAccountLabel(row) }}</small></template></el-table-column>

@@ -148,6 +148,7 @@ function userOwnsTournament(tournament, identity, actorOrgId) {
 }
 
 const TEAM_ACCESS_ROLE_LABELS = {
+  account_owner: '账号持有人',
   team_leader: '领队',
   head_coach: '主教练',
   doctor: '队医',
@@ -326,10 +327,13 @@ async function listTeamAccess(event, identity) {
     const fallbackName = text(context.team.ownerName || context.team.contactName || context.team.managerName, 40)
     if (fallbackName || fallbackPhone) personnel = [{ role:'team_leader', roleLabel:'领队', name:fallbackName, phone:fallbackPhone, accountType:'owner' }]
   }
-  const memberships = await safeGet('team_memberships', { teamId:context.teamId }, 100)
+  const directory=require('./teamAccountDirectory.cjs')
+  const memberships = await directory.readRows(db,'team_memberships',{teamId:context.teamId})
   const pendingInvites = await safeGet('team_invitations', { teamId:context.teamId, type:'team_member', status:'active' }, 100)
   const ownerId = String(context.team.ownerId || context.team.ownerUserId || context.team.claimedByUserId || '')
-  const primary = personnel.find(item => item.accountType === 'owner') || personnel[0] || null
+  const completed=await directory.complete({db,team:context.team,teamId:context.teamId,personnel,memberships})
+  personnel=completed.personnel
+  const primary=personnel.find(item=>item.role===completed.actualOwnerRole)||personnel.find(item=>item.accountType==='owner')||personnel[0]||null
   const rows = []
   for (const item of personnel) {
     const role = String(item.role || '')
@@ -338,7 +342,7 @@ async function listTeamAccess(event, identity) {
     const user = await userByPhone(phone)
     const membership = user ? memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id)) : null
     const pending = pendingInvites.find(row => String(row.inviteePhone || '') === phone)
-    const isPrimary = Boolean(primary && primary.role === role)
+    const isPrimary = Boolean(primary && primary.role === role && normalizeClaimPhone(primary.phone) === phone)
     const transferPending = Boolean(ownerTransfer && normalizeClaimPhone(ownerTransfer.targetPhone || ownerTransfer.inviteePhone) === phone)
     let status = isPrimary ? '待认领' : '待授权'
     if (transferPending) status = '待接收主账号'
@@ -346,7 +350,7 @@ async function listTeamAccess(event, identity) {
     else if (membership && String(membership.status || 'accepted') === 'accepted') status = '已加入'
     else if (pending) status = '待登录'
     const actualOwner = Boolean(user && ownerId && String(user._id) === ownerId)
-    rows.push({ role, staffId:staffAccountId(role), roleLabel:TEAM_ACCESS_ROLE_LABELS[role] || text(item.roleLabel, 40) || '工作人员', name:text(item.name, 40), phone, accountType:transferPending ? 'pending_owner' : (actualOwner || (!ownerId && isPrimary) ? 'owner' : 'member'), permissions:actualOwner || isPrimary ? ['team.view','team.manage'] : teamAccountPermissions(membership && ['active','accepted','claimed'].includes(String(membership.status || '').toLowerCase()) ? membership.permissions : pending ? pending.permissions : item.permissions), status })
+    rows.push({ role, staffId:staffAccountId(role), roleLabel:TEAM_ACCESS_ROLE_LABELS[role] || text(item.roleLabel, 40) || '工作人员', name:text(item.name, 40), phone, accountType:transferPending ? 'pending_owner' : (actualOwner || (!ownerId && isPrimary) ? 'owner' : 'member'), permissions:actualOwner || (!ownerId && isPrimary) ? ['team.view','team.manage'] : teamAccountPermissions(membership && ['active','accepted','claimed'].includes(String(membership.status || '').toLowerCase()) ? membership.permissions : pending ? pending.permissions : item.permissions), status })
   }
   return { success:true, teamId:context.teamId, primaryRole:primary ? String(primary.role || '') : '', personnel:rows, ownerTransferPending:Boolean(ownerTransfer) }
 }
