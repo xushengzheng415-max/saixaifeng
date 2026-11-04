@@ -34,7 +34,14 @@ function response(body) {
     const builder=page.getByRole('dialog',{name:'新建教程',exact:true})
     await builder.getByRole('textbox').nth(0).fill('球队上传图片操作教程（离线验收）')
     await builder.getByRole('textbox',{name:'步骤描述',exact:true}).fill('第一步：选择已处理隐私的截图。')
-    await builder.locator('input[type=file]').setInputFiles(fixtureFile)
+    const pasteScreenshot = async target => {
+      await target.focus()
+      await target.evaluate(async (element, data) => { const blob=await (await fetch(data)).blob(), file=new File([blob],'clipboard-screenshot.png',{type:'image/png'}), transfer=new DataTransfer();transfer.items.add(file);element.dispatchEvent(new ClipboardEvent('paste',{clipboardData:transfer,bubbles:true,cancelable:true})) },fixture)
+    }
+    const plainPasteAllowed = await builder.getByRole('textbox',{name:'步骤描述',exact:true}).evaluate(element => { const transfer=new DataTransfer();transfer.setData('text/plain','普通文字');const e=new ClipboardEvent('paste',{clipboardData:transfer,bubbles:true,cancelable:true});element.dispatchEvent(e);return !e.defaultPrevented })
+    assert.equal(plainPasteAllowed,true,'plain text paste remains native')
+    await pasteScreenshot(builder.getByRole('group',{name:'步骤截图粘贴区',exact:true}))
+    assert.equal(await builder.getByRole('textbox',{name:'步骤描述',exact:true}).inputValue(),'第一步：选择已处理隐私的截图。')
     let editor=page.getByRole('dialog',{name:'编辑步骤截图',exact:true})
     await editor.getByRole('button',{name:'一键遮隐私',exact:true}).click()
     await editor.locator('.image-status').filter({hasText:/[1-9][0-9]* 处遮盖/}).waitFor({timeout:90000})
@@ -49,7 +56,7 @@ function response(body) {
     const pixels=await page.evaluate(async(data)=>{const i=new Image();i.src=data;await i.decode();const c=document.createElement('canvas');c.width=i.width;c.height=i.height;const x=c.getContext('2d');x.drawImage(i,0,0);const phone=x.getImageData(220,235,350,28).data,logo=x.getImageData(80,170,45,45).data,all=x.getImageData(0,0,c.width,c.height).data;let grey=0,logoGrey=0,red=0;for(let k=0;k<phone.length;k+=4)if(phone[k]>212&&phone[k]<242&&Math.abs(phone[k]-phone[k+1])<12&&Math.abs(phone[k+1]-phone[k+2])<12)grey++;for(let k=0;k<logo.length;k+=4)if(logo[k]>212&&logo[k]<242&&Math.abs(logo[k]-logo[k+1])<12)logoGrey++;for(let k=0;k<all.length;k+=4)if(all[k]>140&&all[k]>all[k+1]*1.6&&all[k]>all[k+2]*1.6)red++;return {grey,logoGrey,red}},uploads[0])
     assert.ok(pixels.grey>350*28*.8,'phone text should be covered');assert.ok(pixels.logoGrey>45*45*.8,'coloured logo candidate should be covered');assert.ok(pixels.red>500,'annotations are flattened into output')
     await builder.getByRole('button',{name:'添加下一步',exact:true}).click();await builder.getByRole('textbox',{name:'步骤描述',exact:true}).fill('第二步：点击保存。')
-    await builder.locator('input[type=file]').setInputFiles(fixtureFile);editor=page.getByRole('dialog',{name:'编辑步骤截图',exact:true});await editor.getByRole('button',{name:'沿用上一步',exact:true}).click();await editor.getByText('已核对隐私区域',{exact:true}).click();await editor.getByRole('button',{name:'使用处理后图片',exact:true}).click();await editor.waitFor({state:'hidden'});assert.equal(uploads.length,2)
+    await pasteScreenshot(builder.getByRole('textbox').nth(0));assert.equal(await builder.getByRole('textbox').nth(0).inputValue(),'球队上传图片操作教程（离线验收）');editor=page.getByRole('dialog',{name:'编辑步骤截图',exact:true});await editor.getByRole('button',{name:'沿用上一步',exact:true}).click();await editor.getByText('已核对隐私区域',{exact:true}).click();await editor.getByRole('button',{name:'使用处理后图片',exact:true}).click();await editor.waitFor({state:'hidden'});assert.equal(uploads.length,2)
     await page.screenshot({path:path.join(out,'step-builder.png')})
     await builder.getByRole('button',{name:'上一步',exact:true}).click();assert.equal(await builder.getByRole('textbox',{name:'步骤描述',exact:true}).inputValue(),'第一步：选择已处理隐私的截图。')
     await builder.getByRole('button',{name:'发布教程',exact:true}).click();await page.getByRole('button',{name:'发布',exact:true}).click()
@@ -61,6 +68,6 @@ function response(body) {
     await page.screenshot({path:path.join(out,'share-dialog.png')});await share.getByRole('button',{name:'关闭',exact:true}).click();await share.waitFor({state:'hidden'})
     await page.getByRole('button',{name:'编辑',exact:true}).click();await page.setViewportSize({width:390,height:844});const mobileBuilder=page.getByRole('dialog',{name:'编辑教程',exact:true});assert.equal(await mobileBuilder.evaluate(d=>d.scrollWidth>d.clientWidth+1),false);await page.screenshot({path:path.join(out,'builder-mobile.png'),fullPage:true})
     assert.deepEqual(errors,[]);assert.deepEqual(external,[])
-    fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({status:'passed',pixels,qr:decoded.data,uploads:uploads.length,externalRequests:external,errors},null,2));console.log('PASS: real local Chinese/English OCR, phone/logo masking, arrows/boxes, undo/redo, no original upload, reuse, two-step publication, clean payload, decoded poster QR, download and mobile layout')
+    fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({status:'passed',pixels,qr:decoded.data,uploads:uploads.length,externalRequests:external,errors},null,2));console.log('PASS: screenshot-region paste, title-field paste, native text paste preserved, real local Chinese/English OCR, phone/logo masking, arrows/boxes, undo/redo, no original upload, reuse, two-step publication, clean payload, decoded poster QR, download and mobile layout')
   } finally {if(browser)await browser.close();await server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})
