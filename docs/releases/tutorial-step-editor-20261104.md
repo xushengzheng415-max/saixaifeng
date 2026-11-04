@@ -33,4 +33,23 @@
 
 ## 发布边界
 
-平台源码仅发布本次变更，继续沿用`codex/platform-ops`和正式平台发布流程，保留其他任务的球员卡在途修改。服务号正式/测试仅更新`tutorial.html`及`tutorial.js`，从各自线上文件差量生成并分别回读。未重新部署云函数、未改数据库或小程序。实际发布版本及HTTP/摘要结果在收尾补记。
+平台源码仅发布本次变更，继续沿用`codex/platform-ops`和正式平台发布流程，保留其他任务的球员卡在途修改。服务号正式/测试仅更新`tutorial.html`及`tutorial.js`，从各自线上文件差量生成并分别回读。未重新部署云函数、未改数据库或小程序。发布结果见下节。
+
+
+## 已发布与回读
+
+- 功能源码：`bde961ab`，分支`codex/platform-ops`。平台正式release：`20261104075745-bde961ab`；`npm ci`、生产构建、独立边界检查通过，56个站点文件SHA-256全部回读一致。
+- 正式与测试服务号分别只更新`tutorial.html`、`tutorial.js`，共4个资源HTTP200、SHA-256与各自实际上传文件一致。脚本标记为`20261104-steps2`。平台没有另外登记的独立测试域名，未猜测或新建目标。
+- 使用正式平台页面及正式自托管识别资源再次运行完整截图编辑与海报验证，通过。其业务API在独立浏览器会话中拦截为模拟数据，实际OCR和海报编码/下载没有模拟；没有写入生产教程或客户反馈，也未通知任何客户。
+- 原图上传次数为0；只有两张处理后JPEG进入上传请求。遮盖像素、红色标注像素和海报二维码反解均通过，外部识别请求为0、页面运行错误为0。二维码值为验收用教程ID，不是正式对外教程。
+- 识别资源与库的SHA记录已核对，核心实际版本6.1.2；未因这次前端依赖增加而更新任何云函数依赖、配置、数据库或小程序。
+- 其他任务的球员卡文件和共享导航在发布前隔离，发布后已逐字节恢复，未随本次发布；隔离stash保留作备份。
+
+复核入口：`TUTORIAL_TEST_BASE_URL=https://pingtai.sxffootball.cn node tools/test-tutorial-image-workflow.cjs`（Windows PowerShell先设置该环境变量）。正式静态资源回读证据位于`work/tutorial-step-editor-20261104/h5-readback.json`。Git提交、静态发布与上述模拟业务API验证分开记录，不把它们描述成负责人真实会话下上传/保存或微信真机转发已验收。
+
+| 端口资源 | SHA-256 |
+| --- | --- |
+| `service-account-h5/tutorial.html` | `0e201b67890ead6c34badc0cb8517a2f362144e926ff138244b87645443c77ba` |
+| `service-account-h5/tutorial.js` | `b7a6e0db8b9ff0bf7c58dec66cbed10ced01f80ce9ad3905acb68f76827801a7` |
+| `preview/service-account-h5/tutorial.html` | `0e201b67890ead6c34badc0cb8517a2f362144e926ff138244b87645443c77ba` |
+| `preview/service-account-h5/tutorial.js` | `b7a6e0db8b9ff0bf7c58dec66cbed10ced01f80ce9ad3905acb68f76827801a7` |

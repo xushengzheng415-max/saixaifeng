@@ -2,6 +2,8 @@
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), { pathToFileURL } = require('node:url')
 const { chromium } = require('./lib/load-playwright.cjs')
 const jsQR = require('../platform-admin-vue/node_modules/jsqr')
+const baseUrl = process.env.TUTORIAL_TEST_BASE_URL || 'http://127.0.0.1:5199'
+const allowedHost = new URL(baseUrl).hostname
 const root = path.resolve(__dirname,'..'), out = path.join(root,'output/tutorial-image-workflow-20261104')
 const id = 'tutorial_22222222-2222-4222-8222-222222222222', rows = [], uploads = [], saved = [], external = [], errors = []
 function response(body) {
@@ -23,9 +25,9 @@ function response(body) {
     const ctx=await browser.newContext({viewport:{width:1440,height:1100}})
     await ctx.addInitScript(()=>{localStorage.setItem('platformAuthToken','offline-qa');localStorage.setItem('platformSession',JSON.stringify({userId:'platform-owner',userName:'平台负责人',user:{_id:'platform-owner',isPlatformOwner:true},loginAt:Date.now()}));sessionStorage.setItem('sxfPlatformAuthContext','platform')})
     await ctx.route('**/webLoginApi',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(response(route.request().postDataJSON()))}))
-    await ctx.route('**/*',route=>{const u=new URL(route.request().url());if(!['127.0.0.1','localhost'].includes(u.hostname) && !u.hostname.includes('tcloudbase.com')){external.push(u.hostname);return route.abort()};return route.fallback()})
+    await ctx.route('**/*',route=>{const u=new URL(route.request().url());if(!['127.0.0.1','localhost',allowedHost].includes(u.hostname) && !u.hostname.includes('tcloudbase.com')){external.push(u.hostname);return route.abort()};return route.fallback()})
     const page=await ctx.newPage();page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(e.message))
-    await page.goto('http://127.0.0.1:5199/#/tournament-center-admin?section=tutorials')
+    await page.goto(baseUrl+'/#/tournament-center-admin?section=tutorials')
     const fixture=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1200;c.height=800;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,1200,800);x.fillStyle='#f2f5f3';x.fillRect(0,0,1200,80);x.fillStyle='#152d20';x.font='bold 34px "Microsoft YaHei"';x.fillText('球员资料',40,52);x.fillStyle='#176b43';x.fillRect(55,145,95,95);x.fillStyle='#fff';x.font='bold 34px Arial';x.fillText('FC',78,205);x.fillStyle='#151515';x.font='32px "Microsoft YaHei"';x.fillText('姓名：张三',220,185);x.fillText('电话：13812345678',220,265);x.fillText('郑州测试足球队',220,345);x.fillStyle='#176b43';x.fillRect(870,620,220,66);x.fillStyle='#fff';x.fillText('保存',947,664);return c.toDataURL('image/png')})
     const fixtureFile={name:'offline-private-fixture.png',mimeType:'image/png',buffer:Buffer.from(fixture.split(',')[1],'base64')}
     await page.getByRole('button',{name:'新建教程',exact:true}).click()
