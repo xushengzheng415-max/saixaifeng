@@ -207,15 +207,6 @@
     return first ? (first.id || first.playerId || '') : ''
   }
 
-  function openAiPortrait() {
-    var playerId = aiPortraitPlayerId()
-    if (!playerId) {
-      toast('还没有可生成的球员卡，先去足球世界签约')
-      return
-    }
-    location.href = './portrait.html?playerId=' + encodeURIComponent(playerId) + '&mode=ai'
-  }
-
   function loadScript(src) {
     return new Promise(function (resolve, reject) {
       var script = document.createElement('script')
@@ -310,7 +301,6 @@
     $('btn-library').addEventListener('click', function () {
       document.getElementById('library-panel').scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
-    $('btn-ai-portrait').addEventListener('click', openAiPortrait)
     /* 换形象照：进编辑球员卡并直接弹出「更换照片」（相册上传或拍摄 / 一键形象照），
        页内不再让用户二次选方式。 */
     $('btn-change-photo').addEventListener('click', function () { gotoPortrait(aiPortraitPlayerId()) })
