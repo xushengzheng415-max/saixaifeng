@@ -1,0 +1,22 @@
+{
+  "function": "getMiniWorkspace",
+  "changedFiles": [
+    "tacticsFree.cjs"
+  ],
+  "rulesSHA256": "437164e1318a5d485108288b37d7aeb7a1cfcc52ef8ba80a8a362e1682c02fab",
+  "preservedFiles": 6031,
+  "indexAndDependenciesPreserved": true,
+  "status": "Active",
+  "availableStatus": "Available",
+  "runtime": "Nodejs18.15",
+  "memoryMB": 512,
+  "timeoutSeconds": 150,
+  "installDependency": "FALSE",
+  "nativeVersion": "1.2.44",
+  "nativeUpload": "developer-upload-succeeded",
+  "nativeFormal": "not-submitted-or-published",
+  "nativeExperience": "not-set",
+  "realDatabaseWrites": false,
+  "tests": "legacy plus restore/load/discard/account/team scope, temporary names and red/blue trail save/read pass",
+  "nativeVerification": "isolated saved fixture restored; Canvas2D, temporary label and red/blue strokes rendered; safe-area state 714x354 verified; final screenshot automation timed out"
+}
