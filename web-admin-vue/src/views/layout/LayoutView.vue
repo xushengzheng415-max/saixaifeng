@@ -209,6 +209,7 @@
       </aside>
 
       <section class="workspace">
+        <TabletNavigation v-if="!usesWorkspaceShell && usesEmbeddedPageHeader" :items="currentNavItems" :title="currentPageTitle" :active-path="route.path" :active-resolver="isItemActive" @navigate="handleNavClick" />
         <!-- 顶部工具栏 -->
         <header v-if="usesWorkspaceShell" class="workspace-shell-header">
           <button class="product-brand" type="button" aria-label="返回赛事空间" @click="router.push('/tournament-space')">
@@ -241,6 +242,7 @@
         </header>
         <header v-else-if="!usesEmbeddedPageHeader" class="top-header">
           <div class="header-left">
+            <TabletNavigation :items="currentNavItems" :title="currentPageTitle" :active-path="route.path" :active-resolver="isItemActive" @navigate="handleNavClick" />
             <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" link type="primary" @click="returnToTournamentSpace">返回赛事空间</el-button>
             <span class="page-title">{{ currentPageTitle }}</span>
           </div>
@@ -302,6 +304,7 @@
 </template>
 
 <script setup>
+import TabletNavigation from '../../components/TabletNavigation.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { tutorialForPath } from '../../utils/operationTutorials'
