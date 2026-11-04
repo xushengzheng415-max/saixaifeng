@@ -912,6 +912,10 @@ export function updateDivisionSubstitutionRules(divisionId, data = {}) {
   return callFunctionHTTP('updateDivisionSubstitutionRules', { divisionId, ...data })
 }
 
+export function updateDivisionExecutionRules(divisionId, data = {}) {
+  return callFunctionHTTP('updateDivisionExecutionRules', { divisionId, ...data })
+}
+
 export async function getPublicTournamentCenter() {
   return callFunctionHTTP('publicTournamentCenter', {})
 }

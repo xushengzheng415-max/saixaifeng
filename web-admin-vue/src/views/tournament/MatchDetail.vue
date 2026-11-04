@@ -1140,7 +1140,7 @@
 </template>
 
 <script setup>
-import { resolveSubstitutePlayerLimit } from '../../utils/lineupBenchLimit.js'
+import { resolveMatchSubstitutePlayerLimit } from '../../utils/lineupBenchLimit.js'
 import MatchDecision from '../../components/match/MatchDecision.vue'
 import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
@@ -1770,13 +1770,7 @@ async function loadTournamentName(tid, divisionId = '') {
       substitutionTournament.value = tournament
       tournamentMatchFormat.value = division?.matchFormat || tournament.matchFormat || ''
       const playerCount = Number.parseInt(String(division?.matchFormat || tournamentMatchFormat.value || tournament.matchFormat || ''), 10)
-      substitutePlayerLimit.value = resolveSubstitutePlayerLimit(
-        playerCount,
-        division,
-        division?.publishedRegulationsSnapshot,
-        division?.rulesSnapshot,
-        tournament
-      )
+      substitutePlayerLimit.value = resolveMatchSubstitutePlayerLimit(playerCount, match.value, division || {}, tournament)
     }
   } catch (e) {
     console.warn('加载赛事名称失败:', e)

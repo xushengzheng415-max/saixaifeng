@@ -18,3 +18,22 @@ export function resolveSubstitutePlayerLimit(playerCount, ...sources) {
   }
   return Number(playerCount) === 8 ? 8 : null
 }
+
+export function resolveMatchSubstitutePlayerLimit(playerCount, match = {}, division = {}, tournament = {}) {
+  const fields = ['benchTotalLimit', 'benchPlayerLimit']
+  const hasBench = row => row && fields.some(field => Object.hasOwn(row.regulationDetails || row, field))
+  const started = ['ongoing','in_progress','live','started','halftime','completed','finished'].includes(String(match.status || '').toLowerCase())
+    || Boolean(match.refereeClockStartedAt || match.actualKickoffAt || match.refereeRecordLocked)
+  if (!started) {
+    const active = [division.activeRulesSnapshot, division.rulesSnapshot, division].find(hasBench) || division
+    return resolveSubstitutePlayerLimit(playerCount, active, tournament)
+  }
+  const time = value => new Date(value || 0).getTime()
+  const kickoff = time(match.refereeStartedAt || match.refereeClockStartedAt || match.actualKickoffAt || match.startedAt)
+  const history = (division.rulesHistory || []).filter(row => hasBench(row.snapshot)
+    && (match.rulesVersion && String(row.version) === String(match.rulesVersion) || kickoff > 0 && time(row.revisedAt) >= kickoff))
+    .sort((a,b) => time(a.revisedAt) - time(b.revisedAt))[0]?.snapshot
+  const frozen = [match.rulesSnapshot, match.publishedRegulationsSnapshot, match.substitutionRulesSnapshot, history].find(hasBench)
+  // 已开赛场次只读已有快照/历史；缺失时使用原有默认值，不套用后改的新规程。
+  return resolveSubstitutePlayerLimit(playerCount, frozen)
+}
