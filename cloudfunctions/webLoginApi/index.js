@@ -6641,6 +6641,8 @@ exports.main = async (event, context) => {
           : await center.handleFanSupport(params)
         break
       }
+      case 'serviceTutorialGet':
+        result = await require('./serviceTutorial.cjs')(cloud, params); break
       case 'servicePrivateOAuthUrl':
       case 'servicePrivateOAuth':
       case 'servicePrivateOverview':

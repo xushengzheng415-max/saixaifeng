@@ -3,6 +3,7 @@ const crypto = require('crypto')
 const https = require('https')
 const customerProfiles = require('./customerProfile.cjs')
 const platformArchive = require('./platformArchive.cjs')
+const tutorials = require('./tutorials.cjs')
 
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 
@@ -1186,6 +1187,7 @@ function feedbackRow(row) {
     serviceAccountOpenId: String(row.serviceAccountOpenId || ''),
     reply: String(row.reply || ''),
     replyAt: row.replyAt || null,
+    replyTutorials: row.replyTutorials || [],
     replyBy: String(row.replyBy || ''),
     createTime: row.createTime || null,
     firstHandledAt: row.firstHandledAt || null,
@@ -1354,7 +1356,9 @@ async function serviceFeedbackReply(db, params, user) {
   let existing = null
   try { existing = firstRecord((await db.collection('service_feedback').doc(feedbackId).get()).data) } catch { existing = null }
   if (!existing) return { success: false, error: '反馈不存在或已删除' }
+  const replyTutorials = await tutorials.references(db, params.tutorialIds || [])
   const patch = {
+    replyTutorials,
     reply,
     replyAt: db.serverDate(),
     replyBy: cleanText(user._id, 64),
@@ -1387,6 +1391,8 @@ exports.main = async event => {
     await requirePlatformOwner(db, user)
 
     const action = params.action || 'overview'
+    if (action === 'tutorialList') return await tutorials.list(db, params, cloud)
+    if (action === 'tutorialSave') return await tutorials.save(db, params, user)
     if (action === 'overview') return await getOverview(db)
     if (action === 'getCustomerProfile') return await customerProfiles.getCustomerProfile(db, params)
     if (action === 'setCustomerAssetArchive') return await platformArchive.setCustomerAssetArchive(db, params, user)

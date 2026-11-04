@@ -2115,3 +2115,8 @@ dataCenter 已差量发布：先下载线上包，仅覆盖 `shared/awards.cjs`�
 - **发布**：`sxf-cloud.ps1 football run hosting deploy desktop-windows/release/publish-0.2.6 desktop/windows --entry latest.json --verify`，2 个文件上传并通过一致性校验；未改动网页、H5、小程序、云函数或环境配置。线上 `latest.json` 回读版本 0.2.6、字节 122,430,507、SHA-256 与本地一致；完整回下载复核一致；`probe-published-updates.cjs --expect-feed=0.2.6` 正式与测试通道均 passed。
 - **约束**：PC 测试版（`/preview/admin/`）发布前后必须跑 `node scripts/smoke.cjs --preview` 与 `node scripts/smoke.cjs`，两通道 8 项通过才算网页与客户端匹配，已写入 `desktop-windows/README.md`。
 - **待办**：已安装 0.2.5 的机器需「检查更新 → 立即更新」装到 0.2.6 后，测试版登录页装饰才恢复；真人扫码与业务写操作仍需测试账号验收。详见 `docs/releases/windows-client-0.2.6-20261031.md`。
+
+
+## 2026-11-04 教程知识库与反馈引用（本地完成，未发布）
+
+平台新增教程维护、图文步骤、草稿与发布快照、反馈引用；服务号反馈回复展示教程链接并提供手机阅读页。本地构建、鉴权及业务测试、浏览器流程验证通过。尚未创建生产集合、提交推送或发布；共享函数与服务号发布待当前任务授权。入口、验证及准确发布范围见 [发布记录](releases/tutorial-library-20261104.md)。

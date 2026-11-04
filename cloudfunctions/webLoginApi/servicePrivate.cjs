@@ -174,6 +174,7 @@ async function notifyFeedback(doc){
       status:String(row.status||'pending'),
       reply:String(row.reply||''),
       replyAt:row.replyAt||null,
+      replyTutorials:(row.replyTutorials||[]).map(t=>({id:String(t.id||''),title:String(t.title||'操作教程')})),
       createTime:row.createTime||null
     }))}
   }

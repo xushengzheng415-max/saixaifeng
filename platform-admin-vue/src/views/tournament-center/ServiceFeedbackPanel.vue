@@ -82,10 +82,13 @@
         <div v-if="current.reply" class="fb-reply-block">
           <div class="fb-reply-head"><strong>已回复用户</strong><small>{{ formatTime(current.replyAt) }}</small></div>
           <p class="fb-reply-text">{{ current.reply }}</p>
+          <a v-for="t in current.replyTutorials || []" :key="t.id" :href="tutorialLink(t.id)" target="_blank" rel="noopener noreferrer" class="fb-tutorial-link">{{ t.title }}</a>
         </div>
 
         <el-form label-position="top" class="fb-form">
-          <el-form-item :label="'回复用户（通过服务号模板消息推送给反馈人，最长500字）'">
+          <div class="fb-tutorial-actions"><strong>操作教程</strong><el-button link type="primary" @click="openTutorialPicker">引用教程</el-button><el-button link @click="tutorialEditor.open(null, {}, current.content)">新建教程</el-button></div>
+          <div v-if="replyTutorials.length" class="fb-tutorial-tags"><el-tag v-for="t in replyTutorials" :key="t.id" closable @close="replyTutorials = replyTutorials.filter(v => v.id !== t.id)">{{ t.title }}</el-tag></div>
+          <el-form-item :label="'回复用户（最长500字）'">
             <el-input v-model.trim="replyText" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="输入回复内容，提交后将通过服务号通知反馈人查看" />
           </el-form-item>
         </el-form>
@@ -97,6 +100,18 @@
         <el-button type="success" :loading="replying" @click="submitReply">回复并通知用户</el-button>
       </template>
     </el-drawer>
+    <el-dialog v-model="pickerVisible" title="引用教程" width="min(660px, 94vw)">
+      <div class="fb-tutorial-actions"><el-input v-model="tutorialKeyword" clearable placeholder="搜索已发布教程" @keyup.enter="searchTutorials" @clear="searchTutorials" /><el-button @click="searchTutorials">查询</el-button></div>
+      <el-alert v-if="tutorialError" :title="tutorialError" type="error" :closable="false"><el-button link @click="loadTutorials">重新加载</el-button></el-alert>
+      <el-table v-loading="tutorialLoading" :data="tutorialRows" row-key="_id">
+        <el-table-column label="教程" min-width="200"><template #default="{ row }">{{ row.published.title }}</template></el-table-column>
+        <el-table-column label="端口" width="135"><template #default="{ row }">{{ row.published.audience }}</template></el-table-column>
+        <el-table-column label="操作" width="125"><template #default="{ row }"><el-button link @click="openTutorial(row._id)">预览</el-button><el-button link type="primary" :disabled="replyTutorials.some(t => t.id === row._id) || replyTutorials.length >= 3" @click="attachTutorial({ id: row._id, title: row.published.title })">引用</el-button></template></el-table-column>
+        <template #empty><el-empty description="暂无可引用的已发布教程" :image-size="60" /></template>
+      </el-table>
+      <el-pagination v-if="tutorialTotal > 20" v-model:current-page="tutorialPage" :page-size="20" :total="tutorialTotal" layout="prev, pager, next" @current-change="loadTutorials" />
+    </el-dialog>
+    <TutorialEditor ref="tutorialEditor" @saved="tutorialSaved" />
   </section>
 </template>
 
@@ -105,6 +120,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Refresh, Search } from '@element-plus/icons-vue'
 import { callFunction } from '@/utils/cloud'
+import TutorialEditor from './TutorialEditor.vue'
 
 const typeOptions = [
   { value: 'data_error', label: '数据问题' },
@@ -132,6 +148,18 @@ const drawerVisible = ref(false)
 const current = ref(null)
 const form = reactive({ status: 'processing', note: '' })
 const replyText = ref('')
+const replyTutorials = ref([]), tutorialEditor = ref(null), pickerVisible = ref(false), tutorialRows = ref([]), tutorialKeyword = ref(''), tutorialPage = ref(1), tutorialTotal = ref(0), tutorialLoading = ref(false), tutorialError = ref('')
+const tutorialLink = id => 'https://www.sxffootball.cn/service-account-h5/tutorial.html?id=' + encodeURIComponent(id)
+function openTutorial(id) { window.open(tutorialLink(id), '_blank', 'noopener,noreferrer') }
+function attachTutorial(t) { if (replyTutorials.value.length >= 3 || replyTutorials.value.some(v => v.id === t.id)) return; replyTutorials.value.push(t); pickerVisible.value = false }
+function tutorialSaved(t) { if (t.published) attachTutorial(t) }
+function openTutorialPicker() { pickerVisible.value = true; tutorialPage.value = 1; loadTutorials() }
+function searchTutorials() { tutorialPage.value = 1; loadTutorials() }
+let tutorialEpoch = 0
+async function loadTutorials() {
+  const request = ++tutorialEpoch; tutorialLoading.value = true; tutorialError.value = ''
+  try { const r = await call('tutorialList', { publishedOnly: true, keyword: tutorialKeyword.value, page: tutorialPage.value }); if (request !== tutorialEpoch) return; tutorialRows.value = r.rows || []; tutorialTotal.value = r.total || 0 } catch (e) { if (request === tutorialEpoch) { tutorialRows.value = []; tutorialError.value = e.message } } finally { if (request === tutorialEpoch) tutorialLoading.value = false }
+}
 
 const statusTabs = computed(() => [
   { key: '', label: '全部', value: counts.all },
@@ -196,6 +224,7 @@ function openHandle(row) {
   form.status = row.status === 'done' ? 'done' : row.status === 'processing' ? 'processing' : 'processing'
   form.note = row.note || ''
   replyText.value = ''
+  replyTutorials.value = []
   drawerVisible.value = true
 }
 
@@ -220,7 +249,7 @@ async function submitHandle() {
 
 async function submitReply() {
   if (!current.value || replying.value) return
-  const reply = replyText.value.trim()
+  const reply = replyText.value.trim() || (replyTutorials.value.length ? '请参考以下教程操作，如仍有问题请联系客服。' : '')
   if (!reply) {
     ElMessage.warning('请输入回复内容')
     return
@@ -229,7 +258,8 @@ async function submitReply() {
   try {
     const result = await call('serviceFeedbackReply', {
       feedbackId: current.value.feedbackId,
-      reply
+      reply,
+      tutorialIds: replyTutorials.value.map(t => t.id)
     })
     const notify = result.notify || {}
     if (notify.success === true) {
@@ -291,6 +321,6 @@ onMounted(load)
 .fb-reply-head strong{color:#176d43;font-size:13px}
 .fb-reply-head small{color:#8b978f;font-size:12px}
 .fb-reply-text{margin:0;color:#25322b;font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
-.fb-hint{margin:0;color:#8b978f;font-size:12px}
+.fb-tutorial-actions{display:flex;align-items:center;gap:12px;margin-bottom:12px}.fb-tutorial-tags{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.fb-tutorial-tags .el-tag{max-width:100%;height:auto;white-space:normal;overflow-wrap:anywhere}.fb-tutorial-link{display:block;color:#176d43;margin-top:10px;overflow-wrap:anywhere}.fb-hint{margin:0;color:#8b978f;font-size:12px}
 @media(max-width:760px){.fb-stats{grid-template-columns:repeat(2,1fr)}.fb-contact{width:100%}.fb-total{margin-left:0}}
 </style>

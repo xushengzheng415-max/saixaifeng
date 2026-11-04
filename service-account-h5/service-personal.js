@@ -675,7 +675,7 @@
     if(!app.querySelector('.me-modal-mask'))return
     if(!rows.length){modal('我的反馈','<p class="me-modal-text">暂无反馈记录</p><p class="me-modal-text">遇到问题可在「客服中心」提交反馈，客服回复后会通过服务号通知你。</p>');return}
     var html=rows.map(function(row){
-      var reply=row.reply?('<div class="me-fb-reply"><strong>客服回复</strong><small>'+esc(homeTime(row.replyAt))+'</small><p>'+esc(row.reply)+'</p></div>'):''
+      var reply=row.reply?('<div class="me-fb-reply"><strong>客服回复</strong><small>'+esc(homeTime(row.replyAt))+'</small><p>'+esc(row.reply)+'</p>'+((row.replyTutorials||[]).map(function(t){return '<p><a style="color:#176d43" href="./tutorial.html?id='+encodeURIComponent(t.id)+'">查看教程：'+esc(t.title)+'</a></p>'}).join(''))+'</div>'):''
       return '<div class="me-fb-item"><div class="me-fb-item-head"><span class="me-fb-type">'+esc(row.typeLabel||'其他')+'</span><span class="me-fb-status">'+esc(fbStatus(row.status))+'</span><small>'+esc(homeTime(row.createTime))+'</small></div><p class="me-fb-content">'+esc(row.content)+'</p>'+reply+'</div>'
     }).join('')
     modal('我的反馈',html)
