@@ -30,7 +30,11 @@
         </div>
         <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button plain @click="registrationNotify.open()">通知催认领</el-button>
           <el-button plain :disabled="creatingTargetedRegistrationLink" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>邀请球队</el-button>
-          <el-dropdown trigger="click" @command="openAddTeamEntry"><el-button type="primary"><el-icon><Plus /></el-icon>添加球队<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="isDemoModeActive && !lightweightMode" command="virtual"><el-icon><Plus /></el-icon>虚拟球队</el-dropdown-item><el-dropdown-item v-if="lightweightMode" command="batch"><el-icon><Plus /></el-icon>批量添加球队</el-dropdown-item><el-dropdown-item v-if="!lightweightMode" command="upload"><el-icon><Upload /></el-icon>上传资料、名单</el-dropdown-item><el-dropdown-item command="manual"><el-icon><Plus /></el-icon>快速添加</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+          <template v-if="lightweightMode">
+            <el-button plain @click="openAddTeamEntry('manual')"><el-icon><Plus /></el-icon>快速添加</el-button>
+            <el-button type="primary" @click="openAddTeamEntry('batch')"><el-icon><Plus /></el-icon>批量添加球队</el-button>
+          </template>
+          <el-dropdown v-else trigger="click" @command="openAddTeamEntry"><el-button type="primary"><el-icon><Plus /></el-icon>添加球队<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="isDemoModeActive" command="virtual"><el-icon><Plus /></el-icon>虚拟球队</el-dropdown-item><el-dropdown-item command="upload"><el-icon><Upload /></el-icon>上传资料、名单</el-dropdown-item><el-dropdown-item command="manual"><el-icon><Plus /></el-icon>快速添加</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>
         <div v-else-if="activeTab === 'all'" class="heading-actions"><el-button plain @click="openClaimCodeDialog"><el-icon><Key /></el-icon>球队认领码</el-button></div>
       </div>
