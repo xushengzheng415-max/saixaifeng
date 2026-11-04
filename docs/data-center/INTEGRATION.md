@@ -463,3 +463,8 @@ QuickHybridConsole→tournament_league_tables.leaguePairingMode→generateSchedu
 ## 2026-11-04 小程序个人反馈
 
 小程序miniFeedbackSubmit/miniFeedbackList经webLoginApi可信微信上下文校验自然人账号，再调用与H5相同servicePrivate反馈处理器；service_feedback按userId隔离并共用回复、状态和教程。无服务号绑定不阻断提交，通知按真实唯一绑定执行。未改球队/球员/名单数据。后端已差量发布读回，原生开发版1.2.41上传成功，体验/正式尚未生效。见[记录](../releases/mini-feedback-20261104.md)。
+
+
+## 2026-11-04 自由战术阵容
+
+getMiniWorkspace的teamTactics/saveTeamTactic/deleteTeamTactic复用既有team_tactics并维持球队范围和版本检查，新增boardMode=free保存号码、归一化点位、足球位置及可选本方playerId。关联的姓名与球衣号由服务端读取当前本队档案，不接受异队ID；不修改正式名单、单场阵容、资格或统计。后端差量上线读回，原生开发版1.2.43已上传，体验/正式未发布。见[记录](../releases/tactics-freeboard-20261104.md)。

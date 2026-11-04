@@ -1,0 +1,38 @@
+{
+  "function": "getMiniWorkspace",
+  "changedFiles": [
+    "tacticsFree.cjs",
+    "teamTactics.cjs"
+  ],
+  "sha256": {
+    "tacticsFree.cjs": "4553f5b38e5b3f5ff452d09f612e39e6c6874c312fc380f3d7e5084231ea2fcd",
+    "teamTactics.cjs": "f6b0a1ec5ec53e92748475b44ecf8eec7968312b3081ceae5cc84a8fc7e803f5"
+  },
+  "preservedFiles": 6030,
+  "indexAndDependenciesPreserved": true,
+  "nativeVersion": "1.2.43",
+  "nativeUpload": "developer-succeeded",
+  "nativeFormal": "not-submitted-or-published",
+  "nativeExperience": "not-set",
+  "uploadBytes": 5881025,
+  "mainBytes": 1994855,
+  "realTeamWrites": false,
+  "status": "Active",
+  "availableStatus": "Available",
+  "runtime": "Nodejs18.15",
+  "memoryMB": 512,
+  "timeoutSeconds": 150,
+  "installDependency": "FALSE",
+  "tests": "legacy plus free board, native player dropdown, ID/jersey/name validation, auth/version conflicts pass",
+  "nativeViewport": [
+    844,
+    390
+  ],
+  "nativeArea": [
+    808,
+    354
+  ],
+  "nativeInteraction": "actual handlers on isolated native WXML with test players; no real team writes",
+  "logoSHA256": "23313036c35ff049c2297396e6bff1edde364cb54164bdd3b2936595ea9b66d5",
+  "logoOriginalUnmodified": true
+}
