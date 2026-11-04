@@ -1,0 +1,29 @@
+{
+  "function": "getMiniWorkspace",
+  "status": "Active",
+  "availableStatus": "Available",
+  "runtime": "Nodejs18.15",
+  "memoryMB": 512,
+  "timeoutSeconds": 150,
+  "installDependency": "FALSE",
+  "changedFiles": [
+    "index.js",
+    "rosterImport.cjs"
+  ],
+  "preservedFiles": 6029,
+  "indexSHA256": "56cfb387cb3099b8050a6abaa6108f0b6dd6be7f0462283507a31839fd411a3c",
+  "rosterImportSHA256": "9b45236d7d8bbcf9a4d9e682edc47e92023c0d5d448fc30d5df561e79173f22a",
+  "miniVersion": "1.2.40",
+  "miniUpload": "developer-upload-succeeded",
+  "miniPreview": "compiled",
+  "miniFormal": "not-submitted-for-review-or-published",
+  "miniExperience": "not-set",
+  "miniUploadBytes": 5601776,
+  "miniMainBytes": 1980680,
+  "runtimeConfigUnchanged": true,
+  "dependencyReinstallDisabled": true,
+  "unauthenticatedProbe": "rejected",
+  "isolatedTests": "pass",
+  "realRosterWrites": false,
+  "existingDataCenterChecks": "30 sync differences; ready/unverified assertion at line 51"
+}

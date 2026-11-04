@@ -1831,12 +1831,15 @@ async function officialRosterForWorkspace(event, identity) {
   if (!tournament) throw new Error('赛事不存在')
   const registrations = await safeGet('tournament_teams', { tournamentId, teamId }, 20)
   const rosterContext = await resolveRosterContext(tournament, registrations, event)
-  const rawPlayers = await safeGetTeamPlayers(teamId, 500)
+  const importPolicy=require('./rosterImport.cjs')
+  const rawPlayers=(await readDataRows(db,'players',_.or([{teamId},{teamCode:teamId}]))).filter(p=>importPolicy.belongs(p,teamId))
   const qualifiedPlayers = await applyEventQualifications(tournamentId, rosterContext.divisionId, rawPlayers, rosterContext.requirements)
-  const players = qualifiedPlayers.map(item => formatTeamPlayer(item, rosterContext.requirements))
-  const snapshots = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20))
+  const rawById=new Map(rawPlayers.map(p=>[String(p._id),p]))
+  const players = qualifiedPlayers.map(item => importPolicy.candidate(rawById.get(String(item._id)),formatTeamPlayer({...item,photoUrl:importPolicy.photo(rawById.get(String(item._id)))},rosterContext.requirements),teamId))
+  const snapshots = (await readDataRows(db,'roster_snapshots',{tournamentId,teamId}))
     .filter(item => snapshotMatchesDivision(item, rosterContext.divisionId, rosterContext.allowLegacySnapshot))
   const latest = snapshots.sort((a, b) => toTime(b.updateTime || b.createTime) - toTime(a.updateTime || a.createTime))[0] || null
+  await importPolicy.resolvePhotos(cloud,players)
   let statisticsStatus = 'unavailable'
   let statisticsMetadata = null
   // 查询失败保留未知状态，不把未加载的数据显示成零。
@@ -1863,8 +1866,9 @@ async function officialRosterForWorkspace(event, identity) {
     statisticsMetadata = { schemaVersion:aggregate.schemaVersion, metricVersion:aggregate.metricVersion, dataVersion:aggregate.dataVersion, coverage:aggregate.coverage }
 
   } catch (error) { console.warn('[officialRoster] statistics unavailable:', error.message) }
+  players.forEach(p=>{p.rosterImportAllowed=rawById.has(String(p.id))&&importPolicy.belongs(rawById.get(String(p.id)),teamId)})
   const division = rosterContext.division || {}
-  return { success: true, statisticsStatus, statisticsMetadata, team: { id: teamId, name: firstValue(team.name, team.teamName), logo: firstValue(team.logo, team.logoUrl) }, tournament: { id: tournamentId, name: tournament.name || '赛事', divisionId: rosterContext.divisionId, divisionName: firstValue(rosterContext.registration.divisionName, division.name, division.divisionName, tournament.divisionName, '默认组别'), maxPlayers: Number(firstValue(division.rosterLimit, division.maxPlayersPerTeam, rosterContext.registration.maxPlayersPerTeam, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20)), deadlineText: dateText(firstValue(division.registrationDeadline, tournament.registrationDeadline, tournament.signupDeadline)) }, requirements: rosterContext.requirements, players, snapshot: latest ? { id: String(latest._id), status: latest.status || 'draft', playerIds: latest.playerIds || [], divisionId: String(latest.divisionId || latest.division || rosterContext.divisionId), version: Number(latest.version || 1), returnReason: latest.returnReason || '', returnedAtText: dateText(latest.returnedAt) } : null, canManage: permissions.indexOf('team.manage') >= 0 }
+  return { success: true, submissionPolicy:'library_pending_review', playerLibraryCount:rawPlayers.length, statisticsStatus, statisticsMetadata, team: { id: teamId, name: firstValue(team.name, team.teamName), logo: firstValue(team.logo, team.logoUrl) }, tournament: { id: tournamentId, name: tournament.name || '赛事', logo: typeof tournament.logo === 'string' ? tournament.logo : (typeof tournament.logoUrl === 'string' ? tournament.logoUrl : ''), divisionId: rosterContext.divisionId, divisionName: firstValue(rosterContext.registration.divisionName, division.name, division.divisionName, tournament.divisionName, '默认组别'), maxPlayers: Number(firstValue(division.rosterLimit, division.maxPlayersPerTeam, rosterContext.registration.maxPlayersPerTeam, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20)), deadlineText: dateText(firstValue(division.registrationDeadline, tournament.registrationDeadline, tournament.signupDeadline)) }, requirements: rosterContext.requirements, players, snapshot: latest ? { id: String(latest._id), status: latest.status || 'draft', playerIds: latest.playerIds || [], divisionId: String(latest.divisionId || latest.division || rosterContext.divisionId), version: Number(latest.version || 1), returnReason: latest.returnReason || '', reviewSummary:latest.reviewSummary||null,materialReferences:latest.materialReferences||[], returnedAtText: dateText(latest.returnedAt) } : null, canManage: permissions.indexOf('team.manage') >= 0 }
 }
 
 async function submitOfficialRosterForWorkspace(event, identity) {
@@ -1879,22 +1883,27 @@ async function submitOfficialRosterForWorkspace(event, identity) {
   const registrations = await safeGet('tournament_teams', { tournamentId, teamId }, 20)
   const rosterContext = await resolveRosterContext(tournament, registrations, event)
   const division = rosterContext.division || {}
-  const deadline = toTime(firstValue(division.registrationDeadline, tournament.registrationDeadline, tournament.signupDeadline))
-  if (deadline && Date.now() > deadline) throw new Error('报名已截止，名单不能通过常规流程修改')
-  const max = Number(firstValue(division.rosterLimit, division.maxPlayersPerTeam, rosterContext.registration.maxPlayersPerTeam, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20))
-  if (!playerIds.length || playerIds.length > max) throw new Error('请选择符合上限的参赛球员')
-  const rows = await safeGetTeamPlayers(teamId, 500, { _id: _.in(playerIds) })
-  if (rows.length !== playerIds.length) throw new Error('名单包含不属于当前球队的球员')
+  const importPolicy=require('./rosterImport.cjs')
+  if(!playerIds.length)throw new Error('请先选择参赛球员')
+  if(playerIds.length>2000)throw new Error('名单数量过多，请分批处理')
+  const rows=(await readDataByIds(db,'players','_id',playerIds,{maxRows:2000})).filter(p=>importPolicy.belongs(p,teamId))
+  if(rows.length!==playerIds.length)throw new Error('名单包含不属于当前球队的球员')
   const qualifiedRows = await applyEventQualifications(tournamentId, rosterContext.divisionId, rows, rosterContext.requirements)
-  if (qualifiedRows.some(item => formatTeamPlayer(item, rosterContext.requirements).profileStatus !== 'complete')) throw new Error('资料不完整或存在异常的球员不能进入正式名单')
-  const existing = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20))
+  const reviewSummary=importPolicy.reviewSummary(rows,qualifiedRows.map(p=>formatTeamPlayer({...p,photoUrl:importPolicy.photo(p)},rosterContext.requirements)),rosterContext,tournament)
+  const existing = (await readDataRows(db,'roster_snapshots',{tournamentId,teamId}))
     .filter(item => snapshotMatchesDivision(item, rosterContext.divisionId, rosterContext.allowLegacySnapshot))
+  const submitted=existing.find(item=>item.status==='submitted'&&importPolicy.sameIds(item.playerIds||[],playerIds))
+  if(submitted)return {success:true,snapshotId:String(submitted._id),status:'submitted',idempotent:true,reviewSummary:submitted.reviewSummary||reviewSummary}
   if (existing.some(item => ['submitted', 'approved', 'locked'].indexOf(String(item.status || '')) >= 0)) throw new Error('该赛事名单已提交或锁定，不能重复提交')
   const now = db.serverDate()
   const nextVersion = existing.reduce((max, item) => Math.max(max, Number(item.version || 1)), 0) + 1
-  const snapshot = { tournamentId, teamId, divisionId: rosterContext.divisionId, divisionName: firstValue(rosterContext.registration.divisionName, division.name, division.divisionName, tournament.divisionName, ''), orgId: result.workspace.orgId || '', playerIds, version: nextVersion, status: 'submitted', submittedBy: identity.user._id, createTime: now, updateTime: now }
-  const created = await db.collection('roster_snapshots').add({ data: snapshot })
+  const snapshot = { tournamentId, teamId, divisionId: rosterContext.divisionId, divisionName: firstValue(rosterContext.registration.divisionName, division.name, division.divisionName, tournament.divisionName, ''), orgId: result.workspace.orgId || '', playerIds, version: nextVersion, materialReferences:rows.map(importPolicy.references), reviewSummary, submissionPolicy:'library_pending_review', status: 'submitted', submittedBy: identity.user._id, createTime: now, updateTime: now }
+  const persisted=await importPolicy.persist(db,snapshot,rosterContext.registration)
+  const created={_id:persisted.snapshotId}
+  if(persisted.idempotent)return {success:true,snapshotId:created._id,status:'submitted',idempotent:true,reviewSummary}
   const team = teams.find(item => String(item._id) === teamId) || {}
+  let notificationWarning=false
+  try {
   const organizerUserIds = await findOrganizationUserIds(result.workspace.orgId, 'event.manage')
   await publishWorkspaceMessage({
     orgId: result.workspace.orgId,
@@ -1905,7 +1914,8 @@ async function submitOfficialRosterForWorkspace(event, identity) {
     path: '/pages/todo/index?tournamentId=' + encodeURIComponent(tournamentId) + '&teamId=' + encodeURIComponent(teamId),
     dedupeKey: 'roster-submitted:' + String(created._id)
   })
-  return { success: true, snapshotId: String(created._id), status: 'submitted' }
+  } catch(error){notificationWarning=true;console.warn('[officialRoster] 名单已保存，通知创建失败')}
+  return { success: true, snapshotId: String(created._id), status: 'submitted', reviewSummary, notificationWarning }
 }
 
 async function returnOfficialRosterForOrganizer(event, identity) {
@@ -1950,7 +1960,8 @@ async function matchLineupForWorkspace(event, identity) {
     .filter(snapshot => snapshotMatchesDivision(snapshot, rosterDivisionId, allowLegacyRoster))
     .sort((a,b)=>toTime(b.updateTime)-toTime(a.updateTime))[0]
   if (!roster) throw new Error('尚未形成已审核赛事正式名单，不能编排单场阵容')
-  const players = await safeGetTeamPlayers(teamId, 100, { _id: _.in(roster.playerIds || []) })
+  const rosterContext=await resolveRosterContext((await safeGet('tournaments',{_id:tournamentId},1))[0]||{_id:tournamentId},registrations,{divisionId:rosterDivisionId})
+  const players = await applyEventQualifications(tournamentId,rosterDivisionId,await safeGetTeamPlayers(teamId, 100, { _id: _.in(roster.playerIds || []) }),rosterContext.requirements)
   const lineups = await safeGet('match_lineup_snapshots', { matchId, teamId }, 20)
   const latest = lineups.sort((a,b)=>toTime(b.updateTime)-toTime(a.updateTime))[0]
   const opponentIds = unique([String(match.homeTeamId || ''), String(match.awayTeamId || '')].filter(Boolean))
@@ -1970,7 +1981,7 @@ async function matchLineupForWorkspace(event, identity) {
     workspaceOrgId: String(result.workspace.orgId || ''),
      match: { id: matchId, tournamentId, divisionId: rosterDivisionId, side, minPlayers: Number(match.minPlayers || 11), name: String(match.name || ''), matchDate: String(match.matchDate || ''), venue: String(match.venue || ''), divisionName: String(match.divisionName || match.division || ''), homeTeamName: String(home.name || match.homeTeamName || '主队'), awayTeamName: String(away.name || match.awayTeamName || '客队'), homeLogo: String(home.logoUrl || home.logo || ''), awayLogo: String(away.logoUrl || away.logo || ''), refereeArrived, homeArrived, awayArrived, teamArrived:side === 'home' ? homeArrived : awayArrived, allArrived:refereeArrived && homeArrived && awayArrived },
     rosterId: String(roster._id),
-    players: players.map(formatTeamPlayer),
+    players: players.map(player=>({...formatTeamPlayer({...player,organizerReviewStatus:''},rosterContext.requirements),lineupEligible:formatTeamPlayer({...player,organizerReviewStatus:''},rosterContext.requirements).profileStatus==='complete'})),
     lineup: latest ? { id: String(latest._id), formation: String(latest.formation || ''), starters: latest.starters || [], substitutes: latest.substitutes || [], status: String(latest.status || ''), returnReason: String(latest.returnReason || ''), submittedAtText: dateText(firstValue(latest.updateTime, latest.createTime)) } : null,
     canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0
   }
@@ -2048,7 +2059,7 @@ async function submitMatchLineupForWorkspace(event, identity) {
   const starters = Array.isArray(event.starters) ? event.starters : []
   const substitutes = Array.isArray(event.substitutes) ? event.substitutes : []
   const ids = unique(starters.map(item => item.playerId).concat(substitutes.map(item => item.playerId)))
-  const allowed = new Set(loaded.players.map(item => item.id))
+  const allowed = new Set(loaded.players.filter(item=>item.lineupEligible===true).map(item => item.id))
   if (starters.length !== loaded.match.minPlayers || ids.length !== starters.length + substitutes.length || ids.some(id => !allowed.has(id))) throw new Error('首发人数或阵容成员不符合已审核正式名单')
   const existing = await safeGet('match_lineup_snapshots', { matchId: loaded.match.id, teamId: String(event.teamId || '') }, 20)
   if (existing.some(item => ['submitted', 'locked'].indexOf(String(item.status || '')) >= 0)) throw new Error('该场阵容已提交或锁定')

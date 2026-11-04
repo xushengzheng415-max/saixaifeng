@@ -453,3 +453,8 @@ TeamDetail工作人员→organizerClaimInvite.listTeamAccess→teamAccountDirect
 ## 2026-11-04 联赛首轮对阵方式（已发布）
 
 QuickHybridConsole→tournament_league_tables.leaguePairingMode→generateSchedule.pairingTemplates/confirmedPairings。首轮相邻/首尾模式共用一个轮转函数，默认保留旧后端adjacent；预览、投屏、保存及生成同步，已有对阵签名冲突拒绝。无新增统计、无真实赛程迁移。见[记录](../releases/league-first-round-mode-20261104.md)。
+
+
+## 2026-11-04 球员库选入赛事待审名单
+
+`getMiniWorkspace.officialRoster/submitOfficialRoster` 使用统一完整读取及稳定球员ID，校验本队归属、管理权限和本组参赛关系。原照片/核验资料保留引用，资料缺项允许先提交submitted快照；不生成已通过资格，不改球员身份或其他组别/锁定历史。单场阵容继续校验真实资料状态。已部署共享后端并逐文件读回；小程序仅开发预览与1.2.40开发包已上传，未宣称微信正式/体验版生效。详见[记录](../releases/roster-library-pending-review-20261104.md)。
