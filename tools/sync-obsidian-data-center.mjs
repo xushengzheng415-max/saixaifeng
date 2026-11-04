@@ -6,8 +6,13 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/card-world-tier-gate-20261104.md','发布记录/球员卡卡级灰度门禁编辑构图与AI形象照-20261104.md'],
+  ['docs/releases/signup-kit-colors-three-parts-20261104.md','发布记录/扫码报名比赛服三部位与选色面板-20261104.md'],
+  ['docs/PLAYER_CARD_WORLD_LIVE_MATCH_API.md','玩法与页面/球员卡卡世界直播对战后端接口-20261104.md'],
+  ['docs/PLAYER_CARD_GAME_OVERVIEW_20261103.md','玩法与页面/球员卡玩法与页面概要-20261103.md'],
   ['docs/releases/reg-reject-resume-gate-20261103.md','发布记录/入队驳回通知落地页gate深链与驳回条目-20261103.md'],
   ['docs/releases/h5-i18n-toggle-flash-20261103.md','发布记录/H5中英文按钮自闪修复-20261103.md'],
+  ['docs/releases/h5-i18n-dictionary-20261103.md','发布记录/H5英文人工字典方案-20261103.md'],
   ['docs/releases/team-tactics-board-20261103.md','发布记录/球队首页战术板-20261103.md'],
   ['docs/releases/trf-claimant-recipient-restore-20261103.md','发布记录/入队通知接收人回退重发-20261103.md'],
   ['docs/releases/team-staff-manage-permission-20261103.md','发布记录/球队管理权限按team.manage判定-20261103.md'],
