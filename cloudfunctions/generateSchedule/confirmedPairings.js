@@ -107,7 +107,7 @@ function buildConfirmedPairings({tournamentId,division,groupRecords=[],bracketRe
     const record=latest(leagueRecords.filter(scope))
     if(!confirmed(record))throw new Error(`${divisionName}联赛顺序尚未确认`)
     participants=(record.teams || []).filter(isTeam).sort((a,b)=>Number(a.position || a.rank || 0)-Number(b.position || b.rank || 0)).map(team)
-    const stages=templates.standardRoundRobinRounds(participants.length,record.loopType || division.loopType || 'single').map((pairs,index)=>({name:`联赛第${index+1}轮`,phase:'league',round:index+1,matches:pairs.map(([a,b])=>({home:{type:'seed',...participants[a-1],name:participants[a-1].teamName},away:{type:'seed',...participants[b-1],name:participants[b-1].teamName}}))}))
+    const stages=templates.standardRoundRobinRounds(participants.length,record.loopType || division.loopType || 'single',record.leaguePairingMode || division.leaguePairingMode).map((pairs,index)=>({name:`联赛第${index+1}轮`,phase:'league',round:index+1,matches:pairs.map(([a,b])=>({home:{type:'seed',...participants[a-1],name:participants[a-1].teamName},away:{type:'seed',...participants[b-1],name:participants[b-1].teamName}}))}))
     if(format==='hybrid') {
       const count=Number(record.advanceCount || division.advanceCount || division.formatConfig?.cupAdvanceCount || 0)
       if(count<2 || count>participants.length || (count & (count-1)))throw new Error('请先确认混合制晋级名额')
