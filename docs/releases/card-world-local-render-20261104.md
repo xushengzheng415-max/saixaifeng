@@ -173,7 +173,48 @@ HTTP 回读 SHA-256 `ALL MATCH`，线上回读确认两端 `ai11`、含 `own-con
 正式与测试两端 16 文件重发，HTTP 回读 SHA-256 `ALL MATCH`，线上回读确认两端已无
 `ai-panel`/`btn-ai-portrait`、`app.js` 不再含 `openAiPortrait`，且「换形象照」入口仍在。
 
-## 十三、后续注意
+## 十三、追加（同日）：上传照片直接抠图 + 卡面预览微调版式（并修掉「网络异常」）
+
+用户反馈「网络异常！上传照片直接扣背景，然后球员卡预览，微调确认版式，和球员注册逻辑一样」。
+
+### 根因：网页入口请求体上限 100KB
+
+线上只读探针（`probe-body-limit.cjs`，只发包不写库）实测 `webLoginApi`：
+请求体 100,065 字节返回 200，120,065 字节返回 413。
+
+原来的上传方式是前端先按 1200 宽导出 JPEG（`FRAME_MAX_CHARS=2200000`），
+base64 约 1.5–2MB，请求体必然超限 → 413 → 前端只能看到「网络异常」，
+所以「上传自己的照片」这条链路在线上一直走不通（人像分割本身没有执行过）。
+
+### 处置
+
+1. 上传前按体积收敛：`OWN_PHOTO_MAX_CHARS = 96000`，长边依次尝试 800/720/640/560、
+   质量 0.86 起每档 −0.06，直到 data URL 落在 96K 字符内（约 72KB 二进制），保证过网关。
+   卡面形象照位只有 270×300 逻辑像素，这个分辨率足够。
+2. 流程改成和注册球员建档一致：**选照片 → 服务端人像分割 → 球员卡预览 → 卡面微调 → 确认版式**。
+   - 删掉上传方式里的取景框裁切（`#own-edit`、`#btn-own-confirm`、`#btn-own-reset`、`ownFramer`），
+     选完照片直接 `prepareOwnData` 调 `cardPhotoPrepare` 抠图；AI 方式的两个取景框保持不变。
+   - 新增卡面预览微调：`bindOwnStage` 在 `#own-card-canvas` 上做单指拖动 / 双指缩放，
+     换算与编辑球员卡同一套（逻辑宽 300，左右按 264、上下按 300，zoom 1–4，x/y 限 ±2），
+     改 `state.crop` 后 60ms 节流重绘本机合成卡面。
+   - 确认链路：`saveOwnBackground`（换背景，服务端判权）→ `applyCardPhoto`（计费写照片）→
+     `saveOwnLayout`（按 apply 返回的 version 存裁剪版式；失败只降级提示，不回滚已换好的照片）。
+     版式能单独存是因为照片写回后 `playerCardSourceFileId` 与标准形象照同一文件，
+     服务端不会再判一次换照片计费，不会重复扣蜂蜜。
+   - 重新选择照片会清空抠图结果、卡面背景选择和裁剪值，并再拉一次相册。
+3. `js/api.js` 按 HTTP 状态给出可执行提示：413 → 照片太大（100KB 上限）、
+   401/403 → 登录态失效、429 → 操作太频繁、5xx → 服务繁忙，不再一律「网络异常」。
+
+### 验证
+
+- `node --check portrait.js` 通过；6 套测试全通过（新增「照片按网关体积收敛后再上传」
+  「收敛目标在 100KB 以内」「卡面上可拖动与双指微调版式」「微调换算与编辑构图同一套」
+  「版式在照片写回后再保存」「网关体积失败给明确提示」等断言，并把取景框相关断言收窄到 AI 方式）。
+- 正式 `/service-account-h5/card-world/` 与测试 `/preview/service-account-h5/card-world-ai/` 各 16 文件重发，
+  HTTP 回读 SHA-256 `ALL MATCH`，线上回读确认两端 `ai12`、含「球员卡预览」「确认版式，替换卡面」、
+  体积收敛、`bindOwnStage`、`saveOwnLayout` 与 413 提示。
+
+## 十四、后续注意
 
 - `service-account-h5/card-world/js/dynamic-card-renderer.js` 是 `service-account-h5/dynamic-card-renderer.js`
   的字节一致副本（SHA-256 相同），共享渲染器改动后必须同步副本再发布。
