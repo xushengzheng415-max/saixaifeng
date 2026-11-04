@@ -6563,6 +6563,10 @@ exports.main = async (event, context) => {
       case 'getMyPlayerCard':
       case 'previewMyPlayerCard':
       case 'saveMyPlayerCard':
+      case 'cardPhotoInfo':
+      case 'cardPhotoPrepare':
+      case 'cardPhotoApply':
+      case 'cardPhotoCancel':
       case 'cardAiPortraitInfo':
       case 'cardAiPortraitPrepare':
       case 'cardAiPortraitApply':

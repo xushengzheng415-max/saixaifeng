@@ -221,9 +221,18 @@ function createPlayerCards(deps) {
   }
   async function standardPortrait(auth, entry, db) {
     let portrait = null
+    // 用户自己上传并确认过的照片（playerCardSourceType='uploaded_photo'）优先：
+    // 它和 AI 形象照分开记账，换照片后不必等下一次 AI 生成才生效。
+    const uploaded = String(entry.player.playerCardSourceFileId || '')
+    if (!auth.parentInvite && String(entry.player.playerCardSourceType || '') === 'uploaded_photo' && uploaded.startsWith('cloud://')) {
+      portrait = {
+        _id: String(entry.player.playerCardPhotoRequestId || 'uploaded_photo'),
+        transparentFileId: uploaded,
+        sourceType: 'uploaded_photo'
+      }
     // 卡面 AI 定妆照（服务号「AI 定妆照」页生成并点「使用这张」）优先作为卡面素材；
     // 它只服务卡面，不覆盖登记与人脸核验使用的 parent_portraits 记录。
-    if (!auth.parentInvite && String(entry.player.playerCardAiPortraitFileId || '').startsWith('cloud://')) {
+    } else if (!auth.parentInvite && String(entry.player.playerCardAiPortraitFileId || '').startsWith('cloud://')) {
       portrait = {
         _id: String(entry.player.playerCardAiPortraitId || 'ai_card_portrait'),
         transparentFileId: String(entry.player.playerCardAiPortraitFileId),
@@ -337,6 +346,18 @@ function createPlayerCards(deps) {
       return appeals.submit(db,actor,event,ledger,{...entry.player,teamName:entry.teamName})
     }
     const isStillOwned = current => entry.relation ? owns(current,entry.relation) : ['teamId','guardianUserId','linkedUserId','playerUserId'].every(field=>String(current[field]||'') === String(entry.player[field]||''))
+    // 卡面「换形象照 · 上传自己的照片」：抠图、凭证、扣费、入库统一在 cardPhotoReplace.cjs，
+    // 本文件只把「换照片」既有计费口径（photoReplaceSummary）传进去，不复制第二套规则。
+    if (['cardPhotoInfo','cardPhotoPrepare','cardPhotoApply','cardPhotoCancel'].includes(event.action)) {
+      const cardPhoto = require('./cardPhotoReplace.cjs')
+      const level = await summary(entry)
+      const photoReplace = photoReplaceSummary(level.playerCard)
+      const context = { db, cloud, auth, entry, isStillOwned }
+      if (event.action === 'cardPhotoInfo') return cardPhoto.info(context, photoReplace)
+      if (event.action === 'cardPhotoPrepare') return cardPhoto.prepare(context, event)
+      if (event.action === 'cardPhotoApply') return cardPhoto.apply(context, event, photoReplace)
+      return cardPhoto.cancel(context, event)
+    }
     // 卡面「AI 定妆照」：扣费、凭证、入库统一在 cardPortraitAi.cjs，本文件只做路由，
     // 不在这里复制第二套计费或素材归属判断。
     if (['cardAiPortraitInfo','cardAiPortraitPrepare','cardAiPortraitApply','cardAiPortraitCancel'].includes(event.action)) {

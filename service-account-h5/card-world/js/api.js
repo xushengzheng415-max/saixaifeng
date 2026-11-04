@@ -92,6 +92,12 @@
     prepareAiPortrait: function (data) { return api('cardAiPortraitPrepare', data) },
     applyAiPortrait: function (data) { return api('cardAiPortraitApply', data) },
     cancelAiPortrait: function (data) { return api('cardAiPortraitCancel', data) },
+    // 换形象照 · 上传自己的照片：服务端抠图并签一次性凭证，确认后才扣费写卡面。
+    // 价格沿用既有「换照片」规则（cardPhotoReplace.cjs / photoReplaceSummary），前端不算金额。
+    cardPhotoInfo: function (data) { return api('cardPhotoInfo', data) },
+    prepareCardPhoto: function (data) { return api('cardPhotoPrepare', data) },
+    applyCardPhoto: function (data) { return api('cardPhotoApply', data) },
+    cancelCardPhoto: function (data) { return api('cardPhotoCancel', data) },
     jsSdkConfig: function (url) { return api('servicePrivateJsSdkConfig', { url: url }) }
   }
 })(window)

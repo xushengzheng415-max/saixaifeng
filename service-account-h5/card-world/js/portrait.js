@@ -1,9 +1,11 @@
 (function () {
   'use strict'
-  // 服务号 H5 · 球员卡「AI 形象照」页：
-  // 流程只有两步上传——① 本人单人照 ② 球衣照片——再把两张拼成一张参考板，
-  // 上传参考板后出透明形象照，点「使用这张」直接写进球员卡面。
-  // 扣费、凭证、入库都在服务端（cardAiPortraitPrepare / cardAiPortraitApply），本页不决定金额。
+  // 服务号 H5 · 球员卡「换形象照」页，两种方式并存：
+  //   ①「上传自己的照片」：本人单人照 → 服务端抠图成透明 PNG → 确认后写进卡面
+  //      （走 cardPhotoPrepare / cardPhotoApply，价格沿用既有「换照片」规则）。
+  //   ②「AI 生成形象照」：① 本人单人照 ② 球衣照片 → 拼参考板 → 生成透明形象照再写进卡面
+  //      （走 cardAiPortraitPrepare / cardAiPortraitApply）。
+  // 扣费、凭证、入库都在服务端，本页不决定金额。
   var Api = window.CardWorldApi
   var AI_HTTP = 'https://www.sxffootball.cn/aiPortraitDemo'
   var PENDING_KEY = 'sxf_card_ai_portrait_player'
@@ -23,12 +25,19 @@
     playerId: '',
     name: '',
     teamName: '',
+    mode: 'upload',
     pose: 'front',
     photo: '',
     photoImg: null,
     jersey: '',
     jerseyImg: null,
     photoBusy: false,
+    // 上传自己的照片：ownPreview 是本地压缩图，ownTicket 是服务端抠图凭证。
+    ownPreview: '',
+    ownTicket: '',
+    ownCut: '',
+    ownBusy: false,
+    photoReplace: null,
     price: null,
     busy: false,
     requestId: '',
@@ -93,6 +102,128 @@
 
   function backUrl() {
     return './design.html?playerId=' + encodeURIComponent(state.playerId || playerIdFromQuery())
+  }
+
+  // 两种方式共用一个页面：默认「上传自己的照片」，可切到「AI 生成形象照」。
+  function setMode(mode) {
+    state.mode = mode === 'ai' ? 'ai' : 'upload'
+    var upload = state.mode === 'upload'
+    show('upload-flow', upload)
+    show('ai-flow', !upload)
+    $('mode-upload').className = 'mode-tab' + (upload ? ' is-active' : '')
+    $('mode-ai').className = 'mode-tab' + (upload ? '' : ' is-active')
+    $('portrait-sub').textContent = (state.name || '球员') + (upload ? ' · 上传自己的照片直接换' : ' · 单人照 + 球衣照生成')
+  }
+
+  function ownNote(message) {
+    var el = $('own-note')
+    el.textContent = text(message)
+    el.hidden = !message
+  }
+
+  function renderPhotoReplace(photoReplace) {
+    if (!photoReplace) return
+    state.photoReplace = photoReplace
+    var line = $('own-price-line')
+    if (photoReplace.free === true) {
+      line.textContent = '生涯积分已满 100 分，上传自己的照片换卡面免费。'
+      return
+    }
+    var cost = Number(photoReplace.cost) || 0
+    var balance = photoReplace.balance
+    line.textContent = '未满 100 分换照片消耗 ' + cost + ' 滴蜂蜜'
+      + (typeof balance === 'number' ? '（当前余额 ' + balance + ' 滴）' : '')
+      + (photoReplace.available === false ? '，余额不足' : '')
+  }
+
+  // 选好照片先本地压缩，再交服务端抠图；返回的透明预览只有用户确认后才写进卡面。
+  function prepareOwn(file) {
+    if (!file || state.ownBusy) return
+    state.ownBusy = true
+    ownNote('')
+    $('btn-own-apply').disabled = true
+    show('own-stage', false)
+    show('own-actions', false)
+    dropOwnTicket()
+    compress(file, 1600).then(function (photo) {
+      state.ownPreview = photo.data
+      $('own-preview').src = photo.data
+      show('own-preview', true)
+      show('own-empty', false)
+      ownNote('正在抠图，稍等几秒…')
+      return Api.prepareCardPhoto({ playerId: state.playerId, photoData: photo.data })
+    }).then(function (result) {
+      state.ownTicket = text(result.photoTicket)
+      state.ownCut = text(result.preview)
+      if (!state.ownTicket || !state.ownCut) throw new Error('抠图结果获取失败，请重新选择照片')
+      $('own-cut').src = state.ownCut
+      show('own-stage', true)
+      show('own-actions', true)
+      $('btn-own-apply').disabled = false
+      ownNote('背景已去掉，确认就用这张替换卡面。')
+    }).catch(function (error) {
+      state.ownTicket = ''
+      ownNote((error && error.message) || '照片处理失败，请换一张正对镜头的照片')
+      toast((error && error.message) || '照片处理失败，请换一张正对镜头的照片')
+    }).then(function () {
+      state.ownBusy = false
+    })
+  }
+
+  function dropOwnTicket() {
+    var ticket = state.ownTicket
+    state.ownTicket = ''
+    if (!ticket || !state.playerId) return Promise.resolve(null)
+    return Api.cancelCardPhoto({ playerId: state.playerId, photoTicket: ticket }).catch(function () { return null })
+  }
+
+  function applyOwn() {
+    if (state.ownBusy || !state.ownTicket) return
+    var replace = state.photoReplace
+    var paid = replace && replace.free !== true
+    if (paid && typeof window.confirm === 'function') {
+      var cost = Number(replace.cost) || 0
+      if (!window.confirm('未满 100 分换照片要消耗 ' + cost + ' 滴蜂蜜，确认用这张替换卡面吗？')) return
+    }
+    state.ownBusy = true
+    $('btn-own-apply').disabled = true
+    ownNote('正在写进卡面…')
+    var payload = {
+      playerId: state.playerId,
+      photoTicket: state.ownTicket,
+      requestId: newRequestId(),
+      confirmPhotoReplaceHoney: paid
+    }
+    Api.applyCardPhoto(payload).then(function (result) {
+      state.ownTicket = ''
+      if (result && result.photoReplaceCharge) renderPhotoReplace({
+        free: false,
+        cost: Number(result.photoReplaceCharge.cost) || 0,
+        balance: result.photoReplaceCharge.balance,
+        available: true
+      })
+      toast('已换成你上传的照片')
+      setTimeout(function () { location.href = backUrl() }, 700)
+    }).catch(function (error) {
+      state.ownBusy = false
+      $('btn-own-apply').disabled = false
+      ownNote((error && error.message) || '替换失败，请重试')
+      toast((error && error.message) || '替换失败，请重试')
+    })
+  }
+
+  function retryOwn() {
+    if (state.ownBusy) return
+    state.ownPreview = ''
+    state.ownCut = ''
+    $('own-preview').src = ''
+    $('own-cut').src = ''
+    show('own-preview', false)
+    show('own-empty', true)
+    show('own-stage', false)
+    show('own-actions', false)
+    ownNote('')
+    dropOwnTicket()
   }
 
   function renderPoses() {
@@ -415,6 +546,8 @@
 
   function leave() {
     var done = function () { location.href = backUrl() }
+    // 上传自己的照片：没确认过的抠图凭证作废，临时文件由服务端清理，不产生扣费。
+    dropOwnTicket()
     if (state.applied || !state.requestId) { done(); return }
     dropReference()
     refund().then(done, done)
@@ -437,6 +570,18 @@
   }
 
   function bind() {
+    $('mode-upload').addEventListener('click', function () { setMode('upload') })
+    $('mode-ai').addEventListener('click', function () { setMode('ai') })
+    $('own-input').addEventListener('change', function (event) {
+      var file = event.target.files && event.target.files[0]
+      // 清空 value，允许连续选同一张照片时仍触发 change。
+      try { event.target.value = '' } catch (error) { /* ignore */ }
+      prepareOwn(file)
+    })
+    $('own-preview').addEventListener('click', function () { $('own-input').click() })
+    $('own-empty').addEventListener('click', function () { $('own-input').click() })
+    $('btn-own-retry').addEventListener('click', retryOwn)
+    $('btn-own-apply').addEventListener('click', applyOwn)
     $('photo-input').addEventListener('change', function (event) {
       var file = event.target.files && event.target.files[0]
       // 清空 value，允许连续选同一张照片时仍触发 change。
@@ -488,10 +633,16 @@
       state.teamName = text(result.teamName)
       $('player-name').textContent = state.name || '球员'
       $('player-team').textContent = state.teamName || '—'
-      $('portrait-sub').textContent = (state.name || '球员') + ' · 上传单人照和球衣直接生成'
       show('state-loading', false)
       show('content', true)
+      setMode(state.mode)
       renderPrice(result)
+      // 换照片价格来自服务端既有的「换照片」规则，页面只展示，不自己算门槛。
+      Api.cardPhotoInfo({ playerId: playerId }).then(function (info) {
+        renderPhotoReplace(info && info.photoReplace)
+      }).catch(function () {
+        $('own-price-line').textContent = '换照片价格暂时读取不到，重新进入本页再试。'
+      })
     }).catch(function (error) {
       var code = (error && error.code) || ''
       if (code === 'CARD_AI_PORTRAIT_AUTH_REQUIRED' || code === 'PLAYER_CARD_AUTH_REQUIRED') {
