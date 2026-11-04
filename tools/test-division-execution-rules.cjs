@@ -1,5 +1,7 @@
 const assert=require('node:assert/strict')
-const {buildDivisionExecutionUpdate:build,createDivisionExecutionRules:create}=require('../cloudfunctions/webLoginApi/divisionExecutionRules.cjs')
+const path=require('node:path')
+const moduleRoot=process.env.SXF_EXECUTION_TEST_ROOT||path.resolve(__dirname,'../cloudfunctions/webLoginApi')
+const {buildDivisionExecutionUpdate:build,createDivisionExecutionRules:create}=require(path.join(moduleRoot,'divisionExecutionRules.cjs'))
 const copy=x=>structuredClone(x),now=new Date('2026-11-04T10:00:00Z')
 const base={_id:'d',tournamentId:'t',orgId:'org',rulesVersion:'V1',activeRulesVersion:'V1',rulesLocked:true,matchMinutes:30,playersOnField:8,regulationDetails:{benchTotalLimit:8,benchPlayerLimit:8,benchOfficialLimit:2,substitutionReentryForbidden:false,unlimitedPlayersPerWindow:true},substitutionMode:'free',substitutionLimit:null,substitutionWindows:null,substitutionReentryAllowed:true}
 base.activeRulesSnapshot={matchMinutes:30,playersOnField:8,pointsWin:3,...copy(base)}
@@ -17,7 +19,7 @@ for(const details of [{benchTotalLimit:-1},{benchTotalLimit:31},{benchOfficialLi
 assert.throws(()=>build(base,{...input,pointsWin:9},{id:'u'},now),/锁定/)
 assert.equal(build(base,{...input,substitutionMode:'limited',substitutionLimit:5,substitutionWindows:3},{id:'u'},now).regulationDetails.unlimitedPlayersPerWindow,false)
 assert.equal(build(base,{...input,regulationDetails:undefined},{id:'u'},now).regulationDetails.benchTotalLimit,8,'旧客户端只改换人时保留替补席')
-assert.equal(require('../cloudfunctions/webLoginApi/divisionSubstitutionRules.cjs').buildSubstitutionRuleUpdate,build)
+assert.equal(require(path.join(moduleRoot,'divisionSubstitutionRules.cjs')).buildSubstitutionRuleUpdate,build)
 async function run(event=input,{record=copy(base),auth={success:true,userId:'u',orgId:'org',user:{_id:'u'}},staff=false,right=true}={}){
  const writes=[]
  const db={runTransaction:async fn=>fn(db),collection(name){assert.equal(name,'divisions','不得改写已开赛/完赛比赛或其他集合');return{doc:id=>({get:async()=>({data:record}),update:async({data})=>writes.push(data)})}}}
