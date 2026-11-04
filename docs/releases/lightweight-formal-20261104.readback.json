@@ -1,0 +1,86 @@
+{
+  "task": "lightweight-tournament-formal-release",
+  "checkedAt": "2026-11-04T13:30:00.000Z",
+  "source": {
+    "featureBranch": "feature/lightweight-tournament-20261102",
+    "featureCommits": ["03e1860a", "e177293f"],
+    "baselineMain": "26a41dc9",
+    "mergeCommits": ["06928f39", "a36625ef", "01931997"],
+    "docsCommit": "72082188",
+    "formalRef": "github/main",
+    "previewRef": "github/preview",
+    "changedFiles": {
+      "webAdminVue": 10,
+      "miniprogram": 3,
+      "cloudfunctions": 4
+    },
+    "mergeConflict": {
+      "file": "web-admin-vue/src/views/tournament/TournamentScheduleV2.vue",
+      "scope": "<style> block only",
+      "resolution": "auto-issue (schedule blocker) and light-score/quick-schedule styles both kept"
+    }
+  },
+  "backend": {
+    "deployedThisTask": false,
+    "evidence": {
+      "dataCenter": { "hasLightweightMode": true, "modifyTime": "2026-11-02 20:25:16" },
+      "resultCenter": { "hasLightweightMode": true, "modifyTime": "2026-11-02 20:26:00" },
+      "generateAIImage": { "hasRemoveLogoBg": true, "hasGeneratedNotCutout": true, "modifyTime": "2026-11-02 20:08:07" },
+      "serviceMatchWorkflow": { "hasLightweightMode": true }
+    }
+  },
+  "live": {
+    "production": {
+      "url": "https://www.sxffootball.cn/admin/",
+      "entryHtmlBytes": 818,
+      "entryHtmlSha256": "0F556820901DAE37A052D94FD48195F819DB119AFA6A61DC0EE9C0DDFEB27595",
+      "entryScript": "/admin/assets/index-C0t66jEi.js",
+      "entryScriptBytes": 289524,
+      "entryScriptSha256": "E82E0AC2A674590583EABC3C90AAD740BB785D327BC55BEFBBBEC1D902281016",
+      "scheduleChunk": "/admin/assets/TournamentScheduleV2-DNUxdfjg.js",
+      "scheduleChunkBytes": 222772,
+      "teamsChunk": "/admin/assets/TournamentTeams-HAqbUhPv.js",
+      "teamsChunkBytes": 241804,
+      "hostedFiles": 407
+    },
+    "preview": {
+      "url": "https://www.sxffootball.cn/preview/admin/",
+      "entryHtmlBytes": 858,
+      "entryHtmlSha256": "8FCA9D48C02620EE437C2F43663BEE36A928FF5A5907F2665E91BB755844DDCC",
+      "entryScript": "/preview/admin/assets/index-DXWhunM0.js",
+      "entryScriptBytes": 289556,
+      "entryScriptSha256": "B7847090D3F3240DED880778F6BF8F564EA1C4CBE060D355CECD5031ADF8F992",
+      "scheduleChunk": "/preview/admin/assets/TournamentScheduleV2-DBPtPsdR.js",
+      "scheduleChunkBytes": 222804,
+      "teamsChunk": "/preview/admin/assets/TournamentTeams-YgyRcNyl.js",
+      "teamsChunkBytes": 241852,
+      "hostedFiles": 407
+    }
+  },
+  "bundleParity": {
+    "scheduleCharsAfterBaseNormalize": 206803,
+    "teamsCharsAfterBaseNormalize": 221274,
+    "differenceScope": "only entry/chunk filename references in mapDeps and imports",
+    "featureStrings": {
+      "轻量模式": 3,
+      "一键生成赛程": 5,
+      "自动排程未完成": 1,
+      "AI 队徽": 5,
+      "白底（未抠图）": 1
+    }
+  },
+  "checks": {
+    "nodeCheck": "4 cloudfunctions + 3 miniprogram pages passed",
+    "cloudbaseJsSdkInDist": false,
+    "dataCenterSyncCheck": "pre-existing failures on baseline 26a41dc9; one new item resultCenter/service.cjs not synced",
+    "push": {
+      "github": "main 3590c8e4..01931997, preview aa15a31b..01931997, docs 72082188 fast-forward",
+      "gitee": "main/preview 18ce22ba..01931997, docs 72082188 fast-forward"
+    }
+  },
+  "outstanding": [
+    "miniprogram 3 files merged to main but not uploaded to dev/trial build",
+    "resultCenter/service.cjs copy not synced by tools/sync-data-center.mjs",
+    "obsidian sync check blocked by missing docs/releases/team-owner-display-20261104.readback.json from another task"
+  ]
+}
