@@ -312,6 +312,7 @@ import {
   Postcard, Place, QuestionFilled, Bell, Reading
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
+import { isLightweightTournament } from '../../utils/lightweightMode'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
 import { demoModeChangeEvent, isDemoMode, setDemoMode } from '../../utils/demoMode'
 import productLogo from '../../assets/logo-saixiaofeng.png'
@@ -826,6 +827,20 @@ const coachNavItems = [{ path: '/tournament-space', label: '赛事空间', icon:
 const currentTournamentId = computed(() => String(route.params.id || ''))
 watch(() => route.params.id, syncDemoMode)
 
+// 轻量模式（只记比分、做排名）是赛事级工作流开关：赛事内导航按同一口径隐藏报名与裁判入口。
+const lightweightTournament = ref(false)
+async function syncLightweightMode(tournamentId) {
+  lightweightTournament.value = false
+  if (!tournamentId) return
+  try {
+    const record = await queryById('tournaments', tournamentId)
+    lightweightTournament.value = isLightweightTournament(record)
+  } catch {
+    lightweightTournament.value = false
+  }
+}
+watch(currentTournamentId, (id) => { syncLightweightMode(id) }, { immediate: true })
+
 function tournamentWorkspacePath(suffix = '') {
   return currentTournamentId.value
     ? `/tournaments/${currentTournamentId.value}${suffix}`
@@ -936,9 +951,16 @@ const isAdminPage = computed(() => {
          (route.path === '/system' && userInfo.value.isPlatformOwner === true)
 })
 
+// 轻量模式隐藏点：报名管理（报名表 Word、报名审核）与裁判管理（指派与签核）。
+// 球队管理、抽签、比赛管理、赛果管理保留；球队页内部再按同一开关隐藏名单相关入口。
+const LIGHTWEIGHT_HIDDEN_SUFFIXES = ['/registration', '/referees']
+const visibleOrganizerNavItems = computed(() => lightweightTournament.value
+  ? organizerNavItems.value.filter(item => !LIGHTWEIGHT_HIDDEN_SUFFIXES.some(suffix => item.path.endsWith(suffix)))
+  : organizerNavItems.value)
+
 // 根据角色返回对应导航菜单
 const currentNavItems = computed(() => {
-  if (demoModeActive.value) return organizerNavItems.value.filter(item => !item.external && item.path !== '/system')
+  if (demoModeActive.value) return visibleOrganizerNavItems.value.filter(item => !item.external && item.path !== '/system')
   const ownerOnly = (items) => userInfo.value.isPlatformOwner
     ? items
     : items.filter(item => item.path !== '/system')
@@ -952,7 +974,7 @@ const currentNavItems = computed(() => {
   if (currentRole.value === ROLES.REFEREE) {
     return ownerOnly(refereeNavItems.value)
   }
-  return ownerOnly(organizerNavItems.value)
+  return ownerOnly(visibleOrganizerNavItems.value)
 })
 
 // 用户下拉菜单命令

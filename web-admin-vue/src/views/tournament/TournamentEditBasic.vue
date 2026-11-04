@@ -29,6 +29,13 @@
           <el-form-item label="赛事简称"><el-input v-model="form.shortName" maxlength="20" /></el-form-item>
         </div>
         <div class="grid compact-grid">
+          <el-form-item class="wide" label="办赛模式">
+            <el-radio-group v-model="form.lightweightMode">
+              <el-radio-button :label="false">标准办赛</el-radio-button>
+              <el-radio-button :label="true">轻量模式（只记比分、做排名）</el-radio-button>
+            </el-radio-group>
+            <small class="mode-hint">轻量模式与赛事类别、参赛模式无关；开启后隐藏报名表、名单、球员采集与裁判流程，比赛卡片直接录比分。</small>
+          </el-form-item>
           <el-form-item label="赛事类别" prop="category" required><el-select v-model="form.category"><el-option label="青少年足球赛事" value="youth" /><el-option label="成人足球赛事" value="adult" /><el-option label="校园足球赛事" value="campus" /></el-select></el-form-item>
           <el-form-item label="比赛地点" prop="regionPath" required>
             <el-cascader v-model="form.regionPath" :options="regionOptions" :props="{ emitPath: true }" filterable clearable placeholder="请选择省、市、区县" />
@@ -101,7 +108,7 @@ const regionOptions = provincesData.map(province => ({
   ]
 }))
 const form = ref({
-  name: '', shortName: '', category: 'youth', regionPath: [], commercialCategories: commercialCategoriesFrom(), dateRange: [], deadline: '',
+  name: '', shortName: '', category: 'youth', lightweightMode: false, regionPath: [], commercialCategories: commercialCategoriesFrom(), dateRange: [], deadline: '',
   organizers: [''], undertakers: [''], coOrganizers: [''], contactName: '', contactPhone: '', logo: '', logoFileId: '',
   regulationsFileId: '', regulationsUrl: '', regulationsFileName: ''
 })
@@ -120,7 +127,7 @@ async function loadTournament() {
     const data = await queryById('tournaments', id)
     if (!data) throw new Error('赛事不存在')
     form.value = {
-      name: data.name || '', shortName: data.shortName || '', category: data.category || 'youth',
+      name: data.name || '', shortName: data.shortName || '', category: data.category || 'youth', lightweightMode: data.lightweightMode === true,
       regionPath: resolveRegionPath(data), commercialCategories: commercialCategoriesFrom(data),
       dateRange: data.startDate && data.endDate ? [data.startDate, data.endDate] : [], deadline: data.deadline || '',
       organizers: organizationList(data.organizers || data.organizerName || data.organizer || data.organizationStructure?.organizers || data.organizationStructure?.organizerName),
@@ -294,6 +301,7 @@ async function applyRecognition(data, divisions) {
   await updateRecord('tournaments', id, {
     name: form.value.name.trim(),
     category: form.value.category,
+    lightweightMode: form.value.lightweightMode === true,
     ...region,
     location: region.region,
     startDate: form.value.dateRange?.[0] || '',
@@ -416,6 +424,7 @@ async function handleSubmit() {
     const commercial = commercialPayload(form.value.commercialCategories)
     await updateRecord('tournaments', id, {
       name: form.value.name.trim(), shortName: form.value.shortName.trim(), category: form.value.category,
+      lightweightMode: form.value.lightweightMode === true,
       ...region, location: region.region, ...commercial,
       startDate: dates[0] || '', endDate: dates[1] || '', deadline: form.value.deadline || '',
       organizers, organizerName: organizers.join('、'), undertakers, coOrganizers,
