@@ -1,0 +1,59 @@
+{
+  "task": "schedule-form-workbook-order",
+  "checkedAt": "2026-11-02T10:14:00.000Z",
+  "source": {
+    "codeCommit": "3964f4c5c445595a2c2f875adab06212b1533cd1",
+    "alignCommit": "8b5cf664d7e39b8dd955a0ffbe3bcb53a48bee7f",
+    "previewRef": "github/preview",
+    "formalRef": "github/main",
+    "changedFile": "web-admin-vue/src/utils/scheduleTemplateWorkbook.mjs",
+    "relatedCommit": "fa5c6927"
+  },
+  "localOrderingCheck": {
+    "tool": "ExcelJS readback of createScheduleTemplateWorkbook",
+    "legacyDataOrder": [1, 2, 7, 10, 13, 3, 4, 8, 11, 14, 5, 6, 9, 12, 15, 16, 17, 18, 19, 20, 21, 23, 22],
+    "modernDataOrder": "unchanged",
+    "finalIsLast": true,
+    "result": "passed"
+  },
+  "shippedBundleCheck": {
+    "chunk": "assets/TournamentScheduleV2-CU3h4i0U.js",
+    "containsWorkbookFilename": true,
+    "containsComparator": "stageRankOf -> round -> group -> matchNo",
+    "bareRequire": "absent",
+    "cloudbaseJsSdk": "absent"
+  },
+  "live": {
+    "production": {
+      "url": "https://www.sxffootball.cn/admin/",
+      "http": 200,
+      "entryHtmlSha256": "13C8E508FE523253CF667ACAA4A2FB78F0AFA72777A5BB657F8694324E95E0C7",
+      "entryScript": "/admin/assets/index-DAlGyDTc.js",
+      "entryScriptHttp": 200,
+      "workbookChunkHttp": 200,
+      "releaseMetadataHttp": 200,
+      "releaseMetadataSha256": "A3211F9ACB1F6D3426AD7F5B5669C5E1122535DEC3B1CF452C79CE61CF85C976",
+      "hostedFiles": 407
+    },
+    "preview": {
+      "url": "https://www.sxffootball.cn/preview/admin/",
+      "http": 200,
+      "entryHtmlSha256": "FE9B79AD911FC2A83F621CEBF3FA03C6C17DCA3974A64349EF4F8D288CC6D456",
+      "entryScript": "/preview/admin/assets/index-C_zASndt.js",
+      "entryScriptHttp": 200,
+      "hostedFiles": 407
+    }
+  },
+  "pcAlignment": {
+    "sourceCommit": "8b5cf664d7e39b8dd955a0ffbe3bcb53a48bee7f",
+    "formalBaselineCommit": "8b5cf664d7e39b8dd955a0ffbe3bcb53a48bee7f",
+    "pcSourceSha256": "ef32fb093f1ea70016c8bc6317a6222bca76b94185e9187271836423253e3935",
+    "sourceAligned": true,
+    "sourceDirty": false
+  },
+  "desktopSmoke": {
+    "production": "passed 8/8",
+    "preview": "passed 8/8"
+  },
+  "cloudFunctions": "unchanged; generateSchedule is the shared formal backend"
+}

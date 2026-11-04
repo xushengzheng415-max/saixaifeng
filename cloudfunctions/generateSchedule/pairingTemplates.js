@@ -137,24 +137,25 @@ function roundRobinStage(code, pairings, round) {
   return { name: '小组赛 ' + code + '组 · 第' + round + '轮', stageName: '小组赛阶段', stageOrder: 1, phase: 'group', group: code + '组', round: round, matches: pairings.map(function(pair, index) { return { code: code + '-R' + round + '-' + (index + 1), home: code + pair[0], away: code + pair[1], roundName: '小组赛 ' + code + '组第' + round + '轮', stageName: '小组赛阶段', stageOrder: 1 } }) }
 }
 
-// 标准循环赛轮转法。奇数球队使用内部轮空位，不生成虚假比赛。
+// 标准循环赛轮转法（圆桌轮转）。奇数球队使用内部轮空位，不生成虚假比赛。
+// 初始排列按「奇数签位在前、偶数签位倒序在后」交错，等价于把签表相邻签位
+// 放进同一轮：首轮即 A1-A2、A3-A4、B1-B2…；之后固定首位、其余签位轮转，
+// 保证每轮每队只赛一场、任意两队只相遇一次（赛会制为中立场地，不安排主客场轮换）。
 function standardRoundRobinRounds(teamCount, loopType) {
   var size = Math.max(2, Math.min(64, Number(teamCount || 0)))
-  var entries = Array.from({ length: size }, function(_, index) { return index + 1 })
-  if (entries.length % 2 === 1) entries.push(null)
+  var order = Array.from({ length: size }, function(_, index) { return index + 1 })
+  if (order.length % 2 === 1) order.push(null)
+  var count = order.length
+  var entries = []
+  for (var seedIndex = 0; seedIndex < count; seedIndex += 2) entries.push(order[seedIndex])
+  for (var mirrorIndex = count - 1; mirrorIndex >= 1; mirrorIndex -= 2) entries.push(order[mirrorIndex])
   var rounds = []
-  var count = entries.length
   for (var roundIndex = 0; roundIndex < count - 1; roundIndex += 1) {
     var pairings = []
     for (var pairIndex = 0; pairIndex < count / 2; pairIndex += 1) {
       var home = entries[pairIndex]
       var away = entries[count - 1 - pairIndex]
       if (!home || !away) continue
-      if ((roundIndex + pairIndex) % 2 === 1) {
-        var swap = home
-        home = away
-        away = swap
-      }
       pairings.push([home, away])
     }
     rounds.push(pairings)
@@ -169,19 +170,41 @@ function standardRoundRobinRounds(teamCount, loopType) {
   return rounds
 }
 
+// 小组赛按「轮次」统一编排：第一轮 A、B、C、D 组同时开赛（A1-A2、A3-A4、B1-B2…），
+// 第二轮再统一打下一轮，而不是把 A 组全部打完才开始 B 组。
 function standardRoundRobinTemplate(options) {
   options = options || {}
   var groupSizes = Array.isArray(options.groupSizes) && options.groupSizes.length
     ? options.groupSizes.map(Number)
     : Array.from({ length: Math.max(1, Number(options.groupCount || 1)) }, function() { return Number(options.teamsPerGroup || options.teamCount || 0) })
   var loopType = String(options.loopType || 'single') === 'double' ? 'double' : 'single'
-  var stages = []
-  groupSizes.forEach(function(size, groupIndex) {
-    var code = String.fromCharCode(65 + groupIndex)
-    standardRoundRobinRounds(size, loopType).forEach(function(pairings, roundIndex) {
-      stages.push(roundRobinStage(code, pairings, roundIndex + 1))
-    })
+  var groups = groupSizes.map(function(size, groupIndex) {
+    return { code: String.fromCharCode(65 + groupIndex), rounds: standardRoundRobinRounds(size, loopType) }
   })
+  var maxRounds = groups.reduce(function(max, group) { return Math.max(max, group.rounds.length) }, 0)
+  var stages = []
+  for (var roundIndex = 0; roundIndex < maxRounds; roundIndex += 1) {
+    var matches = []
+    groups.forEach(function(group) {
+      var round = roundIndex + 1
+      ;(group.rounds[roundIndex] || []).forEach(function(pair, index) {
+        matches.push({
+          code: group.code + '-R' + round + '-' + (index + 1),
+          home: group.code + pair[0],
+          away: group.code + pair[1],
+          phase: 'group',
+          group: group.code + '组',
+          pool: group.code + '组',
+          round: round,
+          roundName: '小组赛 ' + group.code + '组第' + round + '轮',
+          stageName: '小组赛阶段',
+          stageOrder: 1
+        })
+      })
+    })
+    if (!matches.length) continue
+    stages.push({ name: '小组赛 第' + (roundIndex + 1) + '轮', stageName: '小组赛阶段', stageOrder: 1, phase: 'group', round: roundIndex + 1, matches: matches })
+  }
   return {
     version: text(options.version || ('standard-rotation-' + loopType + '-v1')),
     source: text(options.source || '标准循环赛轮转法'),

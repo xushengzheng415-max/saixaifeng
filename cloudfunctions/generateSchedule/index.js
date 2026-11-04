@@ -430,6 +430,102 @@ async function resetPairings(event, tournament, actor) {
   return { success:true, message:'已清空当前组别对阵，可以重新抽签', divisionId, deletedMatchCount:matches.length, hasOtherDivisionMatches }
 }
 
+var SCHEDULE_FAILURE_REASON_LABELS = {
+  noFormat: '比赛缺少几人制规则',
+  noVenue: '没有与比赛制式一致的场地',
+  noSlot: '没有满足全部约束的时隙',
+  unknown: '未满足排程条件'
+}
+function scheduleFailureReasonLabel(code) {
+  return SCHEDULE_FAILURE_REASON_LABELS[code] || scheduleEngine.SCHEDULE_BLOCKER_LABELS[code] || code || '未满足排程条件'
+}
+function scheduleFailureSuggestions(codes) {
+  var list = []
+  var has = function(code) { return codes.indexOf(code) >= 0 }
+  if (has('noFormat')) list.push('有场次缺少几人制规则：请先在竞赛规则中确认该组别人制（5/7/8/9/11 人制）后再排程。')
+  if (has('noVenue')) list.push('没有与比赛制式完全一致的场地：请在赛程设置的场地资源中增加对应制式的场地。')
+  if (has('barrierPending')) list.push('赛段屏障：前一赛段必须整体排完才能进入下一赛段，天数需求是各赛段串行相加。请增加比赛日，或把后续赛段整体往后放。')
+  if (has('dependencyPending')) list.push('前置场次没有先落位，或两场间隔不足最短休息：请先让依赖场次排在更早的日期和时段，再重排后续场次。')
+  if (has('teamSession')) list.push('同一球队在同一时段只能排 1 场：两块场地用同一个开赛点时，一天最多 2 场且必须是不同球队。请给每块场地增加第二个开赛点或开启晚场。')
+  if (has('criticalTimeUsed') || has('finalsTimeUsed')) list.push('半决赛/三四名/决赛在同一日期同一开赛点只能排 1 场：即使有两块同开赛点场地，决赛阶段一天也只能用一块场地。请增加开赛点或错开比赛日。')
+  if (has('teamDaily')) list.push('同一球队当日场次已达上限（5 人制每队每天 2 场、11 人制 1 场）：请增加比赛日，或调整该组别的每日上限。')
+  if (has('teamRest')) list.push('同一球队两场之间休息时间不足：请拉开开赛点间隔，或把该队场次分散到不同日期。')
+  if (has('venueOccupied') || has('slotOccupied')) list.push('这些日期+开赛点+场地已被其他比赛（含其他组别）占用：请错开日期，或增加场地与开赛点。')
+  if (has('windowOverflow')) list.push('比赛结束时间超出该时段允许时间：请延长对应时段结束时间，或把开赛点提前。')
+  if (has('dateNotAllowed')) list.push('比赛日不够：请多勾选比赛日，未勾选的日期不会排入比赛。')
+  if (has('dateRestricted')) list.push('该组别的日期限制把可用日期缩得太少：请检查组别日期限制设置。')
+  if (has('dailyLimit')) list.push('该组别当日场次已达上限：请调高每日场次上限，或增加比赛日。')
+  if (!list.length) list.push('请增加场地/开赛点或比赛日后再排程；也可以先手动把部分场次拖到空余资源格，再用「自动排程」只补排剩余场次。')
+  return list
+}
+function buildScheduleResourceSummary(config, occupiedMatches, pendingCount, assignedCount) {
+  var slots = scheduleEngine.buildVenueSlots(config || {})
+  var byFormat = {}
+  slots.forEach(function(slot) {
+    var format = String(slot.fieldFormat || '').toLowerCase()
+    if (!byFormat[format]) byFormat[format] = { fieldFormat: format, label: format.replace('side','人制'), dailySlots: 0, venues: [] }
+    byFormat[format].dailySlots += 1
+    if (byFormat[format].venues.indexOf(slot.venue) < 0) byFormat[format].venues.push(slot.venue)
+  })
+  var formats = Object.keys(byFormat).map(function(format) {
+    return { fieldFormat: byFormat[format].fieldFormat, label: byFormat[format].label, dailySlots: byFormat[format].dailySlots, venues: byFormat[format].venues.join('、') }
+  })
+  var dates = Array.isArray(config && config.matchDates) ? config.matchDates.filter(Boolean).map(String) : []
+  var days = dates.length
+  if (!days && config && config.startDate && config.endDate) days = Math.max(1, Math.floor((new Date(config.endDate).getTime() - new Date(config.startDate).getTime()) / 86400000) + 1)
+  return {
+    days: days,
+    firstDate: dates[0] || String(config && config.startDate || ''),
+    lastDate: dates[dates.length - 1] || String(config && config.endDate || ''),
+    formats: formats,
+    occupiedMatchCount: (occupiedMatches || []).length,
+    pendingCount: Number(pendingCount || 0),
+    assignedCount: Number(assignedCount || 0)
+  }
+}
+function buildScheduleFailurePayload(assigned, validation, divisions, config, occupiedMatches, pendingCount) {
+  var divisionMeta = {}
+  ;(divisions || []).forEach(function(item) {
+    var division = item && item.state && item.state.division || {}
+    divisionMeta[String(item.id)] = String(division.name || division.divisionName || '') || '未命名组别'
+  })
+  var details = (validation.missingAssignments || []).map(function(match) {
+    var divisionId = String(match.divisionId || 'default')
+    return {
+      matchId: String(match._id || ''),
+      matchNo: Number(match.matchNo || match.matchIndex || 0),
+      divisionId: divisionId,
+      divisionName: String(match.divisionName || divisionMeta[divisionId] || ''),
+      stageName: String(match.scheduleStageName || '') || String(match.roundName || ''),
+      roundName: String(match.roundName || ''),
+      homeTeam: String(match.homeTeamName || topology.label(match.homeSource) || '待定'),
+      awayTeam: String(match.awayTeamName || topology.label(match.awaySource) || '待定'),
+      reason: String(match.scheduleIssueLine || match.scheduleIssue || '未满足排程条件'),
+      reasonCode: String(match.scheduleIssueCode || ''),
+      reasons: (match.scheduleIssueDetail || []).map(function(item) { return { code: String(item.code || ''), label: String(item.label || ''), count: Number(item.count || 0) } })
+    }
+  })
+  var summaryMap = {}
+  details.forEach(function(item) {
+    var code = item.reasonCode || 'unknown'
+    if (!summaryMap[code]) summaryMap[code] = { code: code, label: scheduleFailureReasonLabel(code), count: 0, matches: [] }
+    summaryMap[code].count += 1
+    if (summaryMap[code].matches.length < 12) summaryMap[code].matches.push(item.matchNo ? ('场序' + item.matchNo) : item.matchId)
+  })
+  var reasonSummary = Object.keys(summaryMap).map(function(code) { return summaryMap[code] }).sort(function(a, b) { return b.count - a.count })
+  var codes = reasonSummary.map(function(item) { return item.code })
+  if ((validation.conflicts || []).length && codes.indexOf('slotOccupied') < 0) codes.push('slotOccupied')
+  var resourceSummary = buildScheduleResourceSummary(config, occupiedMatches, pendingCount, (assigned || []).length - (validation.missingAssignments || []).length)
+  return {
+    unassignedMatches: details,
+    reasonSummary: reasonSummary,
+    suggestions: scheduleFailureSuggestions(codes),
+    conflicts: validation.conflicts,
+    dailyLimitExceeded: validation.dailyLimitExceeded,
+    resourceSummary: resourceSummary
+  }
+}
+
 async function scheduleExistingPairings(event, tournament, actor) {
   var tournamentId = String(event.tournamentId || tournament._id || '')
   var ids = Array.isArray(event.divisionIds) && event.divisionIds.length
@@ -473,7 +569,16 @@ async function scheduleExistingPairings(event, tournament, actor) {
   })
   var validation = validateGeneratedSchedule(assigned, occupiedBeforeAssignment, getDailyMatchLimit(config))
   if (validation.missingAssignments.length || validation.conflicts.length || validation.dailyLimitExceeded.length) {
-    return { success: false, code: 'SCHEDULE_CAPACITY_INSUFFICIENT', message: '当前日期、场地或阶段容量不足，仍有' + validation.missingAssignments.length + '场比赛未完成安排', unassigned: validation.missingAssignments.length, conflicts: validation.conflicts }
+    var failure = buildScheduleFailurePayload(assigned, validation, divisions, config, occupiedMatches, selected.length)
+    var missingCount = validation.missingAssignments.length
+    return Object.assign({
+      success: false,
+      code: 'SCHEDULE_CAPACITY_INSUFFICIENT',
+      message: missingCount
+        ? '当前日期、场地或阶段容量不足，仍有' + missingCount + '场比赛未完成安排'
+        : '所选范围内存在时段冲突，排程未生效',
+      unassigned: missingCount
+    }, failure)
   }
   await Promise.all(assigned.map(function(match) { return db.collection('matches').doc(match._id).update({ data: { matchDate: match.matchDate, matchTime: match.matchTime, venue: match.venue, date: match.date || match.matchDate, startTime: match.startTime || match.matchTime, timeSlot: match.timeSlot || match.matchTime,durationMinutes:Number(match.durationMinutes || 0),bufferMinutes:Number(match.bufferMinutes || 0),scheduleSession:String(match.scheduleSession || ''), scheduleStatus: 'scheduled', scheduleGenerated: true, updateTime: db.serverDate() } }) }))
   var now = db.serverDate()
@@ -590,38 +695,17 @@ function normalizeScheduleTiming(scheduleConfig, division) {
   return { config: config, matchMinutes: matchMinutes, timeSlots: slots, venueSlots: venueSlots }
 }
 
-// 标准循环赛轮转法：每轮每支球队最多参加一场比赛
+// 标准循环赛轮转法：每轮每支球队最多参加一场比赛。
+// 与 pairingTemplates.standardRoundRobinRounds 共用同一口径：首轮相邻签位配对
+// （1-2、3-4、5-6…），其余轮次固定首位轮转，跨小组可按轮次同步开赛。
 function buildRoundRobinRounds(sourceTeams) {
   var teams = (sourceTeams || []).slice()
   if (teams.length < 2) return []
-  if (teams.length % 2 === 1) teams.push(null)
-
-  var rounds = []
-  var teamCount = teams.length
-  for (var roundIndex = 0; roundIndex < teamCount - 1; roundIndex++) {
-    var pairings = []
-    for (var pairIndex = 0; pairIndex < teamCount / 2; pairIndex++) {
-      var home = teams[pairIndex]
-      var away = teams[teamCount - 1 - pairIndex]
-      if (!home || !away) continue
-
-      // 交替主客场，避免固定球队长期连续主场或客场
-      if ((roundIndex + pairIndex) % 2 === 1) {
-        var temp = home
-        home = away
-        away = temp
-      }
-      pairings.push({ home: home, away: away })
-    }
-    rounds.push(pairings)
-
-    // 固定第一支球队，其余球队顺时针轮转
-    var fixed = teams[0]
-    var rotating = teams.slice(1)
-    rotating.unshift(rotating.pop())
-    teams = [fixed].concat(rotating)
-  }
-  return rounds
+  return pairingTemplates.standardRoundRobinRounds(teams.length, 'single').map(function(pairings) {
+    return pairings.map(function(pair) {
+      return { home: teams[pair[0] - 1], away: teams[pair[1] - 1] }
+    })
+  })
 }
 
 function roundScheduleKey(match) {

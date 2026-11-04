@@ -6,12 +6,17 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/team-join-notify-claimant-20261102.md','发布记录/入队申请服务号通知只发认领人-20261102.md'],
+  ['docs/releases/schedule-form-order-20261102.md','发布记录/schedule-form-order-20261102.md'],
+  ['docs/releases/schedule-form-order-20261102.readback.json','发布记录/schedule-form-order-20261102.readback.json'],
   ['docs/releases/player-review-shortcuts-alignment.readback.json','发布记录/player-review-shortcuts-alignment.readback.json'],
   ['docs/releases/team-avatar-review-20261101.readback.json','发布记录/team-avatar-review-20261101.readback.json'],
   ['docs/releases/team-player-review-20261101.md','发布记录/team-player-review-20261101.md'],
   ['docs/releases/team-avatar-display-20261101.md','发布记录/team-avatar-display-20261101.md'],
   ['docs/handoffs/FRIENDLY_SIGNUP_TRAE_HANDOFF_2026-11-01.md','研发交接/约球报名后端接线Trae交接-20261101.md'],
   ['docs/releases/registration-identity-pending-20261101.readback.json','发布记录/registration-identity-pending-20261101.readback.json'],
+  ['docs/releases/team-owner-display-20261104.md','发布记录/team-owner-display-20261104.md'],
+  ['docs/releases/team-owner-display-20261104.readback.json','发布记录/team-owner-display-20261104.readback.json'],
   ['docs/releases/pc-formal-alignment-20261102.md','发布记录/pc-formal-alignment-20261102.md'],
   ['docs/releases/pc-formal-alignment-20261102.readback.json','发布记录/pc-formal-alignment-20261102.readback.json'],
   ['docs/releases/team-player-document-type-20261102.md','发布记录/team-player-document-type-20261102.md'],

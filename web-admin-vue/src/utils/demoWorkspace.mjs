@@ -324,6 +324,7 @@ export function createDemoWorkspace({assetBase='/preview/admin/',poolDataset=nul
         if(finalStageRow(row))finalsTimeUse.add(`${row.matchDate}|${row.matchTime}`)
       }
       const before=clone(tables)
+      let unplacedRow=null,unplacedReason='',unplacedCode='',unplacedFormat=''
       try {
         for(const row of list.sort(demoStageSort)) {
           let chosen
@@ -359,9 +360,58 @@ export function createDemoWorkspace({assetBase='/preview/admin/',poolDataset=nul
               if(preview.success){schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:false,adjustmentType:'auto'});chosen=entry;planned.push(entry);anyTimeUse.add(timeKey);if(finalStageRow(row))finalsTimeUse.add(timeKey);break}
             }
           }
-          if(!chosen)throw new Error(requiredFormat && !venueRows.length ? `没有兼容${requiredFormat.replace('side','人制')}的场地，请检查赛程设置的场地制式` : '可用日期、场地或时段不足，请调整设置')
+          if(!chosen){
+            // 排不下时不再抛一句泛化错误，而是带回「卡在哪条约束 + 未排明细 + 建议」，与正式后端一致
+            unplacedRow=row
+            unplacedFormat=requiredFormat
+            const formatLabel=requiredFormat ? requiredFormat.replace('side','人制') : '该组别'
+            if(requiredFormat && !venueRows.length){unplacedCode='noCompatibleVenue';unplacedReason=`没有「${formatLabel}」制式的可用场地，请检查赛程设置的场地制式`}
+            else if(finalStageRow(row)){unplacedCode='finalsExclusive';unplacedReason='决赛、半决赛、三四名决赛须独占时段，同一日期同一开赛点只能排 1 场，已勾选的比赛日不足'}
+            else{unplacedCode='constraintFull';unplacedReason='可用比赛日、场地与开赛点已被同队每日上限、同时间段上限和休息间隔占满'}
+            break
+          }
         }
       }catch(error){for(const key of Object.keys(tables))delete tables[key];Object.assign(tables,before);throw error}
+      if(unplacedRow){
+        for(const key of Object.keys(tables))delete tables[key]
+        Object.assign(tables,before)
+        // 失败时回滚全部试排结果，并返回与正式后端同结构的「原因 + 明细 + 建议 + 资源摘要」
+        const plannedIds=new Set(planned.map(item=>item.matchId))
+        const remaining=list.filter(row=>!plannedIds.has(row._id))
+        const allowedDays=(Array.isArray(config.matchDates)&&config.matchDates.length)
+          ? new Set(config.matchDates.map(value=>String(value).slice(0,10))).size
+          : (config.startDate&&config.endDate ? Math.max(0,Math.round((new Date(`${config.endDate}T00:00:00`)-new Date(`${config.startDate}T00:00:00`))/86400000)+1) : 0)
+        const formatMap=new Map()
+        for(const venue of config.venueResources || []){
+          const name=String(venue && venue.name || '').trim()
+          if(!name)continue
+          const format=String(venue.fieldFormat || '').trim().toLowerCase()
+          if(!formatMap.has(format))formatMap.set(format,{fieldFormat:format,label:format ? format.replace('side','人制') : '未设制式',venues:[],dailySlots:0})
+          const item=formatMap.get(format)
+          item.venues.push(name)
+          item.dailySlots=Math.max(item.dailySlots,(venueTimeLists.get(name) || []).length)
+        }
+        const suggestions=[]
+        if(unplacedCode==='noCompatibleVenue')suggestions.push(`在「赛程设置」新增或修正「${unplacedFormat.replace('side','人制')}」制式场地：场地制式必须与组别制式完全一致`)
+        if(unplacedCode==='finalsExclusive')suggestions.push('决赛阶段独占开赛点：半决赛、三四名决赛、决赛各占 1 个「日期 + 开赛点」，请增加比赛日或为这些场次单独留出开赛点')
+        suggestions.push('核对每块场地的首场、末场与开赛点：两块场地同一开赛点一天最多排 2 场，且两场必须是不同球队')
+        suggestions.push('若组别策略把「每天上限」设为 1 场，4 支球队以上的单循环至少需要 3 个比赛日；可改为「按制式自适应」或「上下午各 1 场」')
+        suggestions.push('也可以先在比赛地图手动把部分场次放进空余时段，再用「自动排程」只补排剩余场次')
+        const reasonRows=remaining.map(row=>({matchId:row._id,matchNo:Number(row.matchNo || 0),divisionName:String(row.divisionName || rows('divisions').find(item=>String(item._id)===String(row.divisionId))?.name || ''),stageName:String(row.roundName || row.groupName || (row.round ? `第${row.round}轮` : '')),homeTeam:String(row.homeTeamName || '待定'),awayTeam:String(row.awayTeamName || '待定'),reason:unplacedReason,reasonCode:unplacedCode}))
+        const occupiedMatchCount=rows('matches').filter(row=>!pendingIds.has(row._id) && row.matchDate && row.matchTime && row.venue && row.status!=='cancelled' && !row.demoLegacyPairing).length
+        return {
+          success:false,
+          code:'SCHEDULE_CAPACITY_INSUFFICIENT',
+          message:`当前日期、场地或阶段容量不足，仍有${remaining.length}场比赛未完成安排`,
+          unassigned:remaining.length,
+          unassignedMatches:reasonRows.slice(0,12),
+          reasonSummary:[{code:unplacedCode,label:unplacedReason,count:remaining.length,matches:reasonRows.slice(0,12).map(row=>`场序${row.matchNo}`)}],
+          suggestions,
+          dailyLimitExceeded:[],
+          conflicts:[],
+          resourceSummary:{days:allowedDays,pendingCount:list.length,assignedCount:planned.length,occupiedMatchCount,formats:[...formatMap.values()]}
+        }
+      }
       update('tournaments',tournamentId,{scheduleGenerated:true,scheduleConfig:config,scheduleDraft:config})
       return {success:true,matchCount:planned.length,message:`已编排 ${planned.length} 场比赛`}
     }
