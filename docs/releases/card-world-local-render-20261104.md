@@ -155,7 +155,25 @@ HTTP 回读 SHA-256 `ALL MATCH`，并线上回读确认两端版本 `ai10`、含
 HTTP 回读 SHA-256 `ALL MATCH`，线上回读确认两端 `ai11`、含 `own-confirm`、渲染器脚本、`paintOwnCard`、
 `cardGate` 与「先存背景再写照片」链路。
 
-## 十二、后续注意
+## 十二、追加（同日）：卡面页删掉独立的 AI 形象照面板
+
+用户反馈「既然有编辑路径了，这部分就不要了吧」，指的是卡面页（`index.html`）那块
+「重点 · 对背景或形象照不满意？」+「直接生成 AI 形象照」大按钮。此前它绕开编辑球员卡，
+和 hero 区「编辑球员卡 / 换形象照」两个入口重复。
+
+- `index.html`：删除整个 `#ai-panel`（含 `#btn-ai-portrait`）；会员权益面板里的陈旧指引改为
+  「换照片或形象照请进「编辑球员卡」用「更换照片」，可选相册上传或拍摄，也可一键形象照由 AI 生成」；
+  `js/app.js` 查询版本升到 `ai11`。
+- `js/app.js`：删除 `openAiPortrait()` 与 `#btn-ai-portrait` 绑定（避免空引用），保留 `gotoPortrait`
+  与 `aiPortraitPlayerId`；「换形象照」仍进编辑球员卡并自动弹「更换照片」。
+- `design.html`：`js/design.js` 查询版本同步升到 `ai11`（该文件本次会话已多次改动）。
+
+验证：`node --check app.js` 通过；6 套测试全通过（把「卡面页 AI 入口固定进一键形象照」替换为
+「卡面页已删掉独立的 AI 形象照面板」「会员说明改成走「编辑球员卡」换照片」两条断言）；
+正式与测试两端 16 文件重发，HTTP 回读 SHA-256 `ALL MATCH`，线上回读确认两端已无
+`ai-panel`/`btn-ai-portrait`、`app.js` 不再含 `openAiPortrait`，且「换形象照」入口仍在。
+
+## 十三、后续注意
 
 - `service-account-h5/card-world/js/dynamic-card-renderer.js` 是 `service-account-h5/dynamic-card-renderer.js`
   的字节一致副本（SHA-256 相同），共享渲染器改动后必须同步副本再发布。
