@@ -27,7 +27,7 @@ function response(body) {
     await ctx.route('**/webLoginApi',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(response(route.request().postDataJSON()))}))
     await ctx.route('**/*',route=>{const u=new URL(route.request().url());if(!['127.0.0.1','localhost',allowedHost].includes(u.hostname) && !u.hostname.includes('tcloudbase.com')){external.push(u.hostname);return route.abort()};return route.fallback()})
     const page=await ctx.newPage();page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(e.message))
-    await page.goto(baseUrl+'/#/tournament-center-admin?section=tutorials')
+    await page.goto(baseUrl+'/#/tournament-center-admin?section=tutorials',{waitUntil:'domcontentloaded',timeout:60000})
     const fixture=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1200;c.height=800;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,1200,800);x.fillStyle='#f2f5f3';x.fillRect(0,0,1200,80);x.fillStyle='#152d20';x.font='bold 34px "Microsoft YaHei"';x.fillText('球员资料',40,52);x.fillStyle='#176b43';x.fillRect(55,145,95,95);x.fillStyle='#fff';x.font='bold 34px Arial';x.fillText('FC',78,205);x.fillStyle='#151515';x.font='32px "Microsoft YaHei"';x.fillText('姓名：张三',220,185);x.fillText('电话：13812345678',220,265);x.fillText('郑州测试足球队',220,345);x.fillStyle='#176b43';x.fillRect(870,620,220,66);x.fillStyle='#fff';x.fillText('保存',947,664);return c.toDataURL('image/png')})
     const fixtureFile={name:'offline-private-fixture.png',mimeType:'image/png',buffer:Buffer.from(fixture.split(',')[1],'base64')}
     await page.getByRole('button',{name:'新建教程',exact:true}).click()
