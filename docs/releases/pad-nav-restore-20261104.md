@@ -25,10 +25,11 @@
 - 分支自`github/preview`（`3edc89f9f`）建立：`codex/pad-nav-restore-20261104`，只含上述文件。
 - `npm ci`后`VITE_APP_BASE=/preview/admin/ npm run build`通过（19.73s）；`dist/index.html`入口`/preview/admin/assets/index-CxxdV5gn.js`，CSS`index-7eBerNJa.css`。
 - `node tools/test-tablet-layout-detection.cjs`三项通过：原生标识在鼠标/桌面媒体下仍走紧凑布局、普通桌面不受影响、标识必须是完整版本号令牌。
-- 发布后读回`/preview/admin/index.html`：入口资产与本地构建一致；JS含`SxfFootballPad`与`data-tablet-landscape`，CSS含`data-tablet-landscape`、`.sidebar{display:none}`与`tablet-menu-toggle`，共409文件部署成功。
-- 本地构建摘要：`index.html`A632498253751A728D7E67937EF7FD4ABBC0DC90095D425BDB1145E13BF2B03E，入口JS`2B95EF63C61A56C2C34ACAD490B81AF17732E9B223D636A370291CE295943713`，入口CSS`1897E693DB293BAC528FCC113AA9BEEAB5DF4E59D80FE930C6FA9FAAF3C810BF`。
+- `node tools/test-pad-compact-ui.cjs`六种组合全部通过（隔离样例、拦截全部CloudBase请求、未写真实赛事）：1548×940触控、1548×800非触控、2064×1200、1032×600、1032×568在原生标识下均`compact=true`、`sidebarVisible=false`、`menuVisible=true`、无横向溢出、三行记录末行底部470px；1440×900普通桌面对照`sidebarVisible=true`、`menuVisible=false`，菜单抽屉与行操作按原流程可开可关。
+- 发布后读回`/preview/admin/index.html`：入口资产与本地构建一致；JS含`SxfFootballPad`与`data-tablet-landscape`，CSS含`data-tablet-landscape`、`.sidebar{display:none}`与`tablet-menu-toggle`，共409文件部署成功。线上`/preview/admin/#/login`以原生标识访问时`html`同时带`data-tablet-landscape`与`data-sxf-pad-client`且无页面错误，普通桌面标识下两属性均不存在。
+- 本地构建摘要：`index.html`A632498253751A728D7E67937EF7FD4ABBC0DC90095D425BDB1145E13BF2B03E，入口JS`2B95EF63C61A56C2C34ACAD490B81AF17732E9B223D636A370291CE295943713`，入口CSS`1897E693DB293BAC528FCC113AA9BEEAB5DF4E59D80FE930C6FA9FAAF3C810BF`；线上三项摘要逐一匹配。
 
-上述为浏览器与接口读回验证，未在vivo Pad3 Pro真机复验；最终效果需用户在平板应用内点“刷新”后确认。
+上述为浏览器仿真、隔离样例与线上标记读回，未在vivo Pad3 Pro真机复验；最终效果需用户在平板应用内点“刷新”后确认。证据见`output/pad-nav-restore-20261104/`（`result.json`、6张对照截图、`live-native-marker-20261104.json`）。
 
 ## 仍需处理
 
