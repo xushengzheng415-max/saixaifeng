@@ -17,13 +17,26 @@
     try { localStorage.removeItem(KEY) } catch (e) { /* ignore */ }
   }
 
+  // 网页入口请求体上限约 100KB，413 一般是照片没收敛到位；401/403 是登录态失效；5xx 才是服务端异常。
+  function httpMessage(response) {
+    if (response.status === 413) return '照片太大了（单次上传不能超过 100KB），请换一张或重新拍'
+    if (response.status === 401 || response.status === 403) return '登录状态已失效，请回到签卡页重新进入'
+    if (response.status === 429) return '操作太频繁，请稍后再试'
+    if (response.status >= 500) return '服务繁忙，请稍后重试'
+    return '网络异常，请稍后重试'
+  }
+
   function post(payload) {
     return fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(function (response) {
-      if (!response.ok) throw new Error('网络异常，请稍后重试')
+      if (!response.ok) {
+        var error = new Error(httpMessage(response))
+        error.status = response.status
+        throw error
+      }
       return response.json()
     }).then(function (result) {
       if (result && typeof result.body === 'string') return JSON.parse(result.body)

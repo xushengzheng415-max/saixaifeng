@@ -55,6 +55,10 @@
     cardBg: '',
     cardBgBusy: false,
     cardRenderSeq: 0,
+    // 卡面微调：和编辑球员卡的构图换算同一套（逻辑宽 300，左右按 264、上下按 300）
+    crop: { zoom: 1, x: 0, y: 0 },
+    cropDrag: null,
+    cropTimer: 0,
     photoReplace: null,
     price: null,
     busy: false,
@@ -299,6 +303,79 @@
     empty.hidden = !message
   }
 
+  function clampOwnCrop() {
+    state.crop.zoom = Math.min(4, Math.max(1, Number(state.crop.zoom) || 1))
+    state.crop.x = Math.min(2, Math.max(-2, Number(state.crop.x) || 0))
+    state.crop.y = Math.min(2, Math.max(-2, Number(state.crop.y) || 0))
+    return { zoom: state.crop.zoom, x: state.crop.x, y: state.crop.y }
+  }
+
+  // 拖动换算与编辑球员卡一致：卡面逻辑宽 300，人物左右位移按 264、上下按 300。
+  function ownCropDelta(dx, dy, rect) {
+    var logical = 300 / Math.max(1, rect.width || 300)
+    return { dx: dx * logical / 264, dy: dy * logical / 300 }
+  }
+
+  function scheduleOwnRender() {
+    clearTimeout(state.cropTimer)
+    state.cropTimer = setTimeout(function () { paintOwnCard() }, 60)
+  }
+
+  function bindOwnStage() {
+    var stage = $('own-card-canvas')
+    stage.addEventListener('pointerdown', function (event) {
+      if (!state.ownCut || state.cardBgBusy) return
+      if (!state.cropDrag) state.cropDrag = { points: {}, last: null, distance: 0 }
+      state.cropDrag.points[event.pointerId] = { x: event.clientX, y: event.clientY }
+      state.cropDrag.last = { x: event.clientX, y: event.clientY }
+      var ids = Object.keys(state.cropDrag.points)
+      state.cropDrag.distance = ids.length > 1 ? ownPinchDistance() : 0
+      try { stage.setPointerCapture(event.pointerId) } catch (error) { /* ignore */ }
+    })
+    stage.addEventListener('pointermove', function (event) {
+      var drag = state.cropDrag
+      if (!drag || !drag.points[event.pointerId]) return
+      drag.points[event.pointerId] = { x: event.clientX, y: event.clientY }
+      var rect = $('own-card-canvas').getBoundingClientRect()
+      if (Object.keys(drag.points).length > 1) {
+        var next = ownPinchDistance()
+        if (drag.distance > 0 && next > 0) {
+          state.crop.zoom = (Number(state.crop.zoom) || 1) * (next / drag.distance)
+          clampOwnCrop()
+          scheduleOwnRender()
+        }
+        drag.distance = next
+        drag.last = null
+        return
+      }
+      if (!drag.last) { drag.last = { x: event.clientX, y: event.clientY }; return }
+      var delta = ownCropDelta(event.clientX - drag.last.x, event.clientY - drag.last.y, rect)
+      state.crop.x = (Number(state.crop.x) || 0) + delta.dx
+      state.crop.y = (Number(state.crop.y) || 0) + delta.dy
+      clampOwnCrop()
+      drag.last = { x: event.clientX, y: event.clientY }
+      scheduleOwnRender()
+    })
+    function release(event) {
+      if (!state.cropDrag || !state.cropDrag.points[event.pointerId]) return
+      delete state.cropDrag.points[event.pointerId]
+      if (!Object.keys(state.cropDrag.points).length) state.cropDrag = null
+    }
+    stage.addEventListener('pointerup', release)
+    stage.addEventListener('pointercancel', release)
+    stage.addEventListener('pointerleave', release)
+  }
+
+  function ownPinchDistance() {
+    var drag = state.cropDrag
+    if (!drag) return 0
+    var points = Object.keys(drag.points).map(function (key) { return drag.points[key] })
+    if (points.length < 2) return 0
+    var dx = points[0].x - points[1].x
+    var dy = points[0].y - points[1].y
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
   // 把抠好的人像替换卡面里的照片层，本机合成真实卡面效果；不额外让服务端生成 PNG。
   function paintOwnCard() {
     var scene = state.cardScenes[state.cardBg]
@@ -310,7 +387,7 @@
     var seq = ++state.cardRenderSeq
     var patched = Object.assign({}, scene, {
       assets: Object.assign({}, scene.assets, { portrait: state.ownCut }),
-      crop: { zoom: 1, x: 0, y: 0 }
+      crop: clampOwnCrop()
     })
     var canvas = makeCanvas(300, 430)
     return Dynamic.draw(patched, {
@@ -371,8 +448,8 @@
   function cardBgHint() {
     if (!state.card || !state.card.tier) return '球员积分待核定，只能先按当前背景确认。'
     if (!state.cardBg) return '正在读取球员卡当前背景…'
-    if (state.cardBg === state.card.backgroundId) return '当前就是球员卡正在用的背景，确认后只替换照片。'
-    return '确认后先保存「' + bgName(state.cardBg) + '」背景，再把这张人像写进卡面。'
+    if (state.cardBg === state.card.backgroundId) return '当前就是球员卡正在用的背景，确认后替换照片并保存版式。'
+    return '确认后先保存「' + bgName(state.cardBg) + '」背景，再把这张人像和版式写进卡面。'
   }
 
   function confirmOwnBackground() {
@@ -388,14 +465,14 @@
     })
   }
 
-  // 背景换了先保存背景（服务端判定卡级/换背景权益），再用一次性凭证写照片。
+  // 背景换了先保存背景（服务端判定卡级/换背景权益），再用一次性凭证写照片，最后存版式。
   function saveOwnBackground() {
     var card = state.card
     if (!card || !card.tier || !state.cardBg || state.cardBg === card.backgroundId) return Promise.resolve(null)
     return Api.saveCard({
       playerId: state.playerId,
       backgroundId: state.cardBg,
-      crop: { zoom: 1, x: 0, y: 0 },
+      crop: clampOwnCrop(),
       mode: 'portrait',
       tier: card.tier,
       expectedVersion: card.version
@@ -406,10 +483,26 @@
     })
   }
 
-  // 取景框调好后导出的竖版照片（已按框裁剪缩放到合适位置），再交服务端抠图；透明预览只有用户确认后才写进卡面。
+  // 照片写回后再存一次版式（裁剪位置）。服务端按同一张照片只记位置，不重复计费；
+  // 这一步失败也不影响已经换好的照片，只提示版式没存上。
+  function saveOwnLayout(version) {
+    var card = state.card
+    if (!card || !card.tier) return Promise.resolve(false)
+    return Api.saveCard({
+      playerId: state.playerId,
+      backgroundId: state.cardBg || card.backgroundId,
+      crop: clampOwnCrop(),
+      mode: 'portrait',
+      tier: card.tier,
+      expectedVersion: Number(version) || card.version
+    }).then(function () { return true }).catch(function () { return false })
+  }
+
+  // 选好的照片先按网关体积收敛，再直接交服务端抠图；透明预览只有用户确认后才写进卡面。
   function prepareOwnData(photoData) {
     if (!photoData || state.ownBusy) return
     state.ownBusy = true
+    state.crop = { zoom: 1, x: 0, y: 0 }
     ownNote('')
     $('btn-own-apply').disabled = true
     show('own-stage', false)
@@ -429,7 +522,7 @@
       show('own-confirm', true)
       show('own-actions', true)
       $('btn-own-apply').disabled = false
-      ownNote('人像分割完成：先确认下面的背景图，再写进卡面。')
+      ownNote('人像分割完成：在卡面上微调位置，确认版式后写进球员卡。')
       confirmOwnBackground()
     }).catch(function (error) {
       state.ownTicket = ''
@@ -477,8 +570,11 @@
         balance: result.photoReplaceCharge.balance,
         available: true
       })
-      toast(changingBg ? '照片已换，背景也已存成' + bgName(state.cardBg) : '已换成你上传的照片')
-      setTimeout(function () { location.href = backUrl() }, 700)
+      var appliedVersion = Number((result && result.version) || (state.card && state.card.version) || 0)
+      return saveOwnLayout(appliedVersion).then(function (saved) {
+        toast(saved ? '照片和版式都已保存' : '照片已替换，版式没存上，可回编辑球员卡再调')
+        setTimeout(function () { location.href = backUrl() }, 700)
+      })
     }).catch(function (error) {
       state.ownBusy = false
       $('btn-own-apply').disabled = false
@@ -491,10 +587,11 @@
     if (state.ownBusy) return
     state.ownPreview = ''
     state.ownCut = ''
+    state.crop = { zoom: 1, x: 0, y: 0 }
     state.cardBg = state.card ? state.card.backgroundId : ''
     $('own-preview').src = ''
     $('own-cut').src = ''
-    clearFramer(ownFramer)
+    show('own-badge', false)
     show('own-preview', false)
     show('own-empty', true)
     show('own-stage', false)
@@ -502,6 +599,7 @@
     show('own-actions', false)
     ownNote('')
     dropOwnTicket()
+    setTimeout(function () { try { $('own-input').click() } catch (error) { /* 手动点框选一样 */ } }, 60)
   }
 
   function renderPoses() {
@@ -868,12 +966,65 @@
     return view
   }
 
-  var ownFramer = createFramer({
-    frame: 'own-frame', preview: 'own-preview', empty: 'own-empty',
-    bar: 'own-edit', badge: 'own-badge', confirm: 'btn-own-confirm', reset: 'btn-own-reset',
-    note: 'own-note', maxSide: 1800, confirmLabel: '调整好了，去背景',
-    onDone: function (dataUrl) { prepareOwnData(dataUrl) }
-  })
+  // 上传自己的照片：不再先用取景框裁一遍，选完直接服务端抠图，再在卡面上微调版式。
+  // 网页入口（webLoginApi）请求体只有 100KB，这里按体积收敛到 96K 字符以内，保证能过网关。
+  var OWN_PHOTO_MAX_CHARS = 96000
+  var OWN_PHOTO_SIDES = [800, 720, 640, 560]
+
+  function encodeOwnPhoto(image, maxSide) {
+    var scale = Math.min(1, maxSide / Math.max(image.width || 1, image.height || 1))
+    var width = Math.max(1, Math.round((image.width || 1) * scale))
+    var height = Math.max(1, Math.round((image.height || 1) * scale))
+    var canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    var context = canvas.getContext('2d')
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+    var quality = 0.86
+    while (quality >= 0.5) {
+      var data = ''
+      try { data = canvas.toDataURL('image/jpeg', quality) } catch (error) { data = '' }
+      if (data && data.length <= OWN_PHOTO_MAX_CHARS) return data
+      quality -= 0.06
+    }
+    return ''
+  }
+
+  function shrinkOwnPhoto(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader()
+      reader.onerror = function () { reject(new Error('照片读取失败，请重新选择')) }
+      reader.onload = function () {
+        var image = new Image()
+        image.onerror = function () { reject(new Error('照片无法识别，请换一张')) }
+        image.onload = function () {
+          for (var index = 0; index < OWN_PHOTO_SIDES.length; index += 1) {
+            var data = encodeOwnPhoto(image, OWN_PHOTO_SIDES[index])
+            if (data) { resolve(data); return }
+          }
+          reject(new Error('这张照片压缩后仍然过大，请换一张更小的照片'))
+        }
+        image.src = String(reader.result || '')
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  function pickOwnPhoto(file) {
+    if (!file || state.ownBusy) return
+    show('own-badge', true)
+    $('own-badge').textContent = '读取中…'
+    shrinkOwnPhoto(file).then(function (dataUrl) {
+      $('own-badge').textContent = '已读取'
+      prepareOwnData(dataUrl)
+    }).catch(function (error) {
+      show('own-badge', false)
+      ownNote((error && error.message) || '照片处理失败，请重新选择')
+      toast((error && error.message) || '照片处理失败，请重新选择')
+    })
+  }
 
   var photoFramer = createFramer({
     frame: 'photo-frame', preview: 'photo-preview', empty: 'photo-empty',
@@ -1161,18 +1312,13 @@
       var file = event.target.files && event.target.files[0]
       // 清空 value，允许连续选同一张照片时仍触发 change。
       try { event.target.value = '' } catch (error) { /* ignore */ }
-      pickFramer(ownFramer, file)
+      pickOwnPhoto(file)
     })
-    $('btn-own-pick').addEventListener('click', function () { $('own-input').click() })
-    $('btn-own-confirm').addEventListener('click', function () { toggleFramer(ownFramer) })
-    $('btn-own-reset').addEventListener('click', function () { resetFramer(ownFramer) })
-    $('own-preview').addEventListener('click', function () {
-      if (ownFramer.editing) return
-      $('own-input').click()
-    })
+    $('own-preview').addEventListener('click', function () { $('own-input').click() })
     $('own-empty').addEventListener('click', function () { $('own-input').click() })
     $('btn-own-retry').addEventListener('click', retryOwn)
     $('btn-own-apply').addEventListener('click', applyOwn)
+    bindOwnStage()
     $('photo-input').addEventListener('change', function (event) {
       var file = event.target.files && event.target.files[0]
       // 清空 value，允许连续选同一张照片时仍触发 change。
@@ -1219,12 +1365,12 @@
   var ownPickerTried = false
 
   // 选了「上传自己的照片」就直接拉起相册/拍照，不用先在空白框上再点一次。
-  // 进页本身来自一次点击，这里紧跟其后调用一般能通过；被浏览器拦下时，取景框和下面的按钮仍可点。
+  // 进页本身来自一次点击，这里紧跟其后调用一般能通过；被浏览器拦下时点取景框一样能选。
   function autoOpenOwnPicker() {
     if (ownPickerTried) return
     ownPickerTried = true
     setTimeout(function () {
-      if (ownFramer.img) return
+      if (state.ownCut) return
       try { $('own-input').click() } catch (error) { /* 被拦下就走手动点选 */ }
     }, 80)
   }

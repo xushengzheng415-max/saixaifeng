@@ -276,9 +276,11 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .design-stage.is-cropping:active { cursor: grabbing; }
 .design-stage__empty { color: var(--muted); font-size: 12px; padding: 60px 16px; text-align: center; }
 
-/* 换形象照页的「确认背景图」：和注册球员建档同一步，先看卡面效果再确认 */
+/* 换形象照页的「球员卡预览」：直接在卡面上拖动/双指微调版式，所以画布要吃掉手势 */
 .card-confirm { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--panel-line); }
 .card-confirm .design-stage { margin-top: 10px; }
+.card-confirm .design-stage__canvas { touch-action: none; cursor: grab; outline: 1px dashed rgba(232, 197, 106, 0.55); outline-offset: -1px; }
+.card-confirm .design-stage__canvas:active { cursor: grabbing; }
 
 /* 编辑构图：控制条紧跟卡面下方，不再把滑块放到页面最底部 */
 .crop-bar {
