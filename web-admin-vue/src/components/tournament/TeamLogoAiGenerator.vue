@@ -221,11 +221,15 @@ async function generateBatch() {
       }, 120000)
       if (token !== cancelToken) break
       if (!result || result.success !== true) {
-        const message = result?.message || 'AI 队徽生成失败'
         if (result?.code === 'AI_RATE_LIMITED') {
           throw new Error('AI 生图接口当前较繁忙（限流），请稍后点「换一批」重试')
         }
-        throw new Error(message)
+        // 中转层失败时只带 error（如超时），必须原样展示，否则现场只能看到笼统的“生成失败”。
+        const detail = String(result?.error || '').trim()
+        const base = result?.message || ''
+        throw new Error(base && detail && !base.includes(detail)
+          ? `${base}（${detail}）`
+          : (base || (detail ? `AI 队徽生成失败：${detail}` : 'AI 队徽生成失败')))
       }
       const data = result.data || {}
       if (Array.isArray(data.notices) && data.notices.length) notices.value = [...new Set([...notices.value, ...data.notices])]
