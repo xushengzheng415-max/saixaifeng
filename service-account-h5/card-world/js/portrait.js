@@ -7,8 +7,16 @@
   //      （走 cardAiPortraitPrepare / cardAiPortraitApply）。
   // 扣费、凭证、入库都在服务端，本页不决定金额。
   var Api = window.CardWorldApi
+  var Dynamic = window.SxfDynamicCard
   var AI_HTTP = 'https://www.sxffootball.cn/aiPortraitDemo'
   var PENDING_KEY = 'sxf_card_ai_portrait_player'
+  var BACKGROUNDS = [
+    { id: 'bronze', name: '铜卡', note: '基础', rank: 0 },
+    { id: 'silver', name: '银卡', note: '进阶', rank: 1 },
+    { id: 'gold', name: '金卡', note: '精英', rank: 2 }
+  ]
+  /* 兜底门槛与 data-center/score-rules.cjs 一致，实际值由服务端 tierRule 下发。 */
+  var TIER_FALLBACK = { silverAt: 45, goldAt: 100 }
   // 模型只接受 1 张参考图：左边人脸、右边球衣拼成一张参考板（几何沿用已验证的
   // service-account-h5/ai-portrait-demo.html：纯白底、脸 62%、球衣 34%）。
   // 球衣整张送，不猜正面/背面，避免把单件球衣照片裁掉一半。
@@ -40,6 +48,13 @@
     ownTicket: '',
     ownCut: '',
     ownBusy: false,
+    // 确认背景图：卡级、换背景权益和背景描述都取服务端，页面只负责展示与本机合成。
+    card: null,
+    cardScenes: {},
+    cardImages: {},
+    cardBg: '',
+    cardBgBusy: false,
+    cardRenderSeq: 0,
     photoReplace: null,
     price: null,
     busy: false,
@@ -188,6 +203,209 @@
       + (photoReplace.available === false ? '，余额不足' : '')
   }
 
+  /* ---------- 确认背景图（和注册球员建档同一步） ---------- */
+  function tierRank(tier) {
+    var hit = BACKGROUNDS.filter(function (item) { return item.id === String(tier || '') })[0]
+    return hit ? hit.rank : null
+  }
+
+  function unlockPoints(item) {
+    var rule = (state.card && state.card.tierRule) || TIER_FALLBACK
+    var value = Number(item.id === 'silver' ? rule.silverAt : item.id === 'gold' ? rule.goldAt : 0)
+    if (Number.isFinite(value) && value > 0) return value
+    return item.id === 'silver' ? TIER_FALLBACK.silverAt : TIER_FALLBACK.goldAt
+  }
+
+  function pointsShort(item) {
+    var at = unlockPoints(item)
+    return at ? Math.max(0, at - Number((state.card && state.card.points) || 0)) : 0
+  }
+
+  function bgName(backgroundId) {
+    var hit = BACKGROUNDS.filter(function (item) { return item.id === backgroundId })[0]
+    return hit ? hit.name : '当前'
+  }
+
+  function cardGate(item) {
+    var current = tierRank(state.card && state.card.tier)
+    if (current == null) return { allowed: false, note: '积分待核定', aboveTier: false }
+    if (item.rank > current) return { allowed: false, note: unlockPoints(item) + ' 分解锁', aboveTier: true }
+    if (item.id !== state.card.tier && !state.card.canChangeBackground) return { allowed: false, note: '满 100 分或会员解锁', aboveTier: false }
+    return { allowed: true, note: item.note, aboveTier: false }
+  }
+
+  // 卡级、积分门槛、换背景权益统一取服务端结果，页面不自己算金额或判定等级。
+  function loadCardInfo() {
+    if (state.card) return Promise.resolve(state.card)
+    return Api.getCard(state.playerId).then(function (result) {
+      var player = (result && result.player) || {}
+      var score = player.playerCard || {}
+      state.card = {
+        tier: text(player.cardTier),
+        version: Number(player.version || 0),
+        backgroundId: text(player.backgroundId) || text(player.cardTier),
+        points: Number(score.points || 0),
+        tierRule: player.tierRule || TIER_FALLBACK,
+        canChangeBackground: score.canChangeBackground === true
+      }
+      if (!state.cardBg) state.cardBg = state.card.backgroundId
+      return state.card
+    })
+  }
+
+  function loadCardScene(backgroundId) {
+    if (state.cardScenes[backgroundId]) return Promise.resolve(state.cardScenes[backgroundId])
+    var card = state.card
+    return Api.previewCard({
+      playerId: state.playerId,
+      backgroundId: backgroundId,
+      crop: { zoom: 1, x: 0, y: 0 },
+      mode: 'portrait',
+      tier: card.tier,
+      expectedVersion: card.version,
+      dynamicCardProtocol: 'player-card-dynamic/1'
+    }).then(function (result) {
+      if (!result || !result.cardScene) throw new Error((result && result.reason) || '该背景暂不支持预览')
+      state.cardScenes[backgroundId] = result.cardScene
+      return result.cardScene
+    })
+  }
+
+  function loadCardImage(url) {
+    if (state.cardImages[url]) return state.cardImages[url]
+    var pending = new Promise(function (resolve, reject) {
+      var image = new Image()
+      image.crossOrigin = 'anonymous'
+      image.onload = function () { resolve(image) }
+      image.onerror = function () { delete state.cardImages[url]; reject(new Error('卡面素材读取失败')) }
+      image.src = url
+    })
+    state.cardImages[url] = pending
+    return pending
+  }
+
+  function makeCanvas(width, height) {
+    var canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    return canvas
+  }
+
+  // 占位提示始终留在容器里，只切换显隐，避免清空容器后按 id 取不到节点。
+  function cardEmpty(message) {
+    var empty = $('own-card-empty')
+    if (!empty) return
+    empty.textContent = text(message)
+    empty.hidden = !message
+  }
+
+  // 把抠好的人像替换卡面里的照片层，本机合成真实卡面效果；不额外让服务端生成 PNG。
+  function paintOwnCard() {
+    var scene = state.cardScenes[state.cardBg]
+    if (!Dynamic || !scene || !state.ownCut) return Promise.resolve(false)
+    if (scene.portraitIsLayer) {
+      cardEmpty('当前卡面不支持在本机预览，确认后仍按所选背景写进卡片')
+      return Promise.resolve(false)
+    }
+    var seq = ++state.cardRenderSeq
+    var patched = Object.assign({}, scene, {
+      assets: Object.assign({}, scene.assets, { portrait: state.ownCut }),
+      crop: { zoom: 1, x: 0, y: 0 }
+    })
+    var canvas = makeCanvas(300, 430)
+    return Dynamic.draw(patched, {
+      canvas: canvas,
+      scale: 2,
+      createCanvas: makeCanvas,
+      loadImage: loadCardImage
+    }).then(function () {
+      if (seq !== state.cardRenderSeq) return false
+      var host = $('own-card-canvas')
+      var previous = typeof host.querySelector === 'function' ? host.querySelector('canvas') : null
+      if (previous) host.removeChild(previous)
+      host.appendChild(canvas)
+      cardEmpty('')
+      return true
+    })
+  }
+
+  function renderOwnBackgrounds() {
+    var list = $('own-bg-list')
+    if (!list || !state.card) return
+    list.innerHTML = ''
+    BACKGROUNDS.forEach(function (item) {
+      var gate = cardGate(item)
+      var active = item.id === state.cardBg
+      var button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'bg-option' + (active ? ' is-active' : '') + (gate.allowed ? '' : ' is-locked')
+      button.disabled = !gate.allowed
+      button.innerHTML = '<strong>' + bgName(item.id) + '</strong><small>' + gate.note + '</small>'
+      button.addEventListener('click', function () {
+        if (state.cardBgBusy || item.id === state.cardBg) return
+        if (!gate.allowed) {
+          toast(gate.aboveTier
+            ? bgName(item.id) + '需要生涯积分满 ' + unlockPoints(item) + ' 分，还差 ' + pointsShort(item) + ' 分'
+            : '更换背景需要生涯积分满 100 分或开通会员')
+          return
+        }
+        var previous = state.cardBg
+        state.cardBg = item.id
+        state.cardBgBusy = true
+        renderOwnBackgrounds()
+        loadCardScene(item.id).then(paintOwnCard).then(function () {
+          state.cardBgBusy = false
+          renderOwnBackgrounds()
+        }).catch(function (error) {
+          state.cardBg = previous
+          state.cardBgBusy = false
+          renderOwnBackgrounds()
+          ownNote((error && error.message) || '这个背景暂时预览不了，请换一个')
+        })
+      })
+      list.appendChild(button)
+    })
+    $('own-bg-hint').textContent = cardBgHint()
+  }
+
+  function cardBgHint() {
+    if (!state.card || !state.card.tier) return '球员积分待核定，只能先按当前背景确认。'
+    if (!state.cardBg) return '正在读取球员卡当前背景…'
+    if (state.cardBg === state.card.backgroundId) return '当前就是球员卡正在用的背景，确认后只替换照片。'
+    return '确认后先保存「' + bgName(state.cardBg) + '」背景，再把这张人像写进卡面。'
+  }
+
+  function confirmOwnBackground() {
+    cardEmpty('正在合成卡面效果…')
+    loadCardInfo().then(function () {
+      renderOwnBackgrounds()
+      return loadCardScene(state.cardBg)
+    }).then(function () {
+      return paintOwnCard()
+    }).catch(function (error) {
+      cardEmpty('卡面效果暂时合成不了，确认后仍按所选背景写进卡片')
+      ownNote((error && error.message) || '卡面效果读取失败，请稍后重试')
+    })
+  }
+
+  // 背景换了先保存背景（服务端判定卡级/换背景权益），再用一次性凭证写照片。
+  function saveOwnBackground() {
+    var card = state.card
+    if (!card || !card.tier || !state.cardBg || state.cardBg === card.backgroundId) return Promise.resolve(null)
+    return Api.saveCard({
+      playerId: state.playerId,
+      backgroundId: state.cardBg,
+      crop: { zoom: 1, x: 0, y: 0 },
+      mode: 'portrait',
+      tier: card.tier,
+      expectedVersion: card.version
+    }).then(function (result) {
+      card.version = Number((result && result.version) || card.version + 1)
+      card.backgroundId = state.cardBg
+      return result
+    })
+  }
+
   // 取景框调好后导出的竖版照片（已按框裁剪缩放到合适位置），再交服务端抠图；透明预览只有用户确认后才写进卡面。
   function prepareOwnData(photoData) {
     if (!photoData || state.ownBusy) return
@@ -196,22 +414,26 @@
     $('btn-own-apply').disabled = true
     show('own-stage', false)
     show('own-actions', false)
+    show('own-confirm', false)
     dropOwnTicket()
     state.ownPreview = photoData
     show('own-preview', true)
     show('own-empty', false)
-    ownNote('正在抠图，稍等几秒…')
+    ownNote('正在做人像分割，稍等几秒…')
     Api.prepareCardPhoto({ playerId: state.playerId, photoData: photoData }).then(function (result) {
       state.ownTicket = text(result.photoTicket)
       state.ownCut = text(result.preview)
       if (!state.ownTicket || !state.ownCut) throw new Error('抠图结果获取失败，请重新选择照片')
       $('own-cut').src = state.ownCut
       show('own-stage', true)
+      show('own-confirm', true)
       show('own-actions', true)
       $('btn-own-apply').disabled = false
-      ownNote('背景已去掉，确认就用这张替换卡面。')
+      ownNote('人像分割完成：先确认下面的背景图，再写进卡面。')
+      confirmOwnBackground()
     }).catch(function (error) {
       state.ownTicket = ''
+      show('own-confirm', false)
       ownNote((error && error.message) || '照片处理失败，请换一张正对镜头的照片')
       toast((error && error.message) || '照片处理失败，请换一张正对镜头的照片')
     }).then(function () {
@@ -230,20 +452,24 @@
     if (state.ownBusy || !state.ownTicket) return
     var replace = state.photoReplace
     var paid = replace && replace.free !== true
+    var card = state.card
+    var changingBg = Boolean(card && card.tier && state.cardBg && state.cardBg !== card.backgroundId)
     if (paid && typeof window.confirm === 'function') {
       var cost = Number(replace.cost) || 0
-      if (!window.confirm('未满 100 分换照片要消耗 ' + cost + ' 滴蜂蜜，确认用这张替换卡面吗？')) return
+      if (!window.confirm('未满 100 分换照片要消耗 ' + cost + ' 滴蜂蜜，确认用这张替换卡面吗？'
+        + (changingBg ? '（同时换成' + bgName(state.cardBg) + '背景）' : ''))) return
     }
     state.ownBusy = true
     $('btn-own-apply').disabled = true
-    ownNote('正在写进卡面…')
-    var payload = {
-      playerId: state.playerId,
-      photoTicket: state.ownTicket,
-      requestId: newRequestId(),
-      confirmPhotoReplaceHoney: paid
-    }
-    Api.applyCardPhoto(payload).then(function (result) {
+    ownNote(changingBg ? '正在保存背景并把照片写进卡面…' : '正在写进卡面…')
+    saveOwnBackground().then(function () {
+      return Api.applyCardPhoto({
+        playerId: state.playerId,
+        photoTicket: state.ownTicket,
+        requestId: newRequestId(),
+        confirmPhotoReplaceHoney: paid
+      })
+    }).then(function (result) {
       state.ownTicket = ''
       if (result && result.photoReplaceCharge) renderPhotoReplace({
         free: false,
@@ -251,7 +477,7 @@
         balance: result.photoReplaceCharge.balance,
         available: true
       })
-      toast('已换成你上传的照片')
+      toast(changingBg ? '照片已换，背景也已存成' + bgName(state.cardBg) : '已换成你上传的照片')
       setTimeout(function () { location.href = backUrl() }, 700)
     }).catch(function (error) {
       state.ownBusy = false
@@ -265,12 +491,14 @@
     if (state.ownBusy) return
     state.ownPreview = ''
     state.ownCut = ''
+    state.cardBg = state.card ? state.card.backgroundId : ''
     $('own-preview').src = ''
     $('own-cut').src = ''
     clearFramer(ownFramer)
     show('own-preview', false)
     show('own-empty', true)
     show('own-stage', false)
+    show('own-confirm', false)
     show('own-actions', false)
     ownNote('')
     dropOwnTicket()

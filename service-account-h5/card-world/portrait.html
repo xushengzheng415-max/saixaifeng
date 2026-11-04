@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>换形象照 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261104-ai10" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai11" />
 </head>
 <body>
   <div class="app">
@@ -69,10 +69,25 @@
           <div class="result-stage" id="own-stage" hidden>
             <img id="own-cut" alt="抠图结果" />
           </div>
+          <!-- 人像分割完成后的确认背景图：和注册球员建档同一套流程，先看卡面效果、再确认写进卡片 -->
+          <section class="card-confirm" id="own-confirm" hidden>
+            <div class="panel__head">
+              <h2>确认背景图</h2>
+              <span class="hint" id="own-confirm-state">人像分割已完成</span>
+            </div>
+            <p class="field__hint">这张抠好的人像会放到下面的卡面背景上；换背景按既有规则（满 100 分或会员）由服务端判定，确认后才写进球员卡。</p>
+            <div class="design-stage">
+              <div class="design-stage__canvas" id="own-card-canvas">
+                <div class="design-stage__empty" id="own-card-empty">正在合成卡面效果…</div>
+              </div>
+            </div>
+            <div class="backgrounds" id="own-bg-list"></div>
+            <p class="field__hint" id="own-bg-hint"></p>
+          </section>
           <p class="field__hint" id="own-price-line">正在读取换照片价格…</p>
           <div class="design-actions" id="own-actions" hidden>
             <button type="button" class="btn btn--ghost" id="btn-own-retry">重新选择</button>
-            <button type="button" class="btn btn--gold" id="btn-own-apply">用这张替换卡面</button>
+            <button type="button" class="btn btn--gold" id="btn-own-apply">确认，用这张替换卡面</button>
           </div>
         </article>
 
@@ -177,8 +192,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
+  <script src="js/dynamic-card-renderer.js?v=20261104-ai7"></script>
   <script src="js/api.js?v=20261104-ai7"></script>
-  <script src="js/portrait.js?v=20261104-ai10"></script>
+  <script src="js/portrait.js?v=20261104-ai11"></script>
 </body>
 </html>
 
