@@ -401,3 +401,8 @@
 
 落地状态：`miniprogram-world/utils/{mock,engine,store,api}.js` 与主卡、卡册、我的页面文案已改（分支 `feature/world-player-miniprogram-20261031`，已推 GitHub `f7e69988`）；新增 `tools/verify-world-scope.cjs` 覆盖未认领、认领赛事不符、跨赛事球员、无比赛球员、球迷卡不进卡池、卡册分区收敛等 22 项断言，全部通过；模拟器页面回读主卡「本赛事球员 · 已认领」、卡册仅「本赛事 / 虚拟」两分区、无 console 报错。服务端规则已在同一分支源码层同源同步：`cardWorldEngine.cjs` 新增 `worldAccess` / `playablePool` 与 `CLAIM_REQUIRED` / `EVENT_MISMATCH`，`cardWorld.cjs` 新增 `cardWorldAccess`、按本人/监护球员档案解析认领与所属赛事、`readPlayerPool` 改为按 `eventId` 取池并过滤 `appearances > 0`、全部玩法 action 前置 `requireAccess`；`tools/test-world-card-backend.cjs` 扩到 36 项全部通过。`card_world_players` 需运营补 `eventId`（必填），`appearances` / `eventName` / `divisionLabel` 用于准入与展示；同一认领球员命中多个赛事时返回 `EVENT_MISMATCH` 并转人工核对，不静默取第一条。2026-11-03 已按「最新线上包 + 差量合入」部署 `webLoginApi`：保留线上 `index.js`，仅替换两个 `cardWorld*.cjs`，包级 `check-referee-backend-package`（含报名 Word 上传权限）通过，回下载三文件哈希与上传包一致，`cardWorldAccess` 线上可调；**集合与名册数据未创建，`MODE` 仍为 `local`，未动数据库。**
 
+
+
+## 2026-11-04 球员库先提交本组待审名单
+
+用户要求球员库已有名单可直接拉入赛事名单，资料不足不在选入阶段卡闸。将资料要求由选入前拦截改为待审问题，保留原球员/照片/核验资料引用和真实待核验状态；本组名单与另一组名单独立，历史批准/锁定名单不被覆盖。替代旧的完整度前置要求，不等同于批准或上场资格。见 releases/roster-library-pending-review-20261104.md。
