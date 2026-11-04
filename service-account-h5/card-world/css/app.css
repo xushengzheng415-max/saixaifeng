@@ -253,7 +253,7 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 }
 .weapp-hint { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
 
-/* 卡面设计页：完整成卡预览（背景 + 形象照，由服务端合成） */
+/* 卡面设计页：完整成卡预览（背景 + 形象照，在手机上本机合成） */
 .design-stage {
   position: relative;
   width: 100%;
@@ -269,8 +269,56 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
   min-height: 320px;
   padding: 10px;
 }
-.design-stage img { width: 100%; max-height: 46vh; object-fit: contain; display: block; }
+/* 本机合成的卡面画布：和图片一样按容器宽度缩放，不额外留白 */
+.design-stage__canvas { display: block; width: 100%; line-height: 0; }
+.design-stage__canvas canvas { display: block; width: 100%; height: auto; }
+.design-stage.is-cropping { cursor: grab; touch-action: none; outline: 1px dashed rgba(232, 197, 106, 0.55); outline-offset: -1px; }
+.design-stage.is-cropping:active { cursor: grabbing; }
 .design-stage__empty { color: var(--muted); font-size: 12px; padding: 60px 16px; text-align: center; }
+
+/* 编辑构图：控制条紧跟卡面下方，不再把滑块放到页面最底部 */
+.crop-bar {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(232, 197, 106, 0.08);
+  border: 1px solid rgba(232, 197, 106, 0.35);
+}
+.crop-bar__tip { margin: 0; font-size: 11.5px; color: var(--gold); line-height: 1.5; }
+.crop-bar__actions { display: flex; gap: 8px; margin-top: 10px; }
+.crop-bar__actions .btn { flex: 1; }
+.slider-row--compact { margin-top: 8px; }
+
+/* 更换照片：底部选择面板 */
+.sheet { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+.sheet__mask { position: absolute; inset: 0; background: rgba(4, 8, 12, 0.62); }
+.sheet__panel {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  border-radius: 18px 18px 0 0;
+  background: #0d1420;
+  border-top: 1px solid var(--panel-line);
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.45);
+}
+.sheet__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.sheet__head h2 { margin: 0; font-size: 15px; color: var(--text); }
+.sheet__close {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--panel-line); background: transparent; color: var(--muted);
+  font-size: 16px; line-height: 1;
+}
+.sheet__option {
+  display: block; width: 100%; margin-top: 10px; padding: 14px;
+  text-align: left; border-radius: 12px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+.sheet__option strong { display: block; font-size: 14px; }
+.sheet__option small { display: block; margin-top: 5px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.sheet__option:active { border-color: rgba(232, 197, 106, 0.6); }
 
 .design-actions { display: flex; gap: 10px; margin-top: 16px; }
 .design-actions .btn { flex: 1; }
@@ -395,6 +443,67 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
   place-items: center;
 }
 .result-stage img { width: 100%; max-height: 60vh; object-fit: contain; display: block; }
+
+/* 一键形象照合成动画：抠轮廓 → 换球衣 → 出透明形象照 */
+.gen-anim {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: rgba(4, 8, 12, 0.86);
+}
+.gen-anim__card {
+  width: 100%; max-width: 320px;
+  padding: 26px 22px 22px;
+  border-radius: 22px;
+  background: radial-gradient(90% 70% at 50% 0%, rgba(232, 197, 106, 0.18), transparent 72%), rgba(16, 22, 34, 0.98);
+  border: 1px solid rgba(232, 197, 106, 0.28);
+  text-align: center;
+}
+.gen-anim__ring { position: relative; width: 76px; height: 76px; margin: 0 auto 18px; }
+.gen-anim__ring::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--gold);
+  border-right-color: rgba(232, 197, 106, 0.5);
+  animation: gen-spin 0.95s linear infinite;
+}
+.gen-anim__ring::after {
+  content: ''; position: absolute; inset: 24px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f7e6b4, var(--gold-deep));
+  animation: gen-pulse 1.3s ease-in-out infinite;
+}
+@keyframes gen-spin { to { transform: rotate(360deg); } }
+@keyframes gen-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+.gen-anim__title { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+.gen-anim__steps { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; text-align: left; }
+.gen-anim__step {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px; border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12.5px; color: var(--muted);
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.gen-anim__step i {
+  position: relative; flex: 0 0 auto;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  font-style: normal;
+}
+.gen-anim__step.is-active { color: var(--text); border-color: rgba(232, 197, 106, 0.5); background: rgba(232, 197, 106, 0.1); }
+.gen-anim__step.is-active i { border-color: var(--gold); border-top-color: transparent; animation: gen-spin 0.8s linear infinite; }
+.gen-anim__step.is-done { color: var(--green); }
+.gen-anim__step.is-done i { border-color: var(--green); background: var(--green); }
+.gen-anim__step.is-done i::after {
+  content: ''; position: absolute; left: 5px; top: 2px;
+  width: 4px; height: 7px;
+  border: solid #06231a; border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.gen-anim__hint { margin: 16px 0 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
 
 .toast {
   position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom));

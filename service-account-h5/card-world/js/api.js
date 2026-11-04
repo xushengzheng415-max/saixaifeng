@@ -82,7 +82,8 @@
     membershipStatus: function () { return api('servicePrivateMembershipStatus') },
     mainCard: function () { return api('cardWorldMainCard') },
     listCards: function () { return api('listMyPlayerCards') },
-    getCard: function (playerId) { return api('getMyPlayerCard', { playerId: playerId }) },
+    // 编辑球员卡只用 cardScene 里的临时地址，不要服务端再回 5MB base64 形象照（打开更快）。
+    getCard: function (playerId) { return api('getMyPlayerCard', { playerId: playerId, withPortraitData: false }) },
     previewCard: function (data) { return api('previewMyPlayerCard', data) },
     saveCard: function (data) { return api('saveMyPlayerCard', data) },
     setMainCard: function (playerId) { return api('cardWorldSetMainCard', { playerId: playerId }) },

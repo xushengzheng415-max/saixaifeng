@@ -72,6 +72,11 @@
     try { return text(new URLSearchParams(location.search).get('playerId')) } catch (error) { return '' }
   }
 
+  // 球员卡页「更换照片」会带 mode 进来：上传自己的照片 / 一键形象照（AI 合成）。
+  function modeFromQuery() {
+    try { return new URLSearchParams(location.search).get('mode') === 'ai' ? 'ai' : 'upload' } catch (error) { return 'upload' }
+  }
+
   function rememberPlayerId(playerId) {
     try {
       if (playerId) sessionStorage.setItem(PENDING_KEY, playerId)
@@ -102,6 +107,45 @@
 
   function backUrl() {
     return './design.html?playerId=' + encodeURIComponent(state.playerId || playerIdFromQuery())
+  }
+
+  // 合成动画：只做过程提示，真实进度以服务端返回为准；成功、失败、离开都要收掉覆盖层。
+  var animTimer = null
+  var ANIM_STEPS = ['gen-step-1', 'gen-step-2', 'gen-step-3']
+  var ANIM_INTERVAL = 6000
+
+  function setAnimStep(index) {
+    ANIM_STEPS.forEach(function (id, i) {
+      var el = $(id)
+      if (!el) return
+      el.className = 'gen-anim__step' + (i < index ? ' is-done' : (i === index ? ' is-active' : ''))
+    })
+  }
+
+  function startGenAnim() {
+    var host = $('gen-anim')
+    if (!host) return
+    clearInterval(animTimer)
+    host.hidden = false
+    var step = 0
+    setAnimStep(step)
+    animTimer = setInterval(function () {
+      // 最后一步一直转，等真实结果回来再收掉，不假装已完成。
+      if (step >= ANIM_STEPS.length - 1) return
+      step += 1
+      setAnimStep(step)
+    }, ANIM_INTERVAL)
+  }
+
+  function stopGenAnim() {
+    clearInterval(animTimer)
+    animTimer = null
+    ANIM_STEPS.forEach(function (id) {
+      var el = $(id)
+      if (el) el.className = 'gen-anim__step'
+    })
+    var host = $('gen-anim')
+    if (host) host.hidden = true
   }
 
   // 两种方式共用一个页面：默认「上传自己的照片」，可切到「AI 生成形象照」。
@@ -477,6 +521,7 @@
     if (state.price && state.price.available === false) { toast('蜂蜜不足，暂时不能生成'); return }
     setBusy(true, '正在准备…')
     note('')
+    startGenAnim()
     var requestId = state.requestId || rememberedRequestId() || newRequestId()
     state.requestId = requestId
     rememberRequestId(requestId)
@@ -507,10 +552,12 @@
       $('result-image').src = data.image
       show('result-stage', true)
       show('result-actions', true)
+      stopGenAnim()
       setBusy(false)
       $('btn-generate').hidden = true
       note('生成完成，确认满意就点「使用这张形象照」。')
     }).catch(function (error) {
+      stopGenAnim()
       setBusy(false)
       $('btn-generate').hidden = false
       note((error && error.message) || '生成失败，请稍后重试')
@@ -545,6 +592,7 @@
   }
 
   function leave() {
+    stopGenAnim()
     var done = function () { location.href = backUrl() }
     // 上传自己的照片：没确认过的抠图凭证作废，临时文件由服务端清理，不产生扣费。
     dropOwnTicket()
@@ -621,6 +669,8 @@
     show('state-loading', true)
     var playerId = state.playerId || playerIdFromQuery() || pendingPlayerId()
     state.playerId = playerId
+    // 从球员卡页「更换照片」进来时按传入的方式打开，用户仍可在本页切换。
+    state.mode = modeFromQuery()
     if (!playerId) { showError('缺少球员信息，请从卡库重新进入'); return }
     rememberPlayerId(playerId)
     $('btn-back-link').href = backUrl()

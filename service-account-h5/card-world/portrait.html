@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>换形象照 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261104-ai6" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai7" />
 </head>
 <body>
   <div class="app">
@@ -141,9 +141,24 @@
     </main>
   </div>
 
+  <!-- 一键形象照合成动画：抠轮廓 → 换球衣 → 出透明形象照 -->
+  <div class="gen-anim" id="gen-anim" hidden>
+    <div class="gen-anim__card">
+      <div class="gen-anim__ring"></div>
+      <p class="gen-anim__title" id="gen-anim-title">正在合成你的形象照</p>
+      <ul class="gen-anim__steps">
+        <li class="gen-anim__step" id="gen-step-1"><i></i>抠出人物轮廓</li>
+        <li class="gen-anim__step" id="gen-step-2"><i></i>换上你的球衣</li>
+        <li class="gen-anim__step" id="gen-step-3"><i></i>生成透明形象照</li>
+      </ul>
+      <p class="gen-anim__hint">大约 20–40 秒，先别关掉这个页面</p>
+    </div>
+  </div>
+
   <div class="toast" id="toast" hidden></div>
 
-  <script src="js/api.js?v=20261104-ai6"></script>
-  <script src="js/portrait.js?v=20261104-ai6"></script>
+  <script src="js/api.js?v=20261104-ai7"></script>
+  <script src="js/portrait.js?v=20261104-ai7"></script>
 </body>
 </html>
+

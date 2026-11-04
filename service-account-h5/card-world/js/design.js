@@ -1,6 +1,10 @@
 (function () {
   'use strict'
+  // 服务号 H5 · 编辑球员卡：卡面在手机本机实时合成（player-card-dynamic/1 描述协议 + 浏览器 canvas），
+  // 不再每次改背景/拖构图都等服务端出一张 PNG，所以打开和拖动都更快。
+  // 保存仍走服务端校验（卡级、背景解锁、换照片计费都在后端判定），本页只负责展示与交互。
   var Api = window.CardWorldApi
+  var Dynamic = window.SxfDynamicCard
   var BACKGROUNDS = [
     { id: 'bronze', name: '铜卡', note: '基础', rank: 0 },
     { id: 'silver', name: '银卡', note: '进阶', rank: 1 },
@@ -11,12 +15,18 @@
   var state = {
     playerId: '',
     settings: null,
+    scenes: {},
     thumbs: {},
-    previewSeq: 0,
-    previewTimer: null,
+    crop: { zoom: 1, x: 0, y: 0 },
+    cropping: false,
+    renderSeq: 0,
     thumbBusy: false,
+    fontsReady: false,
+    drag: null,
+    tap: null,
     saving: false
   }
+  var imageCache = {}
 
   function $(id) { return document.getElementById(id) }
 
@@ -55,18 +65,25 @@
     try { return String(sessionStorage.getItem(PENDING_KEY) || '').trim() } catch (error) { return '' }
   }
 
-  /* AI 形象照直接进独立的 portrait.html 生成页；生成并「使用这张」后回到本页即替换卡面形象照。 */
-  function openAiPortrait() {
+  /* 换照片/换形象照统一进 portrait.html：mode=upload 是相册上传或拍摄，mode=ai 是一键形象照。 */
+  function openPhotoPage(mode) {
     var settings = state.settings
     var playerId = (settings && settings.playerId) || playerIdFromQuery()
-    if (!playerId) { toast('还没有可生成的球员卡，先回到卡库选择球员'); return }
-    if (settings && settings.playerId) rememberPlayerId(settings.playerId)
-    location.href = './portrait.html?playerId=' + encodeURIComponent(playerId)
+    if (!playerId) { toast('还没有可编辑的球员卡，先回到卡库选择球员'); return }
+    rememberPlayerId(playerId)
+    location.href = './portrait.html?playerId=' + encodeURIComponent(playerId) + '&mode=' + (mode === 'ai' ? 'ai' : 'upload')
   }
 
-  /* 卡面效果下方「编辑构图」：把页面滚到照片构图面板，避免用户找不到滑块。 */
-  function focusCropPanel() {
-    var panel = $('crop-panel')
+  function openPhotoSheet() {
+    closeCrop()
+    show('photo-sheet', true)
+  }
+
+  function closePhotoSheet() { show('photo-sheet', false) }
+
+  /* 「更换卡面」把页面滚到背景卡面，并短暂高亮，避免用户在长页面里找不到。 */
+  function focusBackgroundPanel() {
+    var panel = $('background-panel')
     if (!panel) return
     try { panel.scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch (error) { panel.scrollIntoView() }
     panel.classList.add('is-focused')
@@ -80,7 +97,7 @@
 
   /* 银卡/金卡解锁所需生涯积分：服务端下发优先，前端只用兜底值。 */
   function unlockPoints(item) {
-    var rule = state.settings.tierRule || TIER_FALLBACK
+    var rule = (state.settings && state.settings.tierRule) || TIER_FALLBACK
     var value = Number(item.id === 'silver' ? rule.silverAt : item.id === 'gold' ? rule.goldAt : 0)
     if (Number.isFinite(value) && value > 0) return value
     return item.id === 'silver' ? TIER_FALLBACK.silverAt : item.id === 'gold' ? TIER_FALLBACK.goldAt : 0
@@ -91,25 +108,26 @@
     return at ? Math.max(0, at - Number(state.settings.points || 0)) : 0
   }
 
-  function setPreviewState(text, isError) {
+  function setPreviewState(message, isError) {
     var el = $('preview-state')
-    el.textContent = text
+    el.textContent = message
     el.style.color = isError ? 'var(--gold)' : ''
   }
 
   function cropValues() {
-    return {
-      zoom: Number($('crop-zoom').value),
-      x: Number($('crop-x').value),
-      y: Number($('crop-y').value)
-    }
+    return { zoom: Number(state.crop.zoom) || 1, x: Number(state.crop.x) || 0, y: Number(state.crop.y) || 0 }
   }
 
   function syncCropLabels() {
-    $('crop-zoom-value').textContent = Number($('crop-zoom').value).toFixed(2)
-    $('crop-x-value').textContent = Number($('crop-x').value).toFixed(2)
-    $('crop-y-value').textContent = Number($('crop-y').value).toFixed(2)
-    if (state.settings) state.settings.crop = cropValues()
+    var zoom = $('crop-zoom')
+    if (zoom) zoom.value = String(cropValues().zoom)
+    $('crop-zoom-value').textContent = cropValues().zoom.toFixed(2)
+  }
+
+  function clampCrop() {
+    state.crop.zoom = Math.min(4, Math.max(1, Number(state.crop.zoom) || 1))
+    state.crop.x = Math.min(2, Math.max(-2, Number(state.crop.x) || 0))
+    state.crop.y = Math.min(2, Math.max(-2, Number(state.crop.y) || 0))
   }
 
   function settingsPayload(backgroundId) {
@@ -117,7 +135,7 @@
     return {
       playerId: settings.playerId,
       backgroundId: backgroundId || settings.backgroundId,
-      crop: state.settings.crop || cropValues(),
+      crop: cropValues(),
       mode: 'portrait',
       tier: settings.tier,
       expectedVersion: settings.version
@@ -127,7 +145,7 @@
   function handleError(error) {
     var code = (error && error.code) || ''
     if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') {
-      showError('该球员还没有标准形象照，先用「直接生成 AI 形象照」生成一张再回来编辑球员卡。', true)
+      showError('该球员还没有标准形象照，先用「一键形象照」生成一张再回来编辑球员卡。', true)
       return
     }
     if (code === 'PLAYER_CARD_BACKGROUND_LOCKED') { toast((error && error.message) || '该背景尚未解锁'); setPreviewState('背景未解锁', true); return }
@@ -136,36 +154,86 @@
     toast((error && error.message) || '操作失败，请重试')
   }
 
-  function requestPreview() {
-    var settings = state.settings
-    if (!settings) return Promise.resolve(null)
-    if (!settings.tier) {
-      setPreviewState('积分待核定，暂不能预览', true)
-      show('design-empty', true)
-      $('design-empty').textContent = '球员积分待核定，暂时无法合成卡面'
-      return Promise.resolve(null)
-    }
-    var seq = ++state.previewSeq
-    setPreviewState('正在合成…')
-    $('design-empty').textContent = '正在合成卡面…'
-    return Api.previewCard(settingsPayload()).then(function (result) {
-      if (seq !== state.previewSeq) return null
-      if (!result || !result.imageData) throw new Error('该卡面暂不支持预览，请直接保存')
-      $('design-image').src = result.imageData
-      show('design-image', true)
-      show('design-empty', false)
-      setPreviewState('背景已合成')
-      return result.imageData
-    }).catch(function (error) {
-      if (seq !== state.previewSeq) return null
-      handleError(error)
-      return null
+  /* ---------- 本机合成 ---------- */
+  function loadCached(url) {
+    if (imageCache[url]) return imageCache[url]
+    var pending = new Promise(function (resolve, reject) {
+      var img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = function () { resolve(img) }
+      img.onerror = function () { delete imageCache[url]; reject(new Error('卡面素材读取失败')) }
+      img.src = url
+    })
+    imageCache[url] = pending
+    return pending
+  }
+
+  function makeCanvas(width, height) {
+    var canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    return canvas
+  }
+
+  function drawScene(scene, canvas, scale) {
+    return Dynamic.draw(scene, {
+      canvas: canvas,
+      scale: scale,
+      createCanvas: makeCanvas,
+      loadImage: loadCached
     })
   }
 
-  function schedulePreview() {
-    clearTimeout(state.previewTimer)
-    state.previewTimer = setTimeout(function () { requestPreview() }, 500)
+  /* 字体只需在第一次渲染时加载；之后拖动/切换背景都直接重画，不再发请求。 */
+  function ensureFonts(scene) {
+    if (state.fontsReady) return Promise.resolve()
+    if (!Dynamic.web) return Promise.resolve()
+    return Dynamic.web(scene).then(function () { state.fontsReady = true }, function () { /* 字体失败时退回系统字体，不阻塞预览 */ })
+  }
+
+  function currentScene() {
+    var settings = state.settings
+    return settings ? state.scenes[settings.backgroundId] || null : null
+  }
+
+  function renderMain() {
+    var scene = currentScene()
+    if (!scene) return Promise.resolve(false)
+    var seq = ++state.renderSeq
+    var canvas = makeCanvas(300, 430)
+    return ensureFonts(scene).then(function () {
+      return drawScene(Object.assign({}, scene, { crop: cropValues() }), canvas, 2)
+    }).then(function () {
+      if (seq !== state.renderSeq) return false
+      var host = $('design-canvas')
+      host.innerHTML = ''
+      host.appendChild(canvas)
+      show('design-empty', false)
+      setPreviewState(state.cropping ? '拖动照片调整位置' : '卡面已就绪')
+      return true
+    }).catch(function (error) {
+      if (seq !== state.renderSeq) return false
+      setPreviewState((error && error.message) || '卡面合成失败', true)
+      return false
+    })
+  }
+
+  var renderTimer = null
+  function scheduleRender() {
+    if (renderTimer) return
+    renderTimer = setTimeout(function () { renderTimer = null; renderMain() }, 60)
+  }
+
+  /* 背景/姿势改了才需要问服务端要新的卡面描述（只回 JSON 素材地址，不回整张 PNG）。 */
+  function loadScene(backgroundId) {
+    if (state.scenes[backgroundId]) return Promise.resolve(state.scenes[backgroundId])
+    var payload = Object.assign(settingsPayload(backgroundId), { dynamicCardProtocol: 'player-card-dynamic/1' })
+    return Api.previewCard(payload).then(function (result) {
+      // 服务端在缺素材时会回 status/reason，直接透出原因，别让用户面对「合成失败」。
+      if (!result || !result.cardScene) throw new Error((result && result.reason) || '该卡面暂不支持预览，请直接保存')
+      state.scenes[backgroundId] = result.cardScene
+      return result.cardScene
+    })
   }
 
   function renderBackgrounds() {
@@ -215,9 +283,17 @@
           }
           return
         }
+        var previous = settings.backgroundId
         settings.backgroundId = item.id
         renderBackgrounds()
-        requestPreview()
+        setPreviewState('正在换背景…')
+        loadScene(item.id).then(function () {
+          return renderMain()
+        }).catch(function (error) {
+          settings.backgroundId = previous
+          renderBackgrounds()
+          handleError(error)
+        })
       })
       list.appendChild(button)
     })
@@ -232,35 +308,138 @@
     return '已达金卡等级'
   }
 
-  /* 背景缩略图同样走服务端成卡渲染，保证看到的是真实背景而不是色块。
-     未达等级的缩略图也要取：页面用灰度展示，让用户看到解锁后的样式。
-     逐张串行请求，失败即跳过，不阻塞主预览。 */
+  /* 缩略图也用本机合成：拿该背景的卡面描述画一张 300×430 的小图，省掉服务端逐张出 PNG。 */
   function loadThumbs() {
     var settings = state.settings
     if (!settings || !settings.tier || state.thumbBusy) return
     var pending = BACKGROUNDS.filter(function (item) { return !state.thumbs[item.id] })
     if (!pending.length) return
     state.thumbBusy = true
-    var chain = Promise.resolve()
-    pending.forEach(function (item) {
-      chain = chain.then(function () {
-        return Api.previewCard(settingsPayload(item.id)).then(function (result) {
-          if (!result || !result.imageData) return
-          state.thumbs[item.id] = result.imageData
-          renderBackgrounds()
-        }).catch(function () { /* 单张缩略图失败时保留占位，不影响主流程 */ })
-      })
+    Promise.all(pending.map(function (item) {
+      return loadScene(item.id).then(function (scene) {
+        var canvas = makeCanvas(300, 430)
+        return drawScene(Object.assign({}, scene, { crop: { zoom: 1, x: 0, y: 0 } }), canvas, 1).then(function () {
+          state.thumbs[item.id] = canvas.toDataURL('image/png')
+        })
+      }).catch(function () { /* 单张缩略图失败时保留占位，不影响主流程 */ })
+    })).then(function () {
+      state.thumbBusy = false
+      renderBackgrounds()
     })
-    chain.then(function () { state.thumbBusy = false })
   }
 
-  function renderCrop() {
-    var settings = state.settings
-    var crop = settings.crop || { zoom: 1, x: 0, y: 0 }
-    $('crop-zoom').value = String(crop.zoom || 1)
-    $('crop-x').value = String(crop.x || 0)
-    $('crop-y').value = String(crop.y || 0)
+  /* ---------- 编辑构图：直接在卡面上拖 ---------- */
+  function enterCrop() {
+    if (!state.settings || !currentScene()) return
+    state.cropping = true
+    show('crop-bar', true)
+    $('btn-edit-crop').className = 'btn btn--gold'
+    $('design-stage').classList.add('is-cropping')
     syncCropLabels()
+    setPreviewState('拖动照片调整位置')
+    try { $('design-stage').scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch (error) { /* ignore */ }
+  }
+
+  function closeCrop() {
+    if (!state.cropping) return
+    state.cropping = false
+    show('crop-bar', false)
+    $('btn-edit-crop').className = 'btn btn--ghost'
+    $('design-stage').classList.remove('is-cropping')
+    setPreviewState('卡面已就绪')
+  }
+
+  /* 拖动换算：卡面逻辑宽 300，人物层左右位移按 264、上下按 300（与渲染器同一套换算）。 */
+  function pointToCrop(dx, dy, rect) {
+    var logical = 300 / Math.max(1, rect.width)
+    return { dx: dx * logical / 264, dy: dy * logical / 300 }
+  }
+
+  function stagePointers() {
+    return state.drag ? state.drag.points : null
+  }
+
+  function bindStage() {
+    var stage = $('design-stage')
+    stage.addEventListener('pointerdown', function (event) {
+      if (!state.settings || !currentScene()) return
+      // 没进构图时这次按下先当作「点卡面」候选，不抢页面滚动：
+      // 手指明显移动就是翻页滚动，几乎没动才进构图（进构图后 touch-action 才置为 none）。
+      if (!state.cropping) {
+        state.tap = { x: event.clientX, y: event.clientY, moved: false }
+        return
+      }
+      if (!state.drag) state.drag = { points: {}, last: null, distance: 0 }
+      state.drag.points[event.pointerId] = { x: event.clientX, y: event.clientY }
+      state.drag.last = { x: event.clientX, y: event.clientY }
+      var ids = Object.keys(state.drag.points)
+      state.drag.distance = ids.length > 1 ? distanceOf() : 0
+      try { stage.setPointerCapture(event.pointerId) } catch (error) { /* ignore */ }
+    })
+    stage.addEventListener('pointermove', function (event) {
+      if (!state.cropping) {
+        if (!state.tap || state.tap.moved) return
+        if (Math.abs(event.clientX - state.tap.x) > 12 || Math.abs(event.clientY - state.tap.y) > 12) state.tap.moved = true
+        return
+      }
+      var drag = state.drag
+      if (!drag || !drag.points[event.pointerId]) return
+      drag.points[event.pointerId] = { x: event.clientX, y: event.clientY }
+      var ids = Object.keys(drag.points)
+      var rect = $('design-canvas').getBoundingClientRect()
+      if (ids.length > 1) {
+        var next = distanceOf()
+        if (drag.distance > 0 && next > 0) {
+          state.crop.zoom = (Number(state.crop.zoom) || 1) * (next / drag.distance)
+          clampCrop()
+          syncCropLabels()
+          scheduleRender()
+        }
+        drag.distance = next
+        drag.last = null
+        return
+      }
+      if (!drag.last) { drag.last = { x: event.clientX, y: event.clientY }; return }
+      var delta = pointToCrop(event.clientX - drag.last.x, event.clientY - drag.last.y, rect)
+      state.crop.x = (Number(state.crop.x) || 0) + delta.dx
+      state.crop.y = (Number(state.crop.y) || 0) + delta.dy
+      clampCrop()
+      drag.last = { x: event.clientX, y: event.clientY }
+      scheduleRender()
+    })
+    function releaseDrag(event) {
+      if (!state.drag || !state.drag.points[event.pointerId]) return
+      delete state.drag.points[event.pointerId]
+      if (!Object.keys(state.drag.points).length) state.drag = null
+    }
+    function release(event) {
+      if (state.cropping) {
+        releaseDrag(event)
+        return
+      }
+      // 点一下卡面就进构图；手指有过的移动说明是在翻页滚动，不打断。
+      if (state.tap && !state.tap.moved) enterCrop()
+      state.tap = null
+    }
+    stage.addEventListener('pointerup', release)
+    stage.addEventListener('pointercancel', function (event) {
+      if (state.cropping) releaseDrag(event)
+      state.tap = null
+    })
+    stage.addEventListener('pointerleave', function (event) {
+      if (event.pointerType === 'mouse') {
+        if (state.cropping) releaseDrag(event)
+        state.tap = null
+      }
+    })
+
+    function distanceOf() {
+      var ids = stagePointers() ? Object.keys(stagePointers()) : []
+      if (ids.length < 2) return 0
+      var a = stagePointers()[ids[0]]
+      var b = stagePointers()[ids[1]]
+      return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2))
+    }
   }
 
   function saveCard() {
@@ -274,7 +453,7 @@
       toast('卡面已保存')
       setTimeout(function () { location.href = './index.html' }, 900)
     }).catch(function (error) {
-      if (error.code === 'PLAYER_CARD_PHOTO_PAY_REQUIRED') toast('换照片需先用「直接生成 AI 形象照」合成新形象照，本页不扣费')
+      if (error.code === 'PLAYER_CARD_PHOTO_PAY_REQUIRED') toast('换照片请用「更换照片」上传自己照片或一键生成，本页只保存背景与构图')
       else handleError(error)
     }).then(function () {
       state.saving = false
@@ -293,18 +472,36 @@
 
   function bind() {
     $('btn-retry').addEventListener('click', function () { init() })
-    $('btn-ai-portrait').addEventListener('click', openAiPortrait)
-    $('btn-edit-crop').addEventListener('click', focusCropPanel)
-    $('btn-change-photo').addEventListener('click', openAiPortrait)
-    $('btn-ai-error').addEventListener('click', openAiPortrait)
+    $('btn-change-photo').addEventListener('click', openPhotoSheet)
+    $('btn-change-bg').addEventListener('click', focusBackgroundPanel)
+    $('btn-edit-crop').addEventListener('click', function () {
+      if (state.cropping) closeCrop()
+      else enterCrop()
+    })
+    $('btn-crop-done').addEventListener('click', function () {
+      closeCrop()
+      renderMain()
+    })
+    $('btn-crop-reset').addEventListener('click', function () {
+      state.crop = { zoom: 1, x: 0, y: 0 }
+      syncCropLabels()
+      renderMain()
+    })
+    $('crop-zoom').addEventListener('input', function () {
+      state.crop.zoom = Number($('crop-zoom').value)
+      clampCrop()
+      syncCropLabels()
+      scheduleRender()
+    })
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sheet-close]'), function (node) {
+      node.addEventListener('click', closePhotoSheet)
+    })
+    $('opt-upload').addEventListener('click', function () { closePhotoSheet(); openPhotoPage('upload') })
+    $('opt-ai').addEventListener('click', function () { closePhotoSheet(); openPhotoPage('ai') })
+    $('btn-ai-error').addEventListener('click', function () { openPhotoPage('ai') })
     $('btn-back').addEventListener('click', function () { location.href = './index.html' })
     $('btn-save').addEventListener('click', saveCard)
-    ;['crop-zoom', 'crop-x', 'crop-y'].forEach(function (id) {
-      $(id).addEventListener('input', function () {
-        syncCropLabels()
-        schedulePreview()
-      })
-    })
+    bindStage()
   }
 
   function init() {
@@ -331,10 +528,12 @@
         backgroundId: String(player.backgroundId || tier || ''),
         points: Number(score.points || 0),
         tierRule: player.tierRule || TIER_FALLBACK,
-        canChangeBackground: Boolean(score.canChangeBackground),
-        crop: draft.crop || { zoom: 1, x: 0, y: 0 }
+        canChangeBackground: Boolean(score.canChangeBackground)
       }
-      $('design-sub').textContent = (state.settings.name || '球员') + ' · 背景与形象照'
+      var saved = draft.crop || { zoom: 1, x: 0, y: 0 }
+      state.crop = { zoom: Number(saved.zoom) || 1, x: Number(saved.x) || 0, y: Number(saved.y) || 0 }
+      clampCrop()
+      $('design-sub').textContent = (state.settings.name || '球员') + ' · 更换照片 · 更换卡面 · 编辑构图'
       /* 历史上已保存的背景可能高于当前卡级（例如会员越级选过金卡）：
          这里按已达到的卡级回退预览，保存时服务端同样会拒绝越级背景。 */
       var savedRank = tierRank(state.settings.backgroundId)
@@ -347,13 +546,24 @@
       show('state-loading', false)
       show('content', true)
       renderBackgrounds()
-      renderCrop()
-      requestPreview().then(loadThumbs)
+      syncCropLabels()
+      var ready
+      if (!fallbackFrom && result.cardScene) {
+        // getMyPlayerCard 已带回当前背景的卡面描述，直接用，省掉一次请求。
+        state.scenes[state.settings.backgroundId] = result.cardScene
+        ready = renderMain()
+      } else {
+        ready = loadScene(state.settings.backgroundId).then(function () { return renderMain() })
+      }
+      ready.then(function (rendered) {
+        if (!rendered) return
+        loadThumbs()
+      }, function (error) { handleError(error) })
       if (fallbackFrom) toast('原卡面背景超出当前卡级，已按' + BACKGROUNDS[currentRank].name + '预览，需要积分达标后才能保存')
     }).catch(function (error) {
       var code = (error && error.code) || ''
-      if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') { showError('该球员还没有标准形象照，先用「直接生成 AI 形象照」生成一张再回来编辑球员卡。', true); return }
-      if (code === 'PLAYER_CARD_FORBIDDEN') { showError('只能设计本人或已绑定孩子的球员卡'); return }
+      if (code === 'PLAYER_CARD_PORTRAIT_REQUIRED') { showError('该球员还没有标准形象照，先用「一键形象照」生成一张再回来编辑球员卡。', true); return }
+      if (code === 'PLAYER_CARD_FORBIDDEN') { showError('只能编辑本人或已绑定孩子的球员卡'); return }
       showError((error && error.message) || '卡面读取失败，请稍后重试')
     })
   }

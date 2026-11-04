@@ -382,8 +382,14 @@ function createPlayerCards(deps) {
     if (event.action === 'getMyPlayerCard') {
       const p = entry.player
       const portrait = await standardPortrait(auth, entry, db)
-      const source = await cloud.downloadFile({ fileID: portrait.transparentFileId })
-      if (!source.fileContent || source.fileContent.length > 5 * 1024 * 1024) throw new Error('标准形象照过大，请重新生成')
+      // 编辑球员卡页只画 cardScene 里的临时地址，用不到 5MB 的 base64 形象照：
+      // 传 withPortraitData:false 时跳过这次下载和传输，页面打开明显更快。默认保持旧行为。
+      let standardPortraitData = ''
+      if (event.withPortraitData !== false) {
+        const source = await cloud.downloadFile({ fileID: portrait.transparentFileId })
+        if (!source.fileContent || source.fileContent.length > 5 * 1024 * 1024) throw new Error('标准形象照过大，请重新生成')
+        standardPortraitData = 'data:image/png;base64,' + source.fileContent.toString('base64')
+      }
       let teamLogoData = ''
       if (entry.teamLogo.startsWith('cloud://')) {
         try {
@@ -396,7 +402,7 @@ function createPlayerCards(deps) {
       }
       return { success: true, player: await summary(entry), templates:await activeTemplates(db),
         portraitId: String(portrait._id), portraitAvailable:true,
-        teamLogoData, cardScene:(await require('./playerCardDynamic.cjs').read(cloud,db,p,{baseOnly:true}))?.cardScene||null, standardPortraitData:'data:image/png;base64,'+source.fileContent.toString('base64'),draft: (p.playerCardFileId || p.playerCardDynamic) ? { crop: p.playerCardCrop || { zoom: 1, x: 0, y: 0 }, layout: p.playerCardLayout || null } : null }
+        teamLogoData, cardScene:(await require('./playerCardDynamic.cjs').read(cloud,db,p,{baseOnly:true}))?.cardScene||null, standardPortraitData, draft: (p.playerCardFileId || p.playerCardDynamic) ? { crop: p.playerCardCrop || { zoom: 1, x: 0, y: 0 }, layout: p.playerCardLayout || null } : null }
     }
     if (!['previewMyPlayerCard','saveMyPlayerCard'].includes(event.action)) return { success: false, error: '未知球员卡操作' }
     const level = await summary(entry)

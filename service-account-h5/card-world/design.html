@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>编辑球员卡 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261104-ai6" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai7" />
 </head>
 <body>
   <div class="app">
@@ -14,7 +14,7 @@
       <img class="topbar__logo" src="assets/card-world-icon.jpg" alt="赛小蜂" />
       <div class="topbar__title">
         <strong>编辑球员卡</strong>
-        <span id="design-sub">背景 · 形象照 · 构图</span>
+        <span id="design-sub">更换照片 · 更换卡面 · 编辑构图</span>
       </div>
     </header>
 
@@ -22,7 +22,7 @@
       <section class="state-card" id="state-loading">
         <i class="spinner"></i>
         <strong>正在读取卡面…</strong>
-        <span>背景与形象照由服务端合成，不在此页上传</span>
+        <span>背景与形象照在手机上直接合成，不用等服务端出图</span>
       </section>
 
       <section class="state-card" id="state-error" hidden>
@@ -30,74 +30,49 @@
         <p id="error-text">请稍后重试</p>
         <div class="state-card__actions">
           <button type="button" class="btn btn--gold" id="btn-retry">重新加载</button>
-          <button type="button" class="btn btn--ghost" id="btn-ai-error" hidden>直接生成 AI 形象照</button>
+          <button type="button" class="btn btn--ghost" id="btn-ai-error" hidden>一键形象照</button>
         </div>
       </section>
 
       <section id="content" hidden>
-        <!-- 卡面效果：完整卡面（背景 + 形象照），不是单张人像 -->
+        <!-- 卡面效果：完整卡面（背景 + 形象照），在本机实时合成，拖动即预览 -->
         <article class="panel">
           <div class="panel__head">
             <h2>卡面效果</h2>
             <span class="hint" id="preview-state">—</span>
           </div>
           <div class="design-stage" id="design-stage">
-            <img id="design-image" alt="卡面预览" hidden />
+            <div class="design-stage__canvas" id="design-canvas"></div>
             <div class="design-stage__empty" id="design-empty">正在合成卡面…</div>
           </div>
+          <div class="crop-bar" id="crop-bar" hidden>
+            <p class="crop-bar__tip">按住卡面拖动，把形象照挪到想要的位置</p>
+            <div class="slider-row slider-row--compact">
+              <span>缩放</span>
+              <input type="range" id="crop-zoom" min="1" max="4" step="0.05" value="1" />
+              <em id="crop-zoom-value">1.00</em>
+            </div>
+            <div class="crop-bar__actions">
+              <button type="button" class="btn btn--ghost" id="btn-crop-reset">重置</button>
+              <button type="button" class="btn btn--gold" id="btn-crop-done">完成调整</button>
+            </div>
+          </div>
           <div class="design-actions">
+            <button type="button" class="btn btn--ghost" id="btn-change-photo">更换照片</button>
+            <button type="button" class="btn btn--ghost" id="btn-change-bg">更换卡面</button>
             <button type="button" class="btn btn--ghost" id="btn-edit-crop">编辑构图</button>
-            <button type="button" class="btn btn--ghost" id="btn-change-photo">换形象照</button>
           </div>
-          <p class="field__hint" id="design-hint">当前显示的是最终成卡效果：「编辑构图」调形象照的大小与位置，「换形象照」可上传你自己的照片，或用 AI 生成一张来替换。</p>
-        </article>
-
-        <!-- 形象照不满意：直接生成 AI 形象照并替换掉卡面上的形象照，本页只保留这一个 AI 入口 -->
-        <article class="panel ai-panel" id="ai-panel">
-          <div class="ai-panel__head">
-            <span class="ai-panel__badge">重点</span>
-            <h2>对卡面形象照不满意？</h2>
-          </div>
-          <p class="ai-panel__text">
-            点下面的按钮直接生成 <strong>AI 形象照</strong>：上传头像和球服、选好姿势就生成，
-            点「使用这张形象照」回来就把新照片替换掉这张卡面里的形象照。
-          </p>
-          <button type="button" class="btn btn--gold ai-panel__btn" id="btn-ai-portrait">直接生成 AI 形象照</button>
-          <p class="field__hint">生成会消耗蜂蜜，失败或放弃会自动退回；不需要改形象照时，只调背景或构图直接保存即可。</p>
+          <p class="field__hint" id="design-hint">「更换照片」换掉卡面上的形象照（可相册上传或拍摄，也可一键 AI 生成）；「更换卡面」换背景；「编辑构图」直接把照片拖到合适位置。</p>
         </article>
 
         <!-- 背景卡面：只开放已达到的卡级，未达等级灰度显示并提示解锁积分 -->
-        <article class="panel">
+        <article class="panel" id="background-panel">
           <div class="panel__head">
-            <h2>背景卡面</h2>
+            <h2>更换卡面</h2>
             <span class="hint" id="background-hint">—</span>
           </div>
           <div class="backgrounds backgrounds--thumb" id="background-list"></div>
           <p class="field__hint">每张缩略图都是该背景下的成卡效果；未达等级的卡片显示为灰度，并标注解锁所需生涯积分。</p>
-        </article>
-
-        <!-- 照片构图 -->
-        <article class="panel" id="crop-panel">
-          <div class="panel__head">
-            <h2>照片构图</h2>
-            <span class="hint">只调大小与位置</span>
-          </div>
-          <div class="slider-row">
-            <span>缩放</span>
-            <input type="range" id="crop-zoom" min="1" max="4" step="0.05" value="1" />
-            <em id="crop-zoom-value">1.00</em>
-          </div>
-          <div class="slider-row">
-            <span>左右</span>
-            <input type="range" id="crop-x" min="-2" max="2" step="0.02" value="0" />
-            <em id="crop-x-value">0.00</em>
-          </div>
-          <div class="slider-row">
-            <span>上下</span>
-            <input type="range" id="crop-y" min="-2" max="2" step="0.02" value="0" />
-            <em id="crop-y-value">0.00</em>
-          </div>
-          <p class="field__hint">只调整背景或构图可直接保存，不消耗蜂蜜；要换形象照请用上方「直接生成 AI 形象照」。</p>
         </article>
 
         <div class="design-actions">
@@ -108,9 +83,30 @@
     </main>
   </div>
 
+  <!-- 更换照片：两种方式 -->
+  <div class="sheet" id="photo-sheet" hidden>
+    <div class="sheet__mask" data-sheet-close="1"></div>
+    <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="更换照片">
+      <div class="sheet__head">
+        <h2>更换照片</h2>
+        <button type="button" class="sheet__close" data-sheet-close="1" aria-label="关闭">×</button>
+      </div>
+      <button type="button" class="sheet__option" id="opt-upload">
+        <strong>相册上传或拍摄</strong>
+        <small>用现成的单人照，服务端自动抠图成透明形象照</small>
+      </button>
+      <button type="button" class="sheet__option" id="opt-ai">
+        <strong>一键形象照</strong>
+        <small>上传头像和球服，AI 生成带动作的形象照（过程有合成动画）</small>
+      </button>
+      <p class="field__hint">两种方式都会先给你预览，确认后才写进这张球员卡。</p>
+    </div>
+  </div>
+
   <div class="toast" id="toast" hidden></div>
 
-  <script src="js/api.js?v=20261104-ai6"></script>
-  <script src="js/design.js?v=20261104-ai6"></script>
+  <script src="js/dynamic-card-renderer.js?v=20261104-ai7"></script>
+  <script src="js/api.js?v=20261104-ai7"></script>
+  <script src="js/design.js?v=20261104-ai7"></script>
 </body>
 </html>
