@@ -58,12 +58,22 @@
 （`E:\Documents\sxf-football-wt-h5\service-account-h5\card-world`）重新发布 16 个文件，
 并逐文件回读 SHA-256 确认正式端已恢复为本分支版本。
 
-遗留：正式端 `/service-account-h5/card-world/` 目录中仍有旧原型遗留文件（本轮页面均未引用），
-包括 `card-world.html`、`meet-anim-demo.html`、`README.md`、`落地说明.md`、
-`css/card-world-proto.css`、`css/my-main-card.css`、`css/player-card-holo.css`、
-`js/card-world-proto.js`、`js/my-main-card.js`、`js/player-card-holo.js`、`js/portrait-entry.js`、
-`assets/pitch-3d.svg`、`assets/card-tie-dongze.png`、`assets/tie-dongze-card.png`、
-`assets/logo-saixiaofeng.png`、`assets/player-card-holo/**`。删除属破坏性操作，待单独授权后执行。
+## 五、旧文件清理（用户 2026-11-04 授权「执行清理」后完成）
+
+正式端删除 20 个旧原型文件：
+
+- 单文件 15 个：`README.md`、`落地说明.md`、`card-world.html`、`meet-anim-demo.html`、
+  `css/card-world-proto.css`、`css/my-main-card.css`、`css/player-card-holo.css`、
+  `js/card-world-proto.js`、`js/my-main-card.js`、`js/player-card-holo.js`、`js/portrait-entry.js`、
+  `assets/pitch-3d.svg`、`assets/card-tie-dongze.png`、`assets/tie-dongze-card.png`、
+  `assets/logo-saixiaofeng.png`。
+- 目录 1 个（5 文件，删除前 `--dry-run` 逐项确认）：`assets/player-card-holo/**`。
+
+测试端删除 1 个：`js/portrait-entry.js`（更早一轮就已在本地下线的旧入口脚本）。
+
+清理后两端目录各为 **16 个文件**（与本轮源码一一对应），再执行一次 HTTP 回读：16/16
+SHA-256 全部与本地一致（`ALL MATCH`）；`index.html` 7089、`design.html` 5372、
+`portrait.html` 7874 字节，与本地完全相同。`css/holo-cosmos.css`、`js/holo.js` 属本轮页面仍在用的文件，保留。
 
 ## 六、后续注意
 
