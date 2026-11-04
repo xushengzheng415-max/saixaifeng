@@ -184,11 +184,25 @@
     })
   }
 
-  /* 字体只需在第一次渲染时加载；之后拖动/切换背景都直接重画，不再发请求。 */
-  function ensureFonts(scene) {
-    if (state.fontsReady) return Promise.resolve()
-    if (!Dynamic.web) return Promise.resolve()
-    return Dynamic.web(scene).then(function () { state.fontsReady = true }, function () { /* 字体失败时退回系统字体，不阻塞预览 */ })
+  /* 字体单独加载：只按 scene.fonts 拉字库，不再让渲染器先画一整张卡（首屏少一半工作量）。
+     字体没到之前先用系统字体出图，到位后再重画一次，用户不用盯着空白等。 */
+  var fontJobs = {}
+  function loadFonts(scene) {
+    var fonts = (scene && scene.fonts) || []
+    if (!fonts.length || typeof FontFace === 'undefined' || !document.fonts) return Promise.resolve(false)
+    var jobs = fonts.map(function (font) {
+      var key = String(font.family) + '|' + String(font.weight || 400) + '|' + String(font.url)
+      if (fontJobs[key]) return fontJobs[key]
+      var face = new FontFace(font.family, 'url(' + font.url + ')', { weight: String(font.weight || 400) })
+      fontJobs[key] = face.load().then(function (loaded) {
+        try { document.fonts.add(loaded) } catch (error) { /* 已存在同名字体时忽略 */ }
+        return true
+      }, function () { delete fontJobs[key]; return false })
+      return fontJobs[key]
+    })
+    return Promise.all(jobs).then(function (results) {
+      return results.some(Boolean)
+    }, function () { return false })
   }
 
   function currentScene() {
@@ -201,9 +215,7 @@
     if (!scene) return Promise.resolve(false)
     var seq = ++state.renderSeq
     var canvas = makeCanvas(300, 430)
-    return ensureFonts(scene).then(function () {
-      return drawScene(Object.assign({}, scene, { crop: cropValues() }), canvas, 2)
-    }).then(function () {
+    return drawScene(Object.assign({}, scene, { crop: cropValues() }), canvas, 2).then(function () {
       if (seq !== state.renderSeq) return false
       var host = $('design-canvas')
       host.innerHTML = ''
@@ -287,7 +299,8 @@
         settings.backgroundId = item.id
         renderBackgrounds()
         setPreviewState('正在换背景…')
-        loadScene(item.id).then(function () {
+        loadScene(item.id).then(function (scene) {
+          loadFonts(scene)
           return renderMain()
         }).catch(function (error) {
           settings.backgroundId = previous
@@ -557,7 +570,13 @@
       }
       ready.then(function (rendered) {
         if (!rendered) return
-        loadThumbs()
+        // 先把卡面给用户看，字体和另外两张缩略图随后补上，不拖慢首屏。
+        loadFonts(currentScene()).then(function (loaded) {
+          if (!loaded || state.fontsReady) return
+          state.fontsReady = true
+          scheduleRender()
+        })
+        setTimeout(loadThumbs, 220)
       }, function (error) { handleError(error) })
       if (fallbackFrom) toast('原卡面背景超出当前卡级，已按' + BACKGROUNDS[currentRank].name + '预览，需要积分达标后才能保存')
     }).catch(function (error) {
