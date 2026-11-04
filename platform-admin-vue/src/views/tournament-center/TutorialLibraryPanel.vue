@@ -7,11 +7,11 @@
       <el-table-column label="分类" min-width="120"><template #default="{ row }">{{ row.draft.category }}</template></el-table-column>
       <el-table-column label="适用端口" min-width="140"><template #default="{ row }">{{ row.draft.audience }}</template></el-table-column>
       <el-table-column label="状态" width="160"><template #default="{ row }"><el-tag :type="row.isPublished ? 'success' : 'info'">{{ row.isPublished ? '已发布' : '未发布' }}</el-tag><small v-if="row.isPublished && JSON.stringify(row.draft) !== JSON.stringify(row.published)">有未发布修改</small></template></el-table-column>
-      <el-table-column label="操作" width="260" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="editor.open(row, imageUrls)">编辑</el-button><el-button v-if="row.isPublished" link @click="read(row)">查看</el-button><el-button v-if="row.isPublished" link @click="copy(row)">复制链接</el-button><el-button v-if="row.isPublished" link type="danger" @click="withdraw(row)">下架</el-button></template></el-table-column>
+      <el-table-column label="操作" width="280" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="editor.open(row, imageUrls)">编辑</el-button><el-button v-if="row.isPublished" link @click="read(row)">查看</el-button><el-button v-if="row.isPublished" link @click="share.open({ id: row._id, ...row.published })">链接与海报</el-button><el-button v-if="row.isPublished" link type="danger" @click="withdraw(row)">下架</el-button></template></el-table-column>
       <template #empty><el-empty :description="keyword ? '未找到相关教程' : '暂无教程'" :image-size="70" /></template>
     </el-table>
     <el-pagination v-if="total > 20" v-model:current-page="page" :page-size="20" :total="total" layout="prev, pager, next" @current-change="load" />
-    <TutorialEditor ref="editor" @saved="load" />
+    <TutorialEditor ref="editor" @saved="load" /><TutorialShare ref="share" />
   </section>
 </template>
 <script setup>
@@ -19,7 +19,8 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction } from '@/utils/cloud'
 import TutorialEditor from './TutorialEditor.vue'
-const keyword = ref(''), page = ref(1), total = ref(0), rows = ref([]), loading = ref(false), error = ref(''), imageUrls = ref({}), editor = ref(null)
+import TutorialShare from './TutorialShare.vue'
+const keyword = ref(''), page = ref(1), total = ref(0), rows = ref([]), loading = ref(false), error = ref(''), imageUrls = ref({}), editor = ref(null), share = ref(null)
 const link = id => 'https://www.sxffootball.cn/service-account-h5/tutorial.html?id=' + encodeURIComponent(id)
 let epoch = 0
 async function load() {
@@ -28,7 +29,7 @@ async function load() {
 }
 function search() { page.value = 1; load() }
 function read(row) { window.open(link(row._id), '_blank', 'noopener,noreferrer') }
-async function copy(row) { try { await navigator.clipboard.writeText(link(row._id)); ElMessage.success('链接已复制') } catch { ElMessage.warning('复制失败，请打开教程后复制地址') } }
+
 async function withdraw(row) {
   if (loading.value) return
   try { await ElMessageBox.confirm('下架后，已发送给客户的链接也将不可阅读。', '下架教程', { confirmButtonText: '下架', cancelButtonText: '取消', type: 'warning' }) } catch { return }

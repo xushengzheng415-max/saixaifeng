@@ -19,7 +19,7 @@
     if (!isNaN(date.getTime())) meta.push('更新于 ' + date.toLocaleDateString('zh-CN'))
     root.append(node('div', meta.join(' · '), 'meta'))
     if (a.intro) root.append(node('p', a.intro, 'intro'))
-    ;(a.steps || []).forEach(function (s, i) { var section = node('section', '', 'step'); section.append(node('h2', (i + 1) + '. ' + s.title), node('p', s.text)); if (s.image) section.append(photo(s.image)); else if (s.imageError) section.append(node('p', '截图暂不可用，请联系客服', 'image-error')); root.append(section) })
+    ;(a.steps || []).forEach(function (s, i) { var section = node('section', '', 'step'); section.append(node('h2', /^第[0-9]+步$/.test(s.title) ? s.title : (i + 1) + '. ' + s.title)); if (s.image) section.append(photo(s.image)); else if (s.imageError) section.append(node('p', '截图暂不可用，请联系客服', 'image-error')); section.append(node('p', s.text)); root.append(section) })
     var footer = node('div', '', 'footer'), help = node('a', '仍需帮助'); help.href = './me.html?deep=myFeedback'; footer.append(help); root.append(footer)
   }
   async function load() {

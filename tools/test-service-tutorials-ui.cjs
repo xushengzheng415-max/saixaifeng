@@ -62,6 +62,7 @@ async function response(body) {
     await dialog.getByRole('button', { name: '发布教程', exact: true }).click()
     await page.getByRole('button', { name: '发布', exact: true }).click()
     await page.getByText('已发布', { exact: true }).waitFor()
+    await page.getByRole('dialog', { name: '分享教程', exact: true }).getByRole('button', { name: '关闭', exact: true }).click()
     await dialog.waitFor({ state: 'hidden' }); await page.locator('.el-message-box').waitFor({ state: 'hidden' })
     await page.screenshot({ path: path.join(output, 'library-desktop.png') })
     // Error and retry states must not show stale selectable results.
