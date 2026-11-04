@@ -468,3 +468,8 @@ QuickHybridConsole→tournament_league_tables.leaguePairingMode→generateSchedu
 ## 2026-11-04 自由战术阵容
 
 getMiniWorkspace的teamTactics/saveTeamTactic/deleteTeamTactic复用既有team_tactics并维持球队范围和版本检查，新增boardMode=free保存号码、归一化点位、足球位置及可选本方playerId。关联的姓名与球衣号由服务端读取当前本队档案，不接受异队ID；不修改正式名单、单场阵容、资格或统计。后端差量上线读回，原生开发版1.2.43已上传，体验/正式未发布。见[记录](../releases/tactics-freeboard-20261104.md)。
+
+
+## 2026-11-04 战术阵容恢复和轨迹
+
+沿用team_tactics及boardMode=free，tacticsFree同源规则新增temporaryName与red/blue归一化轨迹，稳定真实球员引用仍受本队校验。临时姓名不创建users或players。客户端只按账号/球队缓存方案ID，载入内容从服务端重新授权读取，不以缓存作为权限。模块差量上线并读回，原生开发版1.2.44上传，体验/正式未发布。见[记录](../releases/tactics-restore-trails-20261104.md)。
