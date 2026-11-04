@@ -82,3 +82,12 @@
 - `hosting deploy … admin --concurrency 3 --retry-count 8 --retry-interval 3000` 成功，407 个文件。
 - 线上读回 `https://www.sxffootball.cn/admin/index.html`、`/admin/assets/HeadRefereeManagement-AN9lk9KU.js`、`/admin/assets/HeadRefereeManagement-GRIWgmBc.css`：三个摘要与本地逐字节一致；入口只引用 `/admin/assets/`；CSS 含 `min-width:940px`，JS 含「重新生成二维码」；`/admin/` 返回 HTTP 200。
 - 已推送 `github` 与 `origin`：`main` 由 `eed912b90` 快进到 `fc9148a20`；随后把已发布 `main` 合入最新 `preview`（合并提交 `8353228f8`），`git diff 57410b920..HEAD` 为空，预览内容无变化，无需重发 `/preview/admin/`。
+
+## 四、追补（同日）：1280 宽含侧栏时也一屏显示
+
+用户 2026-11-04 截图反馈：带左侧栏的窗口（侧栏 300px、内容区约 980px）下，表格右侧「操作」按钮仍被裁。复测该场景面板宽 890px，原 `min-width:940px` 需要横滑 50px。
+
+- 表格最小宽度 940px → 820px，列宽与内边距不变。1280×800（侧栏可见）复测：面板 890 / 表格 890、`panelScrollable=false`、`pageOverflowX=0`、无元素超出视口、行高 98px，「查看资料」「能力」「指派场次」全部在面板内（换行两排）。
+- 1024×682（侧栏收起）复测：面板 950 / 表格 950、无横滑、行高 111px。
+- 预览站与正式站均重新构建发布；正式读回 `index.html` `61A62708…`、`HeadRefereeManagement-DZ02hYGj.css` `D29335C1…`、`HeadRefereeManagement-CRaIwxea.js` `016FAD45…`，与本地构建逐字节一致，`/admin/` 返回 200。
+- 证据：`E:\Documents\sxf-football\output\referee-sidebar-fit-20261104\`。
