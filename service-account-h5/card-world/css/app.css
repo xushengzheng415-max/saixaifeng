@@ -408,34 +408,6 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .upload-edit__bar .btn { flex: 1; }
 .btn--sm { padding: 9px 12px; font-size: 12px; border-radius: 10px; }
 
-/* 换照片方式切换：上传自己的照片 / AI 生成形象照 */
-.mode-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin-top: 14px;
-  padding: 4px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--panel-line);
-}
-.mode-tab {
-  appearance: none;
-  border: 0;
-  border-radius: 10px;
-  padding: 10px 6px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.mode-tab.is-active {
-  background: rgba(232, 197, 106, 0.16);
-  color: var(--gold);
-  box-shadow: 0 0 0 1px rgba(232, 197, 106, 0.5) inset;
-}
-
 .pose-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 .pose-option {
   appearance: none;

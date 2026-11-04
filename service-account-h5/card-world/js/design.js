@@ -74,6 +74,10 @@
     location.href = './portrait.html?playerId=' + encodeURIComponent(playerId) + '&mode=' + (mode === 'ai' ? 'ai' : 'upload')
   }
 
+  function wantsPhotoSheet() {
+    try { return new URLSearchParams(location.search).get('photo') === '1' } catch (error) { return false }
+  }
+
   function openPhotoSheet() {
     closeCrop()
     show('photo-sheet', true)
@@ -570,6 +574,8 @@
       }
       ready.then(function (rendered) {
         if (!rendered) return
+        // 卡面页「换形象照」带 photo=1 进来：直接把「更换照片」的两个选项弹出来。
+        if (wantsPhotoSheet()) openPhotoSheet()
         // 先把卡面给用户看，字体和另外两张缩略图随后补上，不拖慢首屏。
         loadFonts(currentScene()).then(function (loaded) {
           if (!loaded || state.fontsReady) return

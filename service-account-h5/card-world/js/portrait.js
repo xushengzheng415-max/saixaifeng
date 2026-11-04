@@ -77,7 +77,11 @@
 
   // 球员卡页「更换照片」会带 mode 进来：上传自己的照片 / 一键形象照（AI 合成）。
   function modeFromQuery() {
-    try { return new URLSearchParams(location.search).get('mode') === 'ai' ? 'ai' : 'upload' } catch (error) { return 'upload' }
+    try {
+      var mode = new URLSearchParams(location.search).get('mode')
+      // 入口已定好方式：卡面页「更换照片」带 mode；卡面页旧的「AI 形象照」入口不带参数，按一键形象照显示。
+      return mode === 'upload' ? 'upload' : 'ai'
+    } catch (error) { return 'ai' }
   }
 
   function rememberPlayerId(playerId) {
@@ -151,15 +155,16 @@
     if (host) host.hidden = true
   }
 
-  // 两种方式共用一个页面：默认「上传自己的照片」，可切到「AI 生成形象照」。
+  // 方式由入口决定，页内只保留一种流程，不再出现「一键形象照又带一个上传自己的照片」。
   function setMode(mode) {
-    state.mode = mode === 'ai' ? 'ai' : 'upload'
+    state.mode = mode === 'upload' ? 'upload' : 'ai'
     var upload = state.mode === 'upload'
     show('upload-flow', upload)
     show('ai-flow', !upload)
-    $('mode-upload').className = 'mode-tab' + (upload ? ' is-active' : '')
-    $('mode-ai').className = 'mode-tab' + (upload ? '' : ' is-active')
-    $('portrait-sub').textContent = (state.name || '球员') + (upload ? ' · 上传自己的照片直接换' : ' · 单人照 + 球衣照生成')
+    $('portrait-sub').textContent = (state.name || '球员') + (upload ? ' · 用现成单人照自动抠图' : ' · 上传头像和球服生成')
+    $('player-hint').textContent = upload
+      ? '用相册或拍照的现成单人照换卡面：选好后先拖动调整位置，服务端自动抠图，确认后才写进卡面。'
+      : '上传一张本人照片和一张球衣照片，AI 按球衣生成带动作的透明形象照；生成按次计费，失败或放弃自动退回。'
   }
 
   function ownNote(message) {
@@ -924,8 +929,6 @@
   }
 
   function bind() {
-    $('mode-upload').addEventListener('click', function () { setMode('upload') })
-    $('mode-ai').addEventListener('click', function () { setMode('ai') })
     $('own-input').addEventListener('change', function (event) {
       var file = event.target.files && event.target.files[0]
       // 清空 value，允许连续选同一张照片时仍触发 change。

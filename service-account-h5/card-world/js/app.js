@@ -189,7 +189,8 @@
     location.href = './design.html?playerId=' + encodeURIComponent(playerId)
   }
 
-  /* AI 形象照：直接进独立的 portrait.html 生成页，不再绕「球员登记 · 形象照」。
+  /* 换形象照：进「编辑球员卡」并直接弹出「更换照片」的两个选项
+     （相册上传或拍摄 / 一键形象照），不再在形象照页里二次选方式。
      扣费、凭证与卡面素材入库都在服务端，本页只负责跳转。 */
   function gotoPortrait(playerId) {
     var id = String(playerId || '')
@@ -197,7 +198,7 @@
       toast('还没有球员卡，先去足球世界签约')
       return
     }
-    location.href = './portrait.html?playerId=' + encodeURIComponent(id)
+    location.href = './design.html?playerId=' + encodeURIComponent(id) + '&photo=1'
   }
   function aiPortraitPlayerId() {
     if (state.main && !state.main.empty && state.main.playerId) return state.main.playerId
@@ -212,7 +213,7 @@
       toast('还没有可生成的球员卡，先去足球世界签约')
       return
     }
-    location.href = './portrait.html?playerId=' + encodeURIComponent(playerId)
+    location.href = './portrait.html?playerId=' + encodeURIComponent(playerId) + '&mode=ai'
   }
 
   function loadScript(src) {
@@ -310,8 +311,9 @@
       document.getElementById('library-panel').scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
     $('btn-ai-portrait').addEventListener('click', openAiPortrait)
-    // 卡面页直接给「换形象照」入口：不用先点「编辑卡面」再找 AI。
-    $('btn-change-photo').addEventListener('click', openAiPortrait)
+    /* 换形象照：进编辑球员卡并直接弹出「更换照片」（相册上传或拍摄 / 一键形象照），
+       页内不再让用户二次选方式。 */
+    $('btn-change-photo').addEventListener('click', function () { gotoPortrait(aiPortraitPlayerId()) })
     $('weapp-fallback').addEventListener('click', function () { toast('请使用微信打开本页后进入小程序') })
   }
 
