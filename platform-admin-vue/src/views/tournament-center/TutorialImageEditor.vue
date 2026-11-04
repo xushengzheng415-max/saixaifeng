@@ -8,17 +8,18 @@
       <el-button :disabled="selected < 0 || recognizing || saving" @click="removeSelected">删除选中</el-button>
     </div>
     <p class="privacy-note">识别仅在本机进行。自动处理可能遗漏队徽、头像或文字，请核对并框选补盖。</p>
+    <el-progress v-if="saving" :percentage="savingProgress" />
     <el-progress v-if="recognizing" :percentage="progress" :show-text="false" /><el-alert v-if="error" :title="error" type="error" :closable="false" />
     <div class="canvas-workspace" v-loading="!ready && !error"><canvas ref="canvas" tabindex="0" aria-label="截图标注画布，拖动绘制，选择移动工具后可选中或删除标注" :class="{drawing: tool !== 'select'}" @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="cancelDrawing" @keydown.delete.prevent="removeSelected" /></div>
     <div class="image-status"><span>{{ ready ? width+' × '+height : '正在读取截图' }}<template v-if="shapes.length"> · {{ shapes.filter(s => s.type === 'mask').length }} 处遮盖 · {{ shapes.filter(s => s.type !== 'mask').length }} 个标注</template></span><el-checkbox v-model="reviewed" :disabled="recognizing || saving || !ready">已核对隐私区域</el-checkbox></div>
-    <template #footer><el-button :disabled="saving" @click="close()">取消</el-button><el-button type="primary" :disabled="!ready || !reviewed || recognizing" :loading="saving || exporting" @click="apply">使用处理后图片</el-button></template>
+    <template #footer><el-button :disabled="!ready || saving || recognizing" :loading="exporting" @click="downloadImage">下载处理图</el-button><el-button :disabled="saving" @click="close()">取消</el-button><el-button type="primary" :disabled="!ready || !reviewed || recognizing" :loading="saving || exporting" @click="apply">使用处理后图片</el-button></template>
   </el-dialog>
 </template>
 <script setup>
 import { nextTick, onBeforeUnmount, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { badgeCandidates, normalizedMasks, privacyTextRegions, recognizeLocally, renderAnnotations, scaleMasks } from '@/utils/tutorialPrivacy'
-const props = defineProps({ saving: Boolean })
+const props = defineProps({ saving: Boolean, savingProgress: { type:Number,default:0 } })
 const emit = defineEmits(['apply'])
 const visible = ref(false), canvas = ref(null), ready = ref(false), error = ref(''), tool = ref('mask'), recognizing = ref(false), progress = ref(0), reviewed = ref(false), selected = ref(-1), shapes = ref([]), undoStack = ref([]), redoStack = ref([]), previousMasks = ref([]), width = ref(0), height = ref(0), exporting = ref(false)
 let image = null, source = '', gesture = null, cancelRecognition = null, generation = 0
@@ -85,17 +86,27 @@ async function autoMask() {
     remember(); shapes.value = shapes.value.filter(s => !s.automatic).concat(next); selected.value = -1; paint(); ElMessage.success('已遮盖'+text.length+'处文字、'+badges.length+'处图形候选，请核对')
   } catch (e) { if (current === generation) error.value = e.message || '识别失败，请重试或手动遮盖' } finally { if (current === generation) recognizing.value = false }
 }
+async function exportFile() {
+  const output = document.createElement('canvas'); output.width = width.value; output.height = height.value; const ctx = output.getContext('2d'); ctx.fillStyle = '#fff';ctx.fillRect(0,0,width.value,height.value);ctx.drawImage(image,0,0,width.value,height.value); renderAnnotations(ctx,shapes.value)
+  let blob
+  for (const quality of [.94,.85,.72]) { blob = await new Promise(resolve => output.toBlob(resolve,'image/jpeg',quality)); if (blob && blob.size <= 2*1024*1024) break }
+  if (!blob || blob.size > 2*1024*1024) throw new Error('处理后图片仍超过2MB，请裁小截图后重新上传')
+  return new File([blob],'tutorial-step.jpg',{type:'image/jpeg'})
+}
+async function downloadImage() {
+  if (!ready.value || exporting.value || recognizing.value || props.saving) return
+  exporting.value = true
+  try { const file=await exportFile(),url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download='教程步骤-处理后.jpg';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000) } catch(e) { error.value='图片保存失败，请重新选择截图' } finally { exporting.value=false }
+}
 async function apply() {
   if (!reviewed.value || props.saving || exporting.value || recognizing.value) return
-  exporting.value = true
+  exporting.value = true; error.value = ''
   try {
-    const output = document.createElement('canvas'); output.width = width.value; output.height = height.value; const ctx = output.getContext('2d'); ctx.fillStyle = '#fff';ctx.fillRect(0,0,width.value,height.value);ctx.drawImage(image,0,0,width.value,height.value); renderAnnotations(ctx,shapes.value)
-    let blob
-    for (const quality of [.94,.85,.72]) { blob = await new Promise(resolve => output.toBlob(resolve,'image/jpeg',quality)); if (blob && blob.size <= 2*1024*1024) break }
-    if (!blob || blob.size > 2*1024*1024) throw new Error('处理后图片仍超过2MB，请裁小截图后重新上传')
-    emit('apply',{ file:new File([blob],'tutorial-step.jpg',{type:'image/jpeg'}), source, shapes:JSON.parse(JSON.stringify(shapes.value)), masks:normalizedMasks(shapes.value,width.value,height.value) })
+    const file=await exportFile()
+    emit('apply',{ file, source, shapes:JSON.parse(JSON.stringify(shapes.value)), masks:normalizedMasks(shapes.value,width.value,height.value) })
   } catch (e) { error.value = e.name === 'SecurityError' ? '图片不允许在线编辑，请重新上传原截图' : e.message } finally { exporting.value = false }
 }
+function uploadFailed(message) { error.value = message || '图片上传中断，请重试，当前标注已保留' }
 async function close(done) {
   if (props.saving) return
   if (shapes.value.length && !recognizing.value) { try { await ElMessageBox.confirm('本次图片编辑尚未使用，是否关闭？','关闭编辑器',{confirmButtonText:'关闭',cancelButtonText:'继续编辑'}) } catch { return } }
@@ -103,7 +114,7 @@ async function close(done) {
 }
 function saved() { ++generation; visible.value = false; image = null; source = ''; shapes.value = [] }
 onBeforeUnmount(() => { ++generation; cancelRecognition?.() })
-defineExpose({ open, saved })
+defineExpose({ open, saved, uploadFailed })
 </script>
 <style scoped>
 .image-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-tools :deep(.el-button+.el-button){margin-left:0}.privacy-note{font-size:12px;color:#68766d;margin:12px 0}.canvas-workspace{margin-top:12px;height:min(65vh,700px);overflow:auto;background:#edf0ee;display:flex;align-items:flex-start;justify-content:center;border:1px solid #dce3de}.canvas-workspace canvas{display:block;max-width:100%;height:auto;max-height:none;touch-action:none;cursor:default;outline:none;background:#fff}.canvas-workspace canvas.drawing{cursor:crosshair}.image-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;color:#647168;font-size:12px;flex-wrap:wrap}@media(max-width:700px){.canvas-workspace{height:55vh}.image-tools{gap:6px}.image-tools :deep(.el-button){padding:8px}.image-tools :deep(.el-radio-button__inner){padding:8px}}

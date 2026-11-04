@@ -21,20 +21,22 @@
     <template #footer><el-button :disabled="busy || uploading" @click="close()">取消</el-button><el-button :disabled="busy || uploading" @click="preview = true">预览</el-button><el-button :loading="busy" :disabled="uploading" @click="save('draft')">保存草稿</el-button><el-button type="primary" :loading="busy" :disabled="uploading" @click="save('publish')">发布教程</el-button></template>
   </el-dialog>
   <el-dialog v-model="preview" title="教程预览" width="min(480px, 96vw)"><article class="article"><h1>{{ form.title || '未填写标题' }}</h1><small>{{ form.category }} · {{ form.audience }}</small><p v-if="form.intro">{{ form.intro }}</p><section v-for="(step, i) in form.steps" :key="step.key"><h3>{{ i + 1 }}. {{ step.title }}</h3><img v-if="step.image" :src="imageUrls[step.image] || step.image" alt="步骤截图"><p>{{ step.text }}</p></section></article></el-dialog>
-  <TutorialImageEditor ref="imageEditor" :saving="uploading" @apply="useImage" />
+  <TutorialImageEditor ref="imageEditor" :saving="uploading" :saving-progress="uploadProgress" @apply="useImage" />
   <TutorialShare ref="share" />
 </template>
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { callFunction, uploadImageViaWebApi } from '@/utils/cloud'
+import { callFunction } from '@/utils/cloud'
+import { uploadTutorialImage } from '@/utils/tutorialUpload'
 import TutorialImageEditor from './TutorialImageEditor.vue'
 import TutorialShare from './TutorialShare.vue'
 const emit = defineEmits(['saved'])
 const categories = ['通用操作','照片与图片','球员资料','球队管理','报名与上传','账号与绑定','比赛与数据']
 const visible = ref(false), preview = ref(false), busy = ref(false), uploading = ref(false), id = ref(''), revision = ref(0), published = ref(false), source = ref(''), imageUrls = ref({})
 const form = reactive({ title: '', category: '通用操作', audience: '通用', intro: '', steps: [] })
+const uploadProgress = ref(0)
 const activeIndex = ref(0), imageEditor = ref(null), share = ref(null)
 const activeStep = computed(() => form.steps[activeIndex.value])
 let original = '', editingKey = '', edits = new Map()
@@ -72,7 +74,7 @@ async function readImage(file) {
 function editImage() { if(!activeStep.value?.image)return;editingKey=activeStep.value.key;const saved=edits.get(editingKey);imageEditor.value.open({source:saved?.source || imageUrls.value[activeStep.value.image] || activeStep.value.image,shapes:saved?.shapes || [],previousMasks:previousMasks()}) }
 async function useImage(result) {
   const step=form.steps.find(s=>s.key===editingKey);if(!step || uploading.value)return;uploading.value=true
-  try{const r=await uploadImageViaWebApi('tutorial-images',result.file);if(!r.fileId || !r.tempUrl)throw new Error('图片上传结果不完整，请重试');step.image=r.fileId;imageUrls.value[r.fileId]=r.tempUrl;edits.set(step.key,{source:result.source,shapes:result.shapes,masks:result.masks});imageEditor.value.saved();ElMessage.success('处理后图片已上传')}catch(e){ElMessage.error(e.message)}finally{uploading.value=false}
+  try{const r=await uploadTutorialImage(result.file,p=>{uploadProgress.value=p});if(!r.fileId || !r.tempUrl)throw new Error('图片上传结果不完整，请重试');step.image=r.fileId;imageUrls.value[r.fileId]=r.tempUrl;edits.set(step.key,{source:result.source,shapes:result.shapes,masks:result.masks});imageEditor.value.saved();ElMessage.success('处理后图片已上传')}catch(e){imageEditor.value.uploadFailed(e.message);ElMessage.error(e.message)}finally{uploading.value=false}
 }
 function contentPayload() { return {title:form.title,category:form.category,audience:form.audience,intro:form.intro,steps:form.steps.map((s,i)=>({title:s.title.trim() || '第'+(i+1)+'步',text:s.text,image:s.image}))} }
 async function save(mode) {

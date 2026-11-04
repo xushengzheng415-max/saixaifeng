@@ -6,9 +6,26 @@ const baseUrl = process.env.TUTORIAL_TEST_BASE_URL || 'http://127.0.0.1:5199'
 const allowedHost = new URL(baseUrl).hostname
 const root = path.resolve(__dirname,'..'), out = path.join(root,'output/tutorial-image-workflow-20261104')
 const id = 'tutorial_22222222-2222-4222-8222-222222222222', rows = [], uploads = [], saved = [], external = [], errors = []
+const sessions=new Map();let serial=0, exceededOnce=false, interruptedOnce=false, legacyCalls=0, aborts=0, maxRequestBytes=0, failedBytes=null
 function response(body) {
+  const requestBytes=Buffer.byteLength(JSON.stringify(body));maxRequestBytes=Math.max(maxRequestBytes,requestBytes);assert.ok(requestBytes<40*1024,'each request must stay below 40KB')
   const p = body.functionParams || {}
-  if (body.action === 'uploadImage') { uploads.push(body.base64Data); return {success:true,fileID:'cloud://offline/processed-'+uploads.length+'.jpg',tempUrl:body.base64Data} }
+  if(body.action==='uploadImage'){legacyCalls++;return {success:false,error:'EXCEED_MAX_PAYLOAD_SIZE'}}
+  if(body.functionName==='uploadFile'){
+    if(p.action==='startChunk'){assert.equal(p.folder,'tutorial-images');const uploadId='mock-upload-'+(++serial);sessions.set(uploadId,{total:p.totalChunks,parts:new Map()});return {success:true,uploadId}}
+    if(p.action==='abortChunk'){aborts++;sessions.delete(p.uploadId);return {success:true}}
+    const session=sessions.get(p.uploadId);assert.ok(session,'chunk session must exist')
+    if(p.action==='uploadChunk'){
+      if(!exceededOnce){exceededOnce=true;return {success:false,message:'EXCEED_MAX_PAYLOAD_SIZE'}}
+      session.parts.set(p.chunkIndex,Buffer.from(p.data,'base64'));return {success:true}
+    }
+    if(p.action==='finishChunk'){
+      assert.equal(session.parts.size,session.total);const bytes=Buffer.concat(Array.from({length:session.total},(_,i)=>session.parts.get(i)))
+      if(!interruptedOnce){interruptedOnce=true;failedBytes=bytes;return {success:false,message:'测试：上传中断'}}
+      if(!uploads.length)assert.deepEqual(bytes,failedBytes,'retry must preserve the processed image bytes')
+      const image='data:image/jpeg;base64,'+bytes.toString('base64');uploads.push(image);sessions.delete(p.uploadId);return {success:true,fileID:'cloud://offline/processed-'+uploads.length+'.jpg',tempUrl:image}
+    }
+  }
   if (body.action === 'checkLogin') return {success:true,user:{_id:'platform-owner',isPlatformOwner:true}}
   if (body.functionName === 'platformOwner') return {success:true,isPlatformOwner:true,requests:[]}
   if (p.action === 'tutorialList') return {success:true,rows,total:rows.length,imageUrls:Object.fromEntries(uploads.map((u,i)=>['cloud://offline/processed-'+(i+1)+'.jpg',u]))}
@@ -51,6 +68,9 @@ function response(body) {
     await draw('方框',[840,590],[1120,720]);await draw('箭头',[760,480],[950,620]);await editor.getByRole('button',{name:'撤销',exact:true}).click();await editor.getByRole('button',{name:'重做',exact:true}).click()
     await editor.getByText('已核对隐私区域',{exact:true}).click()
     await page.screenshot({path:path.join(out,'privacy-and-annotations.png')})
+    await editor.getByRole('button',{name:'使用处理后图片',exact:true}).click()
+    await editor.locator('.el-alert').filter({hasText:'测试：上传中断'}).waitFor();assert.equal(await editor.isVisible(),true);assert.equal(uploads.length,0)
+    const backupPromise=page.waitForEvent('download');await editor.getByRole('button',{name:'下载处理图',exact:true}).click();const backup=await backupPromise;await backup.saveAs(path.join(out,'processed-backup.jpg'));assert.deepEqual(fs.readFileSync(path.join(out,'processed-backup.jpg')),failedBytes)
     await editor.getByRole('button',{name:'使用处理后图片',exact:true}).click();await editor.waitFor({state:'hidden'})
     assert.equal(uploads.length,1);assert.notEqual(uploads[0],fixture);assert.ok(uploads[0].startsWith('data:image/jpeg;'))
     const pixels=await page.evaluate(async(data)=>{const i=new Image();i.src=data;await i.decode();const c=document.createElement('canvas');c.width=i.width;c.height=i.height;const x=c.getContext('2d');x.drawImage(i,0,0);const phone=x.getImageData(220,235,350,28).data,logo=x.getImageData(80,170,45,45).data,all=x.getImageData(0,0,c.width,c.height).data;let grey=0,logoGrey=0,red=0;for(let k=0;k<phone.length;k+=4)if(phone[k]>212&&phone[k]<242&&Math.abs(phone[k]-phone[k+1])<12&&Math.abs(phone[k+1]-phone[k+2])<12)grey++;for(let k=0;k<logo.length;k+=4)if(logo[k]>212&&logo[k]<242&&Math.abs(logo[k]-logo[k+1])<12)logoGrey++;for(let k=0;k<all.length;k+=4)if(all[k]>140&&all[k]>all[k+1]*1.6&&all[k]>all[k+2]*1.6)red++;return {grey,logoGrey,red}},uploads[0])
@@ -67,7 +87,7 @@ function response(body) {
     assert.equal(saved[0].content.steps.length,2);assert.equal(saved[0].content.steps[0].title,'第1步');assert.deepEqual(Object.keys(saved[0].content.steps[0]).sort(),['image','text','title']);assert.ok(!JSON.stringify(saved[0]).includes('data:image'),'draft payload cannot contain originals or editing history')
     await page.screenshot({path:path.join(out,'share-dialog.png')});await share.getByRole('button',{name:'关闭',exact:true}).click();await share.waitFor({state:'hidden'})
     await page.getByRole('button',{name:'编辑',exact:true}).click();await page.setViewportSize({width:390,height:844});const mobileBuilder=page.getByRole('dialog',{name:'编辑教程',exact:true});assert.equal(await mobileBuilder.evaluate(d=>d.scrollWidth>d.clientWidth+1),false);await page.screenshot({path:path.join(out,'builder-mobile.png'),fullPage:true})
-    assert.deepEqual(errors,[]);assert.deepEqual(external,[])
-    fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({status:'passed',pixels,qr:decoded.data,uploads:uploads.length,externalRequests:external,errors},null,2));console.log('PASS: screenshot-region paste, title-field paste, native text paste preserved, real local Chinese/English OCR, phone/logo masking, arrows/boxes, undo/redo, no original upload, reuse, two-step publication, clean payload, decoded poster QR, download and mobile layout')
+    assert.deepEqual(errors,[]);assert.deepEqual(external,[]);assert.equal(legacyCalls,0);assert.ok(exceededOnce && interruptedOnce);assert.equal(aborts,2);assert.equal(sessions.size,0)
+    fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({status:'passed',pixels,qr:decoded.data,uploads:uploads.length,maxRequestBytes,aborts,legacyCalls,externalRequests:external,errors},null,2));console.log('PASS: bounded chunk requests, payload fallback, interrupted upload recovery with identical bytes, backup download, screenshot-region paste, title-field paste, native text paste preserved, real local Chinese/English OCR, phone/logo masking, arrows/boxes, undo/redo, no original upload, reuse, two-step publication, clean payload, decoded poster QR, download and mobile layout')
   } finally {if(browser)await browser.close();await server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})
