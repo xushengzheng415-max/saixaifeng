@@ -130,7 +130,32 @@ SHA-256 全部与本地一致（`ALL MATCH`）；`index.html` 7089、`design.htm
 正式 `/service-account-h5/card-world/` 与测试 `/preview/service-account-h5/card-world-ai/` 两端各 16 文件重新发布，
 HTTP 回读 SHA-256 `ALL MATCH`，并线上回读确认两端版本 `ai10`、含 `btn-own-pick` 与 `autoOpenOwnPicker`、无方式页签。
 
-## 十一、后续注意
+## 十一、追加（同日）：上传照片抠图后确认背景图
+
+用户要求「上传图片后应该是需要人像分割，然后确认背景图，和注册球员上传背景的流程是一样的」。
+注册球员建档里，人像分割之后要在球员卡编辑器里确认「卡片背景」；换形象照页缺了这一步。
+
+- `portrait.html`：上传方式新增「确认背景图」区块（`#own-confirm`），含卡面预览舞台 `#own-card-canvas`、
+  背景选项列表 `#own-bg-list`、提示 `#own-bg-hint`；确认按钮改为「确认，用这张替换卡面」；
+  引入 `js/dynamic-card-renderer.js`（与共享渲染器字节一致）。
+- `js/portrait.js`：
+  - `prepareOwnData` 的提示改为「正在做人像分割」，抠图成功后才显示「确认背景图」。
+  - `loadCardInfo` 用 `getMyPlayerCard` 取卡级、积分、换背景权益和当前背景，不页面自算；
+    `loadCardScene` 用 `previewMyPlayerCard` + `player-card-dynamic/1` 取背景描述。
+  - `paintOwnCard` 用人像分割出的透明人像替换 `cardScene.assets.portrait`，本机 canvas 合成真实卡面效果
+    （禁止客户端自绘 PNG，仍只做预览）。`portraitIsLayer` 卡面不出预览，给明确提示。
+  - `cardGate` 与设计页同一套门禁：高于当前卡级按积分解锁、非当前背景且无换背景权益不可选；
+    锁定项点选只提示，不发请求。
+  - 确认链路：先 `saveMyPlayerCard` 保存所选背景（服务端再判权限），再用一次性凭证 `applyCardPhoto` 写照片；
+    任一步失败回显服务端原因并保留可重试状态。重新选择照片会清掉背景选择与预览。
+- `css/app.css` 新增 `.card-confirm` 分隔样式；`index.html`/`design.html`/`portrait.html` 资源版本升到 `ai11`。
+
+验证：`node --check portrait.js` 通过；6 套测试全通过（新增 12 条「人像分割与确认背景图」断言）；
+正式 `/service-account-h5/card-world/` 与测试 `/preview/service-account-h5/card-world-ai/` 两端各 16 文件重新发布，
+HTTP 回读 SHA-256 `ALL MATCH`，线上回读确认两端 `ai11`、含 `own-confirm`、渲染器脚本、`paintOwnCard`、
+`cardGate` 与「先存背景再写照片」链路。
+
+## 十二、后续注意
 
 - `service-account-h5/card-world/js/dynamic-card-renderer.js` 是 `service-account-h5/dynamic-card-renderer.js`
   的字节一致副本（SHA-256 相同），共享渲染器改动后必须同步副本再发布。
