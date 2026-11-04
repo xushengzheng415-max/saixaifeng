@@ -335,7 +335,7 @@ async function run() {
   page.onMove({currentTarget:{dataset:{id:'ours-1'}},detail:{source:'touch',x:650,y:15}});assert(page._tokens[0].x>80,'Can freely cross the half line');assert(page.data.dirty);page.onMoveEnd();assert(page.data.tokens[0].pixelX>640)
   page.onMove({currentTarget:{dataset:{id:'ball'}},detail:{source:'touch',x:20,y:200}});assert.equal(page._ball.x,4.38)
   const priorFree=JSON.stringify(page._tokens);page.data.interactionDisabled=true;page.onMove({currentTarget:{dataset:{id:'ours-1'}},detail:{source:'touch',x:0,y:0}});assert.equal(JSON.stringify(page._tokens),priorFree)
-  activeUser={_id:'user-b',phone:'13800000002'};page.onShow();assert.equal(page.data.tokens.length,0);assert(page.data.interactionDisabled)
+  page.data.drawColor='red';activeUser={_id:'user-b',phone:'13800000002'};page.onShow();assert.equal(page.data.drawColor,'');assert.equal(page.data.tokens.length,0);assert(page.data.interactionDisabled)
   const bound=free.seed(5);bound.tokens[0].playerId='p2';bound.tokens[0].playerName='forged name';bound.tokens[0].number='8'
   const namedDeps=deps({players:players.map(p=>({...p,jerseyNumber:p._id==='p2'?'12':''}))})
   const boundSaved=await teamTactics.save(freeDb,identity,{teamId:'team-a',name:'本方球员阵容',...bound},namedDeps);assert.equal(boundSaved.tactic.tokens[0].playerId,'p2');assert.equal(boundSaved.tactic.tokens[0].playerName,'后卫甲');assert.equal(boundSaved.tactic.tokens[0].number,'12')
