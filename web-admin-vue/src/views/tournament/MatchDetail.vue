@@ -1140,6 +1140,7 @@
 </template>
 
 <script setup>
+import { resolveSubstitutePlayerLimit } from '../../utils/lineupBenchLimit.js'
 import MatchDecision from '../../components/match/MatchDecision.vue'
 import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
@@ -1751,22 +1752,6 @@ async function returnRefereeRecord() {
   } catch (error) { ElMessage.error(error.message || '退回失败') } finally { reviewSaving.value = false }
 }
 
-function resolveSubstitutePlayerLimit(playerCount, ...sources) {
-  for (const source of sources) {
-    if (!source || typeof source !== 'object') continue
-    const details = source.regulationDetails && typeof source.regulationDetails === 'object'
-      ? source.regulationDetails
-      : source
-    // 阵容编辑器的替补席只承载可参赛人员，不单独扣除球队官员名额。
-    const totalLimit = Number(details.benchTotalLimit)
-    if (Number.isFinite(totalLimit) && totalLimit >= 0) {
-      return totalLimit
-    }
-    const playerLimit = Number(details.benchPlayerLimit)
-    if (Number.isFinite(playerLimit) && playerLimit >= 0) return playerLimit
-  }
-  return Number(playerCount) === 8 ? 8 : null
-}
 
 // 加载赛事名称与当前组别规程
 async function loadTournamentName(tid, divisionId = '') {

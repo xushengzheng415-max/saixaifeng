@@ -492,6 +492,7 @@
 </template>
 
 <script setup>
+import { parseBenchLimit } from '../../utils/lineupBenchLimit.js'
 import { ref, computed, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -717,8 +718,8 @@ const selectingForBench = ref(false)
 
 // 替补席容量
 const maxBenchSlots = computed(() => {
-  const ruleLimit = Number(props.substitutePlayerLimit)
-  if (Number.isFinite(ruleLimit) && ruleLimit >= 0) return ruleLimit
+  const ruleLimit = parseBenchLimit(props.substitutePlayerLimit)
+  if (ruleLimit !== null) return ruleLimit
   const rule = getSubstituteRule(selectedPlayerCount.value || 11)
   return rule.maxSubs
 })
