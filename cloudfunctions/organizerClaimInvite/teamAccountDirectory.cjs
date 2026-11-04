@@ -36,10 +36,11 @@ async function complete({db,team,teamId,personnel,memberships}){
   let row=rows.find(p=>phone(p.phone)===number)
   const linked=matches[0]
   const personalName=meaningfulName(user.realName||user.name)||meaningfulName(user.nickName||user.nickname)
+  const boundOwnerName=id===ownerId&&text(team.ownerDisplayUserId)===ownerId?text(team.ownerDisplayName):''
   const matchingContact=phone(team.contactPhone)===number?text(team.contactName):''
   const matchingOwnerName=phone(team.ownerPhone)===number?text(team.ownerName):''
   if(!row){
-   row={role:linked?'staff:'+linked._id:id===ownerId?'account_owner':'',name:text(linked&&linked.name)||personalName||matchingOwnerName||matchingContact||'未填写姓名',phone:number,accountType:id===ownerId?'owner':'member',roleLabel:id===ownerId?'账号持有人':text(linked&&linked.role)||'工作人员'}
+   row={role:linked?'staff:'+linked._id:id===ownerId?'account_owner':'',name:text(linked&&linked.name)||personalName||boundOwnerName||matchingOwnerName||matchingContact||'未填写姓名',phone:number,accountType:id===ownerId?'owner':'member',roleLabel:id===ownerId?'账号持有人':text(linked&&linked.role)||'工作人员'}
    if(!row.role)continue
    rows.push(row)
   }
@@ -47,7 +48,7 @@ async function complete({db,team,teamId,personnel,memberships}){
   if(id===ownerId){
    row.accountType='owner';actualOwnerRole=row.role
    // Only use names tied to this account's verified phone; never borrow another contact's name.
-   row.name=text(linked&&linked.name)||personalName||matchingOwnerName||matchingContact||meaningfulName(row.name)||'未填写姓名'
+   row.name=text(linked&&linked.name)||personalName||boundOwnerName||matchingOwnerName||matchingContact||meaningfulName(row.name)||'未填写姓名'
   }else if(row.accountType==='owner')row.accountType='member'
   if(member)row.permissions=Array.isArray(member.permissions)?member.permissions.filter(p=>['team.view','team.manage'].includes(p)):[]
  }
