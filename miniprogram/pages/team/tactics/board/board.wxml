@@ -1,0 +1,19 @@
+<view class="page">
+  <view class="pitch"><view class="boundary"><image class="center-brand" src="/pages/team/tactics/assets/center-logo.png" mode="aspectFit"/><view class="half"></view><view class="circle"></view><view class="box left"></view><view class="box right"></view><view class="goalbox left"></view><view class="goalbox right"></view><view class="goal left"></view><view class="goal right"></view></view></view>
+  <movable-area id="freeArea" class="area" wx:if="{{!loading}}">
+    <movable-view wx:for="{{tokens}}" wx:key="id" class="{{item.tokenClass}}" direction="all" x="{{item.pixelX}}" y="{{item.pixelY}}" disabled="{{interactionDisabled}}" animation="{{false}}" data-id="{{item.id}}" bindchange="onMove" bindtouchend="onMoveEnd" bindtap="editNumber"><text>{{item.number}}</text><text wx:if="{{item.hasPlayerName}}" class="player-name">{{item.playerName}}</text></movable-view>
+    <movable-view class="ball" direction="all" x="{{ballX}}" y="{{ballY}}" disabled="{{interactionDisabled}}" animation="{{false}}" data-id="ball" bindchange="onMove" bindtouchend="onMoveEnd"><image src="/images/icons/ball.svg" mode="aspectFit"/></movable-view>
+  </movable-area>
+  <button class="back" bindtap="back">返回</button>
+  <view wx:if="{{loading}}" class="state">正在打开球场…</view>
+  <view wx:elif="{{errorText}}" class="state"><text>{{errorText}}</text><button bindtap="retry">重试</button></view>
+  <block wx:else>
+    <view class="toolbar" wx:if="{{toolsOpen}}"><button bindtap="chooseCount">人数</button><button bindtap="add">加号码</button><button bindtap="flip">翻转</button><button bindtap="clear">清空</button><button bindtap="showPlans">方案</button></view>
+    <button class="tools" bindtap="toggleTools">工具</button><button class="save" bindtap="save" disabled="{{interactionDisabled}}" loading="{{saving}}">{{saveText}}</button>
+  </block>
+  <view class="mask" wx:if="{{plansOpen}}" bindtap="closePlans"></view>
+  <view class="plans" wx:if="{{plansOpen}}"><view class="plans-head"><text>已存阵容</text><button bindtap="closePlans">关闭</button></view><scroll-view scroll-y="{{true}}" class="plans-list"><view wx:for="{{plans}}" wx:key="id" class="plan-row"><button data-id="{{item.id}}" bindtap="choosePlan">{{item.name}}</button><button wx:if="{{canManage}}" class="delete" data-id="{{item.id}}" bindtap="deletePlan">删除</button></view><text wx:if="{{!hasPlans}}">暂无已存阵容</text></scroll-view><button wx:if="{{canManage}}" bindtap="createBoard">新建阵容</button></view>
+
+  <view wx:if="{{playersOpen}}" class="player-mask" bindtap="closePlayers"></view>
+  <view wx:if="{{playersOpen}}" class="player-menu"><view class="player-head"><text>{{playerMenuTitle}}</text><button bindtap="closePlayers">关闭</button></view><view wx:if="{{playersLoading}}" class="player-state">正在读取本队球员…</view><view wx:elif="{{playersError}}" class="player-state"><text>{{playersError}}</text><button bindtap="retryPlayers">重试</button></view><view wx:elif="{{!hasPlayers}}" class="player-state">本队暂无可选球员</view><scroll-view wx:else scroll-y="{{true}}" class="player-list"><view wx:for="{{playerRows}}" wx:key="id" class="player-row" data-id="{{item.id}}" bindtap="choosePlayer"><text>{{item.label}}</text><text class="player-assigned">{{item.assignedText}}</text></view></scroll-view><button class="unlink" bindtap="unlinkPlayer">取消球员关联</button></view>
+</view>

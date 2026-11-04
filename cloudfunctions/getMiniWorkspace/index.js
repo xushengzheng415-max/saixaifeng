@@ -4,6 +4,7 @@ const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const createPlayerAccountTransfer = require('./playerAccountTransfer.cjs')
 const sharedEvents = require('./sharedEvents.cjs')
+const teamTactics=require('./teamTactics.cjs')
 const { readAll: readDataRows, readByIds: readDataByIds } = require('./data-center/reader.cjs')
 const { createDataService } = require('./data-center/service.cjs')
 
@@ -3294,6 +3295,9 @@ exports.main = async function(event) {
   event = event || {}
   try {
     const identity = await findCurrentUser()
+    if(event.action==='teamTactics')return await teamTactics.list(db,identity,event,{findWorkspaceForAction,loadTeams,safeGetTeamPlayers})
+    if(event.action==='saveTeamTactic')return await teamTactics.save(db,identity,event,{findWorkspaceForAction,loadTeams,safeGetTeamPlayers})
+    if(event.action==='deleteTeamTactic')return await teamTactics.remove(db,identity,event,{findWorkspaceForAction,loadTeams,safeGetTeamPlayers})
     if(['playerCardRead','playerCardBatchRead','playerCardExport'].includes(event.action))return await readWorkspaceCards(event,identity)
     if (event.action === 'sharedEventOperation') return await require('./sharedOperations.cjs').run(db, cloud, identity, event, formatTeamPlayer)
     if (event.action === 'sharedTournaments') return { success: true, tournaments: await sharedEvents.list(db, identity.user._id) }

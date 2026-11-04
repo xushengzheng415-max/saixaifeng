@@ -99,6 +99,8 @@
         "profile-progress/profile-progress",
         "profile-exception/profile-exception",
         "official-roster/official-roster",
+        "tactics/board/board",
+        "tactics/tactics",
         "data-package/data-package",
         "data-package-events/data-package-events",
         "prebuilt-invite/prebuilt-invite",

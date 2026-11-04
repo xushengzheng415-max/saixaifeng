@@ -10,6 +10,7 @@ Page({
       { id: 'profile', icon: '/images/icons/list.svg', title: '球队资料', subtitle: '队名、队徽、联系人等' },
       { id: 'members', icon: '/images/icons/team.svg', title: '球队成员', subtitle: '教练、管理员' },
       { id: 'players', icon: '/images/icons/players.svg', title: '球队球员库', subtitle: '长期资产' },
+      { id:'tactics',icon:'/images/icons/ball.svg',title:'战术板',subtitle:'', },
       { id: 'participation', icon: '/images/icons/event.svg', title: '参赛管理', subtitle: '报名 / 正式名单 / 单场阵容' },
       { id: 'history', icon: '/images/icons/chart.svg', title: '历史参赛记录', subtitle: '已完成赛事快照' }
     ],
@@ -58,7 +59,7 @@ Page({
   onBack: function() { wx.navigateBack({ delta: 1 }) },
   onMenuTap: function(event) {
     var id = event.currentTarget.dataset.id || '', teamId = this.data.teamId
-    var routes = { profile: '/pages/team/profile/profile?teamId=', members: '/pages/team/members/members?teamId=', players: '/pages/team/player-library/player-library?teamId=', participation: '/pages/team/participation/participation?teamId=', history: '/pages/team/history/history?teamId=' }
+    var routes = { profile: '/pages/team/profile/profile?teamId=', members: '/pages/team/members/members?teamId=', players: '/pages/team/player-library/player-library?teamId=', tactics:'/pages/team/tactics/board/board?teamId=', participation: '/pages/team/participation/participation?teamId=', history: '/pages/team/history/history?teamId=' }
     var route = routes[id] || ''
     if (!route) return
     wx.navigateTo({ url: route + teamId })
