@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>换形象照 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261104-ai9" />
+  <link rel="stylesheet" href="css/app.css?v=20261104-ai10" />
 </head>
 <body>
   <div class="app">
@@ -53,10 +53,11 @@
           <p class="field__hint">选一张正对镜头、光线均匀的单人照；先在下框里把人放到合适位置，服务端再去掉背景做成透明形象照，确认后才写进卡面。</p>
           <div class="upload" id="own-frame">
             <img class="upload__preview" id="own-preview" alt="自己的照片" hidden />
-            <div class="upload__empty" id="own-empty">点这里选择照片</div>
+            <div class="upload__empty" id="own-empty">从相册选择或拍照</div>
             <span class="upload__badge" id="own-badge" hidden>拖动调整</span>
             <input class="upload__input" type="file" id="own-input" accept="image/*" />
           </div>
+          <button type="button" class="btn btn--gold btn--full" id="btn-own-pick">读取相册 / 拍照</button>
           <div class="upload-edit" id="own-edit" hidden>
             <p class="upload-edit__tip">按住照片拖动，把人物放到框中间；双指可以放大缩小。调好再点「调整好了」。</p>
             <div class="upload-edit__bar">
@@ -177,7 +178,7 @@
   <div class="toast" id="toast" hidden></div>
 
   <script src="js/api.js?v=20261104-ai7"></script>
-  <script src="js/portrait.js?v=20261104-ai9"></script>
+  <script src="js/portrait.js?v=20261104-ai10"></script>
 </body>
 </html>
 

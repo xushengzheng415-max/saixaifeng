@@ -935,6 +935,7 @@
       try { event.target.value = '' } catch (error) { /* ignore */ }
       pickFramer(ownFramer, file)
     })
+    $('btn-own-pick').addEventListener('click', function () { $('own-input').click() })
     $('btn-own-confirm').addEventListener('click', function () { toggleFramer(ownFramer) })
     $('btn-own-reset').addEventListener('click', function () { resetFramer(ownFramer) })
     $('own-preview').addEventListener('click', function () {
@@ -987,13 +988,26 @@
     $('error-text').textContent = text(message) || '请稍后重试'
   }
 
+  var ownPickerTried = false
+
+  // 选了「上传自己的照片」就直接拉起相册/拍照，不用先在空白框上再点一次。
+  // 进页本身来自一次点击，这里紧跟其后调用一般能通过；被浏览器拦下时，取景框和下面的按钮仍可点。
+  function autoOpenOwnPicker() {
+    if (ownPickerTried) return
+    ownPickerTried = true
+    setTimeout(function () {
+      if (ownFramer.img) return
+      try { $('own-input').click() } catch (error) { /* 被拦下就走手动点选 */ }
+    }, 80)
+  }
+
   function init() {
     show('state-error', false)
     show('content', false)
     show('state-loading', true)
     var playerId = state.playerId || playerIdFromQuery() || pendingPlayerId()
     state.playerId = playerId
-    // 从球员卡页「更换照片」进来时按传入的方式打开，用户仍可在本页切换。
+    // 从编辑页「更换照片」进来时按传入的方式打开（upload / ai），本页只跑一种流程。
     state.mode = modeFromQuery()
     if (!playerId) { showError('缺少球员信息，请从卡库重新进入'); return }
     rememberPlayerId(playerId)
@@ -1010,6 +1024,7 @@
       show('state-loading', false)
       show('content', true)
       setMode(state.mode)
+      if (state.mode === 'upload') autoOpenOwnPicker()
       renderPrice(result)
       // 换照片价格来自服务端既有的「换照片」规则，页面只展示，不自己算门槛。
       Api.cardPhotoInfo({ playerId: playerId }).then(function (info) {

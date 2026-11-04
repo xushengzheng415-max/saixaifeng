@@ -407,6 +407,7 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .upload-edit__bar { display: flex; gap: 8px; }
 .upload-edit__bar .btn { flex: 1; }
 .btn--sm { padding: 9px 12px; font-size: 12px; border-radius: 10px; }
+.btn--full { width: 100%; margin-top: 10px; }
 
 .pose-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 .pose-option {
