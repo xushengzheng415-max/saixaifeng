@@ -110,7 +110,27 @@ SHA-256 全部与本地一致（`ALL MATCH`）；`index.html` 7089、`design.htm
 「方式只由入口 mode 决定」「页内只显示一种流程」「卡面页换形象照进编辑页并弹更换照片」「编辑页支持 photo=1」
 等断言）；两端 16 文件重新发布，HTTP 回读 SHA-256 `ALL MATCH`，并线上回读确认两端均无页签、版本为 `ai9`。
 
-## 十、后续注意
+## 十、追加（同日）：上传自己的照片进页直接拉起相册/拍照
+
+用户反馈「既然是上传自己的照片直接就是读取相册或者拍照就可以」，指的是选了「上传自己的照片」进入
+`portrait.html?mode=upload` 后，仍要先点一次空白取景框才会弹系统选择框。
+
+- `portrait.html`：`#own-empty` 文案由「点这里选择照片」改为「从相册选择或拍照」；
+  取景框下新增显式按钮 `#btn-own-pick`（「读取相册 / 拍照」），浏览器拦截自动弹框时可直接点它。
+- `js/portrait.js`：新增 `autoOpenOwnPicker()`，进页渲染完成后 80ms 触发一次 `#own-input.click()`，
+  由 `ownPickerTried` 保证同一页只尝试一次；被拦截时不影响取景框拖动与按钮点选。
+  只在 `state.mode === 'upload'` 时尝试，AI 流程不自动弹框。
+- `css/app.css` 新增 `.btn--full`；三个页面资源版本统一升到 `20261104-ai10`。
+
+说明：微信内置浏览器对「页面加载即自动打开相册」有限制，若自动弹框被拦截，用户点取景框或
+「读取相册 / 拍照」按钮同样直达相册/拍照，不再出现「必须先点空白框」的多余一步。
+
+验证：`node --check` `portrait.js` 通过；6 套测试全通过（新增「上传自己的照片直接拉起相册/拍照」
+「取景框提示改为从相册选择或拍照」「提供显式的读取相册/拍照按钮」等断言）；
+正式 `/service-account-h5/card-world/` 与测试 `/preview/service-account-h5/card-world-ai/` 两端各 16 文件重新发布，
+HTTP 回读 SHA-256 `ALL MATCH`，并线上回读确认两端版本 `ai10`、含 `btn-own-pick` 与 `autoOpenOwnPicker`、无方式页签。
+
+## 十一、后续注意
 
 - `service-account-h5/card-world/js/dynamic-card-renderer.js` 是 `service-account-h5/dynamic-card-renderer.js`
   的字节一致副本（SHA-256 相同），共享渲染器改动后必须同步副本再发布。
