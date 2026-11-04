@@ -6034,7 +6034,7 @@ exports.main = async (event, context) => {
       if (session.success && session.orgId) {
         const db = cloud.database()
         if (await staffPolicy.isStaff(db, session.userId, session.orgId) && !await staffPolicy.owner(db, session.userId, session.orgId)) {
-          const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery', 'reviewRefereeRecord', 'rosterExceptionBoard', 'recognizeRefereeReport', 'confirmRefereeReport']
+          const permittedSessionActions = ['updateDivisionExecutionRules','updateDivisionSubstitutionRules','getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery', 'reviewRefereeRecord', 'rosterExceptionBoard', 'recognizeRefereeReport', 'confirmRefereeReport']
           const playerCardViewerActions = ['getPlayerCardsForViewer', 'getPlayerCardForViewer', 'getPlayerCardById']
           if (action === 'uploadImage') {
             const tournamentId = String(params.staffTournamentId || '')
@@ -6074,6 +6074,9 @@ exports.main = async (event, context) => {
       case 'miniFeedbackSubmit':
       case 'miniFeedbackList':
         result = await require('./servicePrivate.cjs')({cloud,config:SERVICE_ACCOUNT_CONFIG,hashSessionToken,dateValue,httpsGet,createSession:createRefereeH5Session})(action, params); break
+      case 'updateDivisionExecutionRules':
+      case 'updateDivisionSubstitutionRules':
+        result = await require('./divisionExecutionRules.cjs').createDivisionExecutionRules({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed,staffPolicy})(params); break
       case 'phoneCodeLoginOptions':
         result = await phoneCodeLoginService().options()
         break

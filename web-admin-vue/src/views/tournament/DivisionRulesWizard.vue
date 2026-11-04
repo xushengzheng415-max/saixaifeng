@@ -25,7 +25,7 @@
         <el-select class="division-selector" :model-value="divisionId" disabled aria-label="当前组别">
           <el-option :label="`当前组别：${division.name || '竞赛组别'}`" :value="divisionId" />
         </el-select>
-        <el-button v-if="(effective || division.activeRulesVersion) && canManage" type="primary" @click="openSubstitutionSettings">修改换人</el-button>
+        <el-button v-if="(effective || division.activeRulesVersion) && canManage" type="primary" @click="openSubstitutionSettings">调整比赛规则</el-button>
         <el-button v-if="effective && canManage && !midCompetition" plain :disabled="!ruleEditState?.canEdit" :loading="saving" @click="startRuleRevision">调整规则</el-button>
         <el-button v-if="effective" plain @click="backToDivisions">返回组别管理</el-button>
         <span v-else class="draft-version">草稿 {{ draftVersion }}</span>
@@ -200,7 +200,7 @@
           <section class="summary-section effective-section"><div class="summary-heading"><span>1</span><h4>赛制设置</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span v-for="item in formatSummaryItems" :key="item">{{ item }}</span></div></section>
           <section class="summary-section effective-section"><div class="summary-heading"><span>2</span><h4>基础规则</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span>{{ periodModeLabel }}</span><span>单段 {{ form.matchMinutes }} 分钟</span><span>中场 {{ form.breakMinutes }} 分钟</span><span>{{ substitutionModeLabel }}</span><span v-if="form.formatType !== 'tournament'">{{ rankingLabel }}</span><span v-if="form.formatType !== 'league'">淘汰赛平局：{{ knockoutTieBreakLabel }}</span></div></section>
         </article>
-        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div></dl><hr /><h4>竞赛规程</h4><p class="regulation-note">本组精简正式规程已根据定版规则生成，可预览、导出并进入发布中心正式发布。</p><div v-if="tournament.regulationsFileId && !midCompetition" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出规程</el-button></div><el-alert type="warning" :closable="false" :title="midCompetition ? '赛程生成后仅换人规则可调整，其他结构性规则保持锁定。' : '规则调整会生成新版本并保留审计记录。'" /></aside>
+        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div></dl><hr /><h4>竞赛规程</h4><p class="regulation-note">本组精简正式规程已根据定版规则生成，可预览、导出并进入发布中心正式发布。</p><div v-if="tournament.regulationsFileId && !midCompetition" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出规程</el-button></div><el-alert type="warning" :closable="false" :title="midCompetition ? '可调整换人与替补席人数，其他结构性规则保持锁定。' : '规则调整会生成新版本并保留审计记录。'" /></aside>
       </template>
     </main>
 
@@ -218,12 +218,18 @@
       </div>
     </footer>
     <el-alert v-if="!canManage" class="permission-alert" type="warning" :closable="false" show-icon title="你只有查看该赛事的权限，不能修改竞赛规则。" />
-    <el-dialog v-model="substitutionSettingsVisible" title="换人设置" width="min(520px,94vw)">
-      <el-alert v-if="midCompetition" class="rule-edit-policy" type="info" :closable="false" title="赛程生成后仅能调整换人规则；赛制、资格、积分和赛程保持锁定。新规则用于尚未开赛的场次。" />
+    <el-dialog v-model="substitutionSettingsVisible" title="调整比赛规则" width="min(640px,94vw)" top="5vh" class="execution-settings-dialog">
+      <el-alert v-if="midCompetition" class="rule-edit-policy" type="info" :closable="false" title="仅作用于未开赛场次；赛制、资格、积分和赛程保持锁定。" />
       <el-form label-position="top">
         <el-form-item label="换人方式"><el-radio-group v-model="substitutionSettings.substitutionMode"><el-radio-button value="limited">限定换人</el-radio-button><el-radio-button value="free">无限换人</el-radio-button></el-radio-group></el-form-item>
         <template v-if="substitutionSettings.substitutionMode === 'limited'"><el-form-item label="换人人数"><el-input-number v-model="substitutionSettings.substitutionLimit" :min="0" :max="100" /></el-form-item><el-form-item label="换人窗口"><el-input-number v-model="substitutionSettings.substitutionWindows" :min="0" :max="100" /></el-form-item></template>
         <el-form-item label="允许再次上场"><el-switch v-model="substitutionSettings.substitutionReentryAllowed" /></el-form-item>
+        <el-divider content-position="left">替补席人数</el-divider>
+        <div class="execution-bench-fields">
+          <el-form-item label="替补席总人数"><el-input-number v-model="substitutionSettings.regulationDetails.benchTotalLimit" :min="0" :max="30" placeholder="未设置" controls-position="right" /></el-form-item>
+          <el-form-item label="替补球员人数"><el-input-number v-model="substitutionSettings.regulationDetails.benchPlayerLimit" :min="0" :max="30" placeholder="未设置" controls-position="right" /></el-form-item>
+          <el-form-item label="球队官员人数"><el-input-number v-model="substitutionSettings.regulationDetails.benchOfficialLimit" :min="0" :max="20" placeholder="未设置" controls-position="right" /></el-form-item>
+        </div>
       </el-form>
       <template #footer><el-button @click="substitutionSettingsVisible=false">取消</el-button><el-button type="primary" :loading="substitutionSettingsSaving" @click="saveSubstitutionSettings">保存</el-button></template>
     </el-dialog>
@@ -231,6 +237,7 @@
 </template>
 
 <script setup>
+import { parseBenchLimit } from '../../utils/lineupBenchLimit.js'
 import DivisionOutcomeRules from '../../components/tournament/DivisionOutcomeRules.vue'
 import {DEFAULT_TIE_BREAKERS,rankingOrderLabel,validateOutcomeRules} from '../../utils/divisionOutcomeRules'
 
@@ -238,7 +245,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, Check, CircleCheck, CircleCheckFilled, Document, Grid, Location, MagicStick, Printer, Tickets, Trophy, View, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionSubstitutionRules, readDivisionRuleEditState } from '../../utils/cloud'
+import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionExecutionRules, readDivisionRuleEditState } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import DivisionRegulationFields from './DivisionRegulationFields.vue'
@@ -258,9 +265,11 @@ const loading = ref(false)
 const ruleEditState=ref(localVisualQa?{canEdit:true,hasSchedule:false}:null),ruleEditError=ref('')
 const saving = ref(false)
 const substitutionSettingsVisible=ref(false),substitutionSettingsSaving=ref(false)
-const substitutionSettings=reactive({substitutionMode:'limited',substitutionLimit:5,substitutionWindows:3,substitutionReentryAllowed:false})
+const substitutionSettings=reactive({substitutionMode:'limited',substitutionLimit:5,substitutionWindows:3,substitutionReentryAllowed:false,regulationDetails:{benchTotalLimit:null,benchPlayerLimit:null,benchOfficialLimit:null}})
 function openSubstitutionSettings(){
   Object.assign(substitutionSettings,{substitutionMode:division.value.substitutionMode || 'limited',substitutionLimit:division.value.substitutionLimit ?? 5,substitutionWindows:division.value.substitutionWindows ?? 3,substitutionReentryAllowed:division.value.substitutionReentryAllowed===true})
+  const details=division.value.regulationDetails || division.value.activeRulesSnapshot?.regulationDetails || {}
+  substitutionSettings.regulationDetails=Object.fromEntries(['benchTotalLimit','benchPlayerLimit','benchOfficialLimit'].map(field=>[field,parseBenchLimit(details[field])]))
   substitutionSettingsVisible.value=true
 }
 watch(()=>substitutionSettings.substitutionMode,mode=>{if(mode==='free')substitutionSettings.substitutionReentryAllowed=true})
@@ -268,10 +277,10 @@ async function saveSubstitutionSettings(){
   if(!canManage.value)return
   substitutionSettingsSaving.value=true
   try{
-    const result=await updateDivisionSubstitutionRules(divisionId,{...substitutionSettings,expectedRulesVersion:String(division.value.rulesVersion || 'V1.0')})
-    if(!result?.success)throw new Error(result?.error || '换人设置保存失败')
+    const result=await updateDivisionExecutionRules(divisionId,{...substitutionSettings,regulationDetails:Object.fromEntries(Object.entries(substitutionSettings.regulationDetails).map(([field,value])=>[field,value??null])),expectedRulesVersion:String(division.value.rulesVersion || 'V1.0')})
+    if(!result?.success)throw new Error(result?.error || '比赛规则保存失败')
     Object.assign(division.value,result.data);hydrateForm(division.value)
-    substitutionSettingsVisible.value=false;ElMessage.success('换人规则已更新')
+    substitutionSettingsVisible.value=false;ElMessage.success('比赛规则已更新')
   }catch(error){ElMessage.error(error.message || '保存失败，请重试')}
   finally{substitutionSettingsSaving.value=false}
 }
@@ -1019,4 +1028,12 @@ onUnmounted(() => window.removeEventListener('sxf-visual-qa-ready', load))
 .participation-card .participation-form{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}.participation-card .participation-form .wide-field{grid-column:1/-1}.professional-discipline{margin-top:14px;padding:18px 22px}.professional-discipline>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.professional-discipline>header h3{margin:0;color:#704d16;font-size:18px}.professional-discipline>header span{color:#8a734d;font-size:12px}.execution-overview>.discipline-overview{display:none}.professional-handbook{display:grid}.handbook-family{margin-top:2px}@media(max-width:760px){.participation-card .participation-form{grid-template-columns:1fr}.participation-card .participation-form .wide-field{grid-column:auto}}
 
 .outcome-settings{grid-column:1/-1}.outcome-settings :deep(.outcome-rules){display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,.65fr);gap:28px}@media(max-width:900px){.outcome-settings :deep(.outcome-rules){grid-template-columns:1fr;gap:16px}}
+</style>
+<style scoped>
+.execution-bench-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.execution-bench-fields .el-input-number{width:100%}
+:deep(.execution-settings-dialog){max-height:90vh;display:flex;flex-direction:column}
+:deep(.execution-settings-dialog .el-dialog__body){min-height:0;overflow-y:auto}
+:deep(.execution-settings-dialog .el-dialog__footer){flex-shrink:0}
+@media(max-width:600px){.execution-bench-fields{grid-template-columns:1fr;gap:0}}
 </style>
