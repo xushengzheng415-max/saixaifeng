@@ -1,0 +1,106 @@
+{
+  "ownerBackendSource": "05344f6f",
+  "backend": {
+    "function": "organizerClaimInvite",
+    "files": [
+      {
+        "file": "index.js",
+        "sha256": "00c783e3cf9dc3b380668192ee1ab8c3438ed728e917e90c923b379b96ca5490"
+      },
+      {
+        "file": "teamAccountDirectory.cjs",
+        "sha256": "b51e92cacd339315a680780feb568d5b05e2cce372bd203da4ff44ffc6065f0b"
+      }
+    ],
+    "originalDependenciesAndOtherSourcePreserved": true
+  },
+  "configuration": {
+    "protectedConfigurationAndEnvironmentPreserved": true,
+    "installDependencyBefore": true,
+    "installDependencyAfter": false,
+    "reason": "preserve packaged original dependencies"
+  },
+  "maintenance": {
+    "ownerReferenceUnchanged": true,
+    "contactCorrect": true,
+    "displayNameBound": true,
+    "requestedManagerAccepted": true,
+    "previousManagerKept": true
+  },
+  "pcAlignment": {
+    "formalRef": "github/main",
+    "previewRef": "github/preview",
+    "formalSourceSha256": "e2a70b6d4a03b030afe1a65dad49c3e326ca335bf158b20396446c3337aefd75",
+    "previewSourceSha256": "e2a70b6d4a03b030afe1a65dad49c3e326ca335bf158b20396446c3337aefd75",
+    "checkedAt": "2026-11-04T04:21:39.397Z",
+    "sourceAligned": true,
+    "live": {
+      "production": {
+        "url": "https://www.sxffootball.cn/admin/pc-release.json",
+        "http": 200,
+        "app": "sxf-organizer-pc",
+        "channel": "production",
+        "sourceCommit": "83d77656d01a80a7e5890493ce04b6091d9e7c45",
+        "formalBaselineCommit": "83d77656d01a80a7e5890493ce04b6091d9e7c45",
+        "pcSourceSha256": "e2a70b6d4a03b030afe1a65dad49c3e326ca335bf158b20396446c3337aefd75",
+        "sourceDirty": false,
+        "builtAt": "2026-11-04T04:03:51.466Z"
+      },
+      "preview": {
+        "url": "https://www.sxffootball.cn/preview/admin/pc-release.json",
+        "http": 200,
+        "app": "sxf-organizer-pc",
+        "channel": "preview",
+        "sourceCommit": "166b585b60391d50aae666bea3b1753a46fde120",
+        "formalBaselineCommit": "83d77656d01a80a7e5890493ce04b6091d9e7c45",
+        "pcSourceSha256": "e2a70b6d4a03b030afe1a65dad49c3e326ca335bf158b20396446c3337aefd75",
+        "sourceDirty": false,
+        "builtAt": "2026-11-04T04:08:07.503Z"
+      }
+    },
+    "desktop": {
+      "sourceVersion": "0.2.8",
+      "publishedVersion": "0.2.8",
+      "url": "https://www.sxffootball.cn/desktop/windows/SxfFootball-Setup-0.2.8-x64.exe",
+      "sha256": "ace817167db4e8b917f4d5d8cc6986af18f91cd1015b38e2a5bba61eacd67fbb",
+      "bytes": 122431595
+    }
+  },
+  "formalFrontendBuild": "83d77656d01a80a7e5890493ce04b6091d9e7c45",
+  "previewFrontendBuild": "166b585b60391d50aae666bea3b1753a46fde120",
+  "productionAssetCount": 209,
+  "previewAssetCount": 209,
+  "desktopProduction": {
+    "channel": "production",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/admin/",
+    "status": "passed"
+  },
+  "desktopPreview": {
+    "channel": "preview",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/preview/admin/",
+    "status": "passed"
+  },
+  "noPersonalDataArchived": true
+}
