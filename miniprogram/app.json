@@ -25,6 +25,7 @@
     "pages/service/claim/claim",
     "pages/service/lineup/lineup",
     "pages/profile/profile",
+    "pages/profile/feedback/feedback",
     "pages/profile/version-log/version-log",
     "pages/admin/index",
     "pages/profile/info/info",

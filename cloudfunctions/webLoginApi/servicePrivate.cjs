@@ -130,17 +130,18 @@ async function wecomAccessToken(corpId,secret){
 }
 async function notifyFeedback(doc){
   const label=FEEDBACK_TYPE_LABELS[doc.type]||'其他'
+  const channel=doc.source==='team-miniprogram/profile'?'球队小程序反馈':'服务号反馈'
   const summary=String(doc.content||'').slice(0,300).replace(/[\r\n]+/g,'\n')
   const time=new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})
-  const link='https://www.sxffootball.cn/admin/#/tournament-center-admin?section=feedback'
+  const link='https://pingtai.sxffootball.cn/#/tournament-center-admin?section=feedback'
   const tasks=[]
   const webhook=text(process.env.SERVICE_FEEDBACK_WEBHOOK)
-  if(webhook)tasks.push(postJson(webhook,{msgtype:'markdown',markdown:{content:['**服务号反馈｜'+label+'**','> '+summary.split('\n').join('\n> '),'微信号：'+(doc.contact||'未填写')+' · 手机号 '+(doc.phoneMasked||'未绑定'),'时间：'+time,'[去后台处理]('+link+')'].join('\n')}}).then(result=>{if(result&&result.errcode)throw new Error('机器人推送失败:errcode '+result.errcode)}))
+  if(webhook)tasks.push(postJson(webhook,{msgtype:'markdown',markdown:{content:['**'+channel+'｜'+label+'**','> '+summary.split('\n').join('\n> '),'微信号：'+(doc.contact||'未填写')+' · 手机号 '+(doc.phoneMasked||'未绑定'),'时间：'+time,'[去后台处理]('+link+')'].join('\n')}}).then(result=>{if(result&&result.errcode)throw new Error('机器人推送失败:errcode '+result.errcode)}))
   const corpId=text(process.env.SERVICE_WECOM_CORP_ID),agentId=text(process.env.SERVICE_WECOM_AGENT_ID),secret=text(process.env.SERVICE_WECOM_SECRET)
   if(corpId&&agentId&&secret)tasks.push((async()=>{
     // 应用消息用 text 类型：markdown 在微信插件（个人微信）中不展示
     const token=await wecomAccessToken(corpId,secret)
-    const content=['【服务号反馈】'+label,summary,'微信号：'+(doc.contact||'未填写')+' · 手机号 '+(doc.phoneMasked||'未绑定'),'时间：'+time,'后台处理：'+link].join('\n')
+    const content=['【'+channel+'】'+label,summary,'微信号：'+(doc.contact||'未填写')+' · 手机号 '+(doc.phoneMasked||'未绑定'),'时间：'+time,'后台处理：'+link].join('\n')
     const result=await postJson(wecomApiBase()+'/cgi-bin/message/send?access_token='+encodeURIComponent(token),{touser:text(process.env.SERVICE_WECOM_TOUSER)||'@all',msgtype:'text',agentid:Number(agentId),text:{content}},relayHeaders())
     if(!result||result.errcode)throw new Error('企微应用消息推送失败:'+(result?('errcode '+result.errcode+' '+(result.errmsg||'')):'响应异常'))
   })())
@@ -159,7 +160,7 @@ async function notifyFeedback(doc){
     const recent=await db.collection('service_feedback').where({userId:text(context.user._id),createTime:_.gt(new Date(Date.now()-60*1000))}).limit(1).get()
     if((recent.data||[]).length)return fail('SERVICE_PRIVATE_FEEDBACK_TOO_FREQUENT','提交太频繁，请一分钟后再试')
     const phone=text(context.user.phone||context.user.phoneNumber)
-    const doc={type,content,contact,userId:text(context.user._id),serviceAccountOpenId:text(context.session&&context.session.serviceAccountOpenId),phoneMasked:phone.slice(0,3)+'****'+phone.slice(-4),status:'pending',source:'service-account-h5/me',createTime:db.serverDate()}
+    const doc={type,content,contact,userId:text(context.user._id),serviceAccountOpenId:text(context.session&&context.session.serviceAccountOpenId),phoneMasked:phone.slice(0,3)+'****'+phone.slice(-4),status:'pending',source:context.feedbackSource||'service-account-h5/me',createTime:db.serverDate()}
     const added=await db.collection('service_feedback').add({data:doc})
     try{await notifyFeedback(doc)}catch(error){console.warn('[servicePrivate] feedback webhook failed:',error.message)}
     return {success:true,feedbackId:added._id}
@@ -174,11 +175,13 @@ async function notifyFeedback(doc){
       status:String(row.status||'pending'),
       reply:String(row.reply||''),
       replyAt:row.replyAt||null,
+      replyTutorials:(row.replyTutorials||[]).map(t=>({id:String(t.id||''),title:String(t.title||'操作教程')})),
       createTime:row.createTime||null
     }))}
   }
   async function handle(action,event={}) {
     try {
+      if(['miniFeedbackSubmit','miniFeedbackList'].includes(action))return await require('./miniFeedback.cjs')({cloud,db,read,event,action,submit:feedback,list:feedbackList})
       if(action==='servicePrivateOAuthUrl')return await oauthUrl(event)
       if(action==='servicePrivateOAuth')return await oauth(event)
       if(['servicePrivateOverview','servicePrivatePlayerData','servicePrivateRefereeData','servicePrivateParticipation','servicePrivateAdultMatchPass','servicePrivateAccountData','serviceFeedbackSubmit','servicePrivateFeedbackList','servicePrivateRegistrationList','servicePrivateResumeRegistration','servicePrivateHoneyRecharge','servicePrivateHoneyOrders','servicePrivateHoneyOrderStatus','servicePrivateMembershipStatus','servicePrivateMembershipSubscribe','servicePrivateMembershipOrderStatus','servicePrivateMembershipOrders','servicePrivateInsuranceUpload','servicePrivateInsuranceRecognize','servicePrivateInsuranceConfirm'].includes(action))return await personal(action,event)

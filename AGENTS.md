@@ -277,3 +277,8 @@ webLoginApi 的 recognizeRefereeReport / confirmRefereeReport、分组换人及 
 ## 报名上传权限发布防回退（2026-10-28）
 
 webLoginApi曾被旧staffUploadRights.cjs覆盖，导致共享赛事Word上传再次被拒。今后对实际拟发布的webLoginApi目录运行强制check-referee-backend-package时，必须同时通过其内置的check-registration-upload-backend-package检查：本赛事football/team-registration-imports/{赛事ID}下.docx初始化对应event.registration，跨赛事和非法文件类型拒绝。禁止只检查主仓或旧缓存；以最新线上包差量发布，并回下载再次执行检查。uploadFile保留已确认的原依赖随包和InstallDependency=FALSE。本规则仅保护现有已授权目录，不扩大子账号权限。
+
+
+## 小程序版本日志同步（2026-11-04，用户确认）
+
+每次小程序功能更新与上传时，同步维护miniprogram/config/release.js的版本号、日期、更新摘要及实际改动。我的页与版本日志页读取这一共同配置；上传版本号须与包内配置一致。保留旧版本记录，补充本次更新，不只修改上传描述。开发上传、体验设置、审核与正式发布分别记录，不能用新版本文字假装正式包已更新。
