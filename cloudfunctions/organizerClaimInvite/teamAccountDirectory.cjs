@@ -49,7 +49,7 @@ async function complete({db,team,teamId,personnel,memberships}){
    row.accountType='owner';actualOwnerRole=row.role
    // Only use names tied to this account's verified phone; never borrow another contact's name.
    row.name=text(linked&&linked.name)||personalName||boundOwnerName||matchingOwnerName||matchingContact||meaningfulName(row.name)||'未填写姓名'
-  }else if(row.accountType==='owner')row.accountType='member'
+  }else if(ownerId && row.accountType==='owner')row.accountType='member'
   if(member)row.permissions=Array.isArray(member.permissions)?member.permissions.filter(p=>['team.view','team.manage'].includes(p)):[]
  }
  return {personnel:rows,actualOwnerRole}
