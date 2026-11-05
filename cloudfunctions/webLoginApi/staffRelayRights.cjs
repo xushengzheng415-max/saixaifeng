@@ -8,7 +8,8 @@ const registrationActions = new Set([
   'retryRegistrationNotifications', 'notificationStatus', 'getInvitation'
 ])
 const refereeActions = new Set([
-  'createRefereeFollowInvite', 'createTemporaryRefereeClaim', 'reviewTemporaryRefereeClaim'
+  'createRefereeFollowInvite', 'createTemporaryRefereeClaim', 'reviewTemporaryRefereeClaim',
+  'sendRefereeClaimReminder'
 ])
 const teamActions = new Set([
   'getTeamExportPhotos', 'getTeamRegistrationSource', 'listTournamentRosterPlayers',
