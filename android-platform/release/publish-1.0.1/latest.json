@@ -1,0 +1,12 @@
+{
+  "platform": "android",
+  "packageId": "cn.sxffootball.platform",
+  "versionCode": 2,
+  "version": "1.0.1",
+  "minSdk": 24,
+  "targetSdk": 34,
+  "downloadUrl": "https://www.sxffootball.cn/desktop/platform/android/SxfPlatform-1.0.1.apk",
+  "sha256": "85d4a547a24e0089b60c780c0bc15645efca9b1a3172840fc03fcb509bd559ba",
+  "size": 64896,
+  "notes": "新增应用内检查更新：打开应用会读取更新清单，发现新版本可一键下载，校验 SHA-256 后交给系统安装，不用再自己找下载地址。"
+}
