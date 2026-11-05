@@ -359,13 +359,47 @@
   var input=document.getElementById('personalInsurancePdf')
   if(input)input.addEventListener('change',function(){if(input.files&&input.files[0])uploadPersonalInsurancePdf(input.files[0])})
  }
+ // 网页端单次请求体上限约 100KB，PDF 按 64KB 切片上传，全部到齐后再触发合并识别
+ function uploadTicketHex(){
+  var chars='0123456789abcdef',out=''
+  for(var i=0;i<32;i++)out+=chars.charAt(Math.floor(Math.random()*16))
+  return out
+ }
+ function uploadPdfChunks(dataUrl,meta){
+  var base64=String(dataUrl||'').replace(/^data:[^,]*,/,'').replace(/[\r\n\t]/g,'')
+  if(!base64)return Promise.reject(new Error('保单读取失败，请重试'))
+  var size=64*1024,total=Math.ceil(base64.length/size),uploadId=uploadTicketHex(),pending=[],index
+  for(index=0;index<total;index++)pending.push(index)
+  function basePayload(){
+   var payload={action:'servicePrivateInsuranceUploadChunk',uploadId:uploadId,stage:meta.stage,playerId:meta.playerId}
+   if(meta.tournamentId)payload.tournamentId=meta.tournamentId
+   if(meta.divisionId)payload.divisionId=meta.divisionId
+   return payload
+  }
+  function run(){
+   if(!pending.length)return Promise.resolve()
+   var batch=pending.splice(0,4)
+   return Promise.all(batch.map(function(index){
+    var payload=basePayload()
+    payload.index=index
+    payload.total=total
+    payload.chunk=base64.slice(index*size,(index+1)*size)
+    return api(payload)
+   })).then(run)
+  }
+  return run().then(function(){
+   var payload=basePayload()
+   payload.final=true
+   return api(payload)
+  })
+ }
  function uploadPersonalInsurancePdf(file){
   if(state.insuranceBusy)return
   var player=personalPlayer()
   if(!player){toast('请先选择球员');return}
   state.insuranceBusy=true;state.personalDraft=null;paintInsuranceResult(null);toast('正在上传并识别…')
   readPdfAsDataUrl(file).then(function(dataUrl){
-   return api({action:'servicePrivateInsurancePersonalUpload',playerId:player.id,base64Data:dataUrl})
+   return uploadPdfChunks(dataUrl,{stage:'personal',playerId:player.id})
   }).then(function(r){
    state.insuranceBusy=false
    state.personalDraft=r&&r.draft||null
@@ -935,7 +969,7 @@
   if(!item){toast('参赛资料已失效，请返回刷新');return}
   state.insuranceBusy=true;state.insuranceDraft=null;paintInsuranceResult(null);toast('正在上传并识别…')
   readPdfAsDataUrl(file).then(function(dataUrl){
-   return api({action:'servicePrivateInsuranceUpload',playerId:item.playerId,tournamentId:item.tournamentId,divisionId:item.divisionId||'default',base64Data:dataUrl})
+   return uploadPdfChunks(dataUrl,{stage:'event',playerId:item.playerId,tournamentId:item.tournamentId,divisionId:item.divisionId||'default'})
   }).then(function(r){
    state.insuranceBusy=false
    state.insuranceDraft=r&&r.draft||null
