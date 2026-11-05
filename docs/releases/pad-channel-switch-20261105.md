@@ -22,6 +22,21 @@
 - 新包 `SxfFootball-Pad-0.1.3.apk` SHA-256 `ebb1ba12679db7d20d624eb5c7315a8a647badb50c7aa94d104704ad0a10937c`；`aapt2 dump badging` 读回包名、versionCode 103、versionName 0.1.3、横屏与权限未变。
 - 线上旧包 0.1.2 摘要 `0fba0822c0a74b47cb069358708bd0b6e6bde2d5c823704fad8de525331eec1b` 与更新清单一致。
 
+## 线上发布
+
+已上传 `desktop/android/SxfFootball-Pad-0.1.3.apk`、`desktop/android/latest.json`、`desktop/android/SHA256SUMS.txt`（CloudBase CLI `hosting deploy`，显式文件路径）。首次上传误把 `desktop/android` 当成文件名覆盖成 APK 对象，已按精确 key 删除，`/desktop/android` 恢复 404，其余 0.1.0–0.1.3 与清单均正常。
+
+读回结果：
+
+| 路径 | 状态 | 大小 | 摘要 |
+|---|---|---|---|
+| `desktop/android/SxfFootball-Pad-0.1.3.apk` | 200 | 246,485 B | SHA-256 与本地一致 `ebb1ba12…` |
+| `desktop/android/SxfFootball-Pad-0.1.2-preview.apk` | 200 | 242,392 B | 未变动 |
+| `desktop/android/latest.json` | 200 | 467 B | 字节与仓库 `update-manifest.json` 一致 `e5e14324…`，UTF-8 文案正常 |
+| `desktop/android/SHA256SUMS.txt` | 200 | — | 含 0.1.2 与 0.1.3 两行 |
+
+Pad 端「更多 → 检查更新」会提示 0.1.3；升级后通道仍为测试，需在「更多」菜单手动切正式。
+
 ## 尚未完成
 
-未上传 APK 与 `latest.json` 到 `/desktop/android/`，未在 vivo Pad3 Pro 真机安装验收。上传与本机通道切换需单独授权后执行。
+未在 vivo Pad3 Pro 真机安装验收，未实测切换后重新登录与正式站写入。
