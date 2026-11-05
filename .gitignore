@@ -89,3 +89,7 @@ docs/design/*.png
 docs/design/*.html
 design.html
 registration-ai-test.html
+
+# Android 构建缓存与本地工具链
+android-platform/.gradle/
+android-platform/build/
