@@ -1,12 +1,18 @@
 # 赛小蜂足球安卓平板客户端
 
-当前为 0.1.2 平板测试版（首版0.1.0），包名 cn.sxffootball.pad.preview，Android 10+。原生 Java WebView 复用 https://www.sxffootball.cn/preview/admin/ ，不复制后台或改变业务权限。安装后微信扫码与手机号验证码登录均使用已上线网页流程。应用有本机独立会话存储，不能继承浏览器登录。
+当前为 0.1.3 平板客户端，包名 cn.sxffootball.pad.preview，Android 10+。原生 Java WebView 复用 https://www.sxffootball.cn/ 后台，可在应用内切换正式 `/admin/` 与测试 `/preview/admin/` 两个通道，默认测试。安装后微信扫码与手机号验证码登录均使用已上线网页流程。应用有本机独立会话存储，不能继承浏览器登录。
+
+## 通道切换
+
+「更多」菜单第二项为“切换正式版/切换测试版”。通道写入本机 SharedPreferences，重启后保持；默认测试通道，升级安装不会自动切到正式。
+
+两个通道同属 www.sxffootball.cn，Cookie 与 DOM 存储天然共享，因此切换时清除 WebView Cookie、DOM 存储和浏览历史，并回到对应通道的登录页，必须重新登录，避免测试会话被带到正式环境。正式通道等价于网页 `/admin/`，审核、保存、删除会写入真实业务数据。
 
 ## 构建
 
 工具安装在 %LOCALAPPDATA%/SxfFootballBuild/android，独立于系统 PATH。需要 JDK17、Android build-tools35.0.0、platforms android35；首次下载来源及校验结果见本轮 output/android-pad-20261028/。
 
-首次执行 pwsh -File android-pad/scripts/setup-tools.ps1 校验并安装固定工具版本，然后执行 pwsh -File android-pad/scripts/build.ps1。输出 android-pad/release/SxfFootball-Pad-0.1.2-preview.apk 及 SHA256SUMS.txt。脚本直接运行 javac、D8、AAPT2、zipalign、apksigner，无额外前端 SDK 和 Gradle 插件依赖。
+首次执行 pwsh -File android-pad/scripts/setup-tools.ps1 校验并安装固定工具版本，然后执行 pwsh -File android-pad/scripts/build.ps1。输出 android-pad/release/SxfFootball-Pad-0.1.3.apk 及 SHA256SUMS.txt。脚本直接运行 javac、D8、AAPT2、zipalign、apksigner，无额外前端 SDK 和 Gradle 插件依赖。
 
 签名密钥与 DPAPI 加密密码留在仓库外 %LOCALAPPDATA%/SxfFootballBuild/signing，不提交、不复制到发布包。必须保留原密钥才能覆盖安装升级；不可因缺失而随意重建。此身份为测试包，不代表已取得应用商店认证。
 
