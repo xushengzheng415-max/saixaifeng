@@ -16,7 +16,12 @@ const CONFIG = {
   timeKey: process.env.SERVICE_TEMPLATE_TIME_KEY || 'time3',
   roleKey: process.env.SERVICE_TEMPLATE_ROLE_KEY || 'thing4',
   bridgeUrl: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_URL || '',
-  bridgeSecret: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_SECRET || ''
+  bridgeSecret: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_SECRET || '',
+  reminderTemplateId: process.env.SERVICE_ACCOUNT_REFEREE_REMINDER_TEMPLATE_ID || 'JBSIQSLN3wJG_Lm4d066oSKsTsgSy8xRl5wmqI7HnUA',
+  reminderNameKey: process.env.SERVICE_REMINDER_NAME_KEY || 'thing1',
+  reminderTournamentKey: process.env.SERVICE_REMINDER_TOURNAMENT_KEY || 'thing2',
+  reminderOrganizerKey: process.env.SERVICE_REMINDER_ORGANIZER_KEY || 'thing3',
+  reminderTimeKey: process.env.SERVICE_REMINDER_TIME_KEY || 'time4'
 }
 
 function getConfigurationStatus() {
@@ -163,7 +168,22 @@ async function pendingNotifications(event) {
     phone,
     status: _.in(['pending', 'awaiting_binding', 'configuration_required', 'failed'])
   }).limit(20).get()
-  return result.data || []
+  // 催办使用独立模板，不能用裁判任务模板批量带发。
+  return (result.data || []).filter(item => item.templateType !== 'referee_claim_reminder')
+}
+
+async function resolveServiceOpenId(phone) {
+  const targetPhone = normalizePhone(phone)
+  if (!targetPhone) return null
+  const identityResult = await db.collection('service_identities').where({
+    phone: targetPhone,
+    phoneVerified: true
+  }).limit(5).get()
+  const identity = (identityResult.data || []).find(item => item.serviceAccountOpenId)
+  if (identity) return identity
+  const refereeResult = await db.collection('referees').where({ phone: targetPhone, wechatBound: true }).limit(10).get()
+  const referee = (refereeResult.data || []).find(item => item.wechatWorkflowOpenId)
+  return referee ? { serviceAccountOpenId: String(referee.wechatWorkflowOpenId).replace(/^service:/, '') } : null
 }
 
 async function sendOne(notification) {
@@ -175,16 +195,7 @@ async function sendOne(notification) {
     })
     return { configured: false }
   }
-  const identityResult = await db.collection('service_identities').where({
-    phone: notification.phone,
-    phoneVerified: true
-  }).limit(5).get()
-  let identity = (identityResult.data || []).find(item => item.serviceAccountOpenId)
-  if (!identity) {
-    const refereeResult = await db.collection('referees').where({ phone: notification.phone, wechatBound: true }).limit(10).get()
-    const referee = (refereeResult.data || []).find(item => item.wechatWorkflowOpenId)
-    if (referee) identity = { serviceAccountOpenId: String(referee.wechatWorkflowOpenId).replace(/^service:/, '') }
-  }
+  const identity = await resolveServiceOpenId(notification.phone)
   if (!identity) {
     await db.collection('referee_notifications').doc(notification._id).update({
       data: { status: 'awaiting_binding', updateTime: db.serverDate() }
@@ -215,6 +226,46 @@ async function sendOne(notification) {
   return { sent: true }
 }
 
+// 认领催办：使用独立的催办模板（姓名/赛事/主办方/提交时间），与裁判任务模板互不影响。
+async function sendReminderOne(notification) {
+  if (!notification || notification.status === 'sent' || notification.status === 'cancelled') return { skipped: true }
+  if (!CONFIG.reminderTemplateId) {
+    await db.collection('referee_notifications').doc(notification._id).update({
+      data: { status: 'configuration_required', lastError: '未配置认领催办模板 ID（SERVICE_ACCOUNT_REFEREE_REMINDER_TEMPLATE_ID）', updateTime: db.serverDate() }
+    })
+    return { configured: false }
+  }
+  const identity = await resolveServiceOpenId(notification.phone)
+  if (!identity) {
+    await db.collection('referee_notifications').doc(notification._id).update({
+      data: { status: 'awaiting_binding', updateTime: db.serverDate() }
+    })
+    return { bound: false }
+  }
+  const data = {}
+  data[CONFIG.reminderNameKey] = { value: value(notification.refereeName, 20) }
+  data[CONFIG.reminderTournamentKey] = { value: value(notification.tournamentName, 20) }
+  data[CONFIG.reminderOrganizerKey] = { value: value(notification.organizerName, 20) }
+  data[CONFIG.reminderTimeKey] = { value: value(notification.submittedTimeText, 20) }
+  const message = {
+    touser: identity.serviceAccountOpenId,
+    template_id: CONFIG.reminderTemplateId,
+    url: notificationUrl(notification.url),
+    data
+  }
+  let result
+  if (CONFIG.bridgeUrl && CONFIG.bridgeSecret) result = await bridgePost('template/send', { message })
+  else {
+    const token = await getAccessToken()
+    result = await httpsPost('https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=' + encodeURIComponent(token), message)
+  }
+  if (result.errcode) throw new Error('催办模板消息发送失败：' + (result.errmsg || result.errcode))
+  await db.collection('referee_notifications').doc(notification._id).update({
+    data: { status: 'sent', msgId: result.msgid || '', sentAt: db.serverDate(), updateTime: db.serverDate() }
+  })
+  return { sent: true }
+}
+
 exports.main = async event => {
   const configuration = getConfigurationStatus()
   if (event && event.action === 'configurationStatus') {
@@ -227,7 +278,10 @@ exports.main = async event => {
   const results = []
   for (const notification of notifications) {
     try {
-      results.push({ notificationId: notification._id, ...(await sendOne(notification)) })
+      const sendResult = notification.templateType === 'referee_claim_reminder'
+        ? await sendReminderOne(notification)
+        : await sendOne(notification)
+      results.push({ notificationId: notification._id, ...sendResult })
     } catch (error) {
       console.error('[sendRefereeTemplateMessages] send failed:', notification._id, error)
       await db.collection('referee_notifications').doc(notification._id).update({
