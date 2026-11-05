@@ -123,9 +123,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { Aim, Calendar, DocumentChecked, Download, Location, Plus, Search, SwitchButton, Trophy, UserFilled } from '@element-plus/icons-vue'
 import { addRecord, callFunction, getFileUrl, queryList, updateRecord } from '../../utils/cloud'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
@@ -223,7 +223,43 @@ function friendlyInviteError(error){const message=String(error?.message||error||
 async function openRefereeInvite(referee=null){if(!selectedTournamentId.value)return ElMessage.warning('请先选择赛事');saving.value=true;inviteTarget.value=referee;try{const result=await callFunction('tournamentRegistrationFlow',{action:'createRefereeFollowInvite',tournamentId:selectedTournamentId.value,targetRefereeId:referee?._id||'',previewMode});if(!result?.success)throw new Error(result?.message||result?.error||'裁判关注二维码生成失败');inviteQrCode.value=result.data?.qrCodeUrl||'';inviteMode.value=result.data?.claimMode||'';if(!inviteQrCode.value)throw new Error('服务号关注二维码暂不可用');inviteDialog.value=true}catch(error){ElMessage.error(friendlyInviteError(error))}finally{saving.value=false}}
 async function regenerateInvite(){if(saving.value)return;await openRefereeInvite(inviteTarget.value||null)}
 function exportList() { ElMessage.info('导出名单已准备，正式导出将按当前赛事与筛选范围生成') }
-onMounted(load)
+let claimPollTimer = null
+const trackedClaimIds = ref(new Set())
+function pendingTempClaims(rows) {
+  return (rows || []).filter(item => item.temporaryReferee === true && item.temporaryClaimStatus === 'claimed_pending_review' && (!selectedTournamentId.value || String(item.tournamentId || '') === String(selectedTournamentId.value)))
+}
+function noteNewTempClaims(rows) {
+  const list = pendingTempClaims(rows)
+  const fresh = list.filter(item => !trackedClaimIds.value.has(item._id))
+  trackedClaimIds.value = new Set(list.map(item => item._id))
+  if (!fresh.length || qaSnapshot) return
+  const names = fresh.map(item => item.name || item.realName || '临时裁判').join('、')
+  ElNotification({ title: '有裁判提交认领，待确认', message: `${names} 已提交手机号与头像，点这里进入「待审核」并确认临时执裁`, type: 'warning', duration: 0, onClick: () => { statusFilter.value = 'pending' } })
+}
+async function refreshClaimStatus() {
+  if (qaSnapshot || loading.value) return
+  try {
+    const people = await queryList('referees', { orderBy: { createTime: 'desc' }, limit: 500 })
+    referees.value = people || []
+    noteNewTempClaims(referees.value)
+  } catch (error) { /* 轮询失败保持现有列表，等待用户手动刷新 */ }
+}
+function onPageVisible() { if (document.visibilityState === 'visible') refreshClaimStatus() }
+function startClaimWatcher() {
+  stopClaimWatcher()
+  claimPollTimer = setInterval(() => { if (document.visibilityState === 'visible' && !assignDialog.value && !inviteDialog.value && !saving.value) refreshClaimStatus() }, 30000)
+  document.addEventListener('visibilitychange', onPageVisible)
+}
+function stopClaimWatcher() {
+  if (claimPollTimer) { clearInterval(claimPollTimer); claimPollTimer = null }
+  document.removeEventListener('visibilitychange', onPageVisible)
+}
+onMounted(async () => {
+  await load()
+  noteNewTempClaims(referees.value)
+  startClaimWatcher()
+})
+onBeforeUnmount(stopClaimWatcher)
 </script>
 
 <style scoped>
