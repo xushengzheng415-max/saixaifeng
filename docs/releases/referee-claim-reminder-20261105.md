@@ -41,9 +41,19 @@
 
 ## 未覆盖
 
+- 已修正子账号权限：`webLoginApi/staffRelayRights.cjs` 的 `refereeActions` 补入 `sendRefereeClaimReminder`，赛事子账号具备 `event.referees` 即可发送催办。webLoginApi 以最新线上包差量发布，保留线上已有转会权限隔离（`event.transfer`）等能力。
 - 未新增环境变量，催办模板 ID 走代码默认值；如需更换直接在环境变量配置即可。
 - 小程序、服务号 H5 未因本次改动重发。
 - 未做真实服务号发送验收：需要一位已关注服务号的测试裁判手机号，点击「发送认领催办」后确认收到模板消息。
+
+## 补充发布（子账号权限修复）
+
+| 项 | 状态 |
+|---|---|
+| webLoginApi | 已发布，`staffRelayRights.cjs` 与上传包 SHA-256 一致，`index.js` 哈希与发布前一致（未改动其他逻辑），node_modules 随包保留 |
+| 发布检查 | `node tools/check-referee-backend-package.cjs <实际包目录>` 通过，含报名 Word 上传权限检查 |
+| 配置来源 | CLI 从配置文件读取 webLoginApi 配置，未使用默认配置覆盖 |
+
 
 ## 验收建议
 
