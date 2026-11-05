@@ -37,6 +37,9 @@
    {outTradeNo:'MT20261029111111ABCDEF5678',planCode:'basic',planName:'基础会员',priceCents:1990,priceYuan:19.9,grantDrops:200,priceTier:'renew',months:1,status:'pending',statusLabel:'待支付',ledgerState:'pending',createdAt:now,paidAt:0,closedAt:0}
   ]
  }
+ function mockPersonalPolicy(){
+  return {playerId:'p2',playerName:'郑晓峰',insuredName:'郑晓峰',productType:'人身意外伤害保险',policyNo:'PA2026010100123',coverStart:'2026-01-01',coverEnd:'2026-12-31',matchResult:'matched',reviewFlag:'ok'}
+ }
  function mockParticipation(){
   var BUY='https://anlan-dplatform-h5.cn-anlan.com/?channelCode=100998&goodsId=170&promotionId=144&tenantFrom=ba&thirdOrderNo=100998_261606&thirdOrderNoType=1&flag=aquarius'
   function materials(name,birth,idMasked,jersey,verified,photoOk,insState){
@@ -52,7 +55,7 @@
   }
   return [
    {id:'p1|e1|t1|d1',playerId:'p1',playerName:'郑旭升',relation:'self',photoUrl:'',gender:'男',birthDate:'2008-06-18',identityMasked:'410***********1234',jerseyNumber:'7',position:'前锋',tournamentId:'e1',tournamentName:'2026郑州市青少年足球邀请赛',eventStatus:'ongoing',startDate:'2026-10-10',endDate:'2026-10-20',venue:'郑州市体育中心',divisionId:'d1',divisionName:'U17 男子组',teamId:'t1',teamName:'郑州青少队',registrationStatus:'approved',registrationStatusText:'报名已通过',rosterStatus:'approved',rosterStatusText:'名单已审核',rosterVersion:2,state:'approved',stateText:'已进入正式名单',stateTone:'ok',reason:'',materials:materials('郑旭升','2008-06-18','410***********1234',7,true,true,'submitted'),teamLogoUrl:'./assets/logo-saixiaofeng-football.png',insurance:{required:true,ready:true,canUpload:false,state:'submitted',text:'保险资料已提交',tone:'ok',productType:'人身意外伤害保险',purchaseUrl:BUY,purchaseLabel:'去购买保险',uploaderHint:'请由球员本人上传保单 PDF'},pass:{eligible:true,stateText:'可出示 · 现场按照片核验',mode:'adult',number:'SXF-20261030-K7F2X',issuedAt:null,note:'成人电子参赛证；进入正式名单后可随时刷新动态签名二维码，供助理裁判现场扫码做资格审查，扫码后仍须当面核对照片。',qr:{status:'ready',reason:'点击即可刷新，供助理裁判现场扫码',matches:[{matchId:'m-ready',teamsText:'郑州青少队 vs 洛阳金茂队',timeText:'2026-10-30 15:00'}]}}},
-   {id:'p2|e1|t1|d2',playerId:'p2',playerName:'郑晓峰',relation:'guardian',photoUrl:'',gender:'男',birthDate:'2018-03-12',identityMasked:'410***********5678',jerseyNumber:'10',position:'中场',tournamentId:'e1',tournamentName:'2026郑州市青少年足球邀请赛',eventStatus:'ongoing',startDate:'2026-10-10',endDate:'2026-10-20',venue:'郑州市体育中心',divisionId:'d2',divisionName:'U9 男子组',teamId:'t1',teamName:'郑州青少队',registrationStatus:'approved',registrationStatusText:'报名已通过',rosterStatus:'approved',rosterStatusText:'名单已审核',rosterVersion:2,state:'approved',stateText:'已进入正式名单',stateTone:'ok',reason:'',materials:materials('郑晓峰','2018-03-12','410***********5678',10,true,true,'pending'),teamLogoUrl:'./assets/logo-saixiaofeng-football.png',insurance:{required:true,ready:false,canUpload:true,state:'pending',text:'保险资料待提交',tone:'warn',productType:'',purchaseUrl:BUY,purchaseLabel:'去购买保险',uploaderHint:'请由监护人上传保单 PDF',disclaimer:'平台仅核验保单文字与赛事要求，不替代保险公司承保确认。'},pass:{eligible:false,stateText:'需先提交本赛事保险资料',mode:'youth',number:'',issuedAt:null,note:'本组别要求保险；确认提交保单后方可出示参赛证。青少年现场不扫码，由助理裁判按照片核验。',qr:{status:'locked',reason:'需先提交本赛事保险资料',matches:[]}}},
+   {id:'p2|e1|t1|d2',playerId:'p2',playerName:'郑晓峰',relation:'guardian',photoUrl:'',gender:'男',birthDate:'2018-03-12',identityMasked:'410***********5678',jerseyNumber:'10',position:'中场',tournamentId:'e1',tournamentName:'2026郑州市青少年足球邀请赛',eventStatus:'ongoing',startDate:'2026-10-10',endDate:'2026-10-20',venue:'郑州市体育中心',divisionId:'d2',divisionName:'U9 男子组',teamId:'t1',teamName:'郑州青少队',registrationStatus:'approved',registrationStatusText:'报名已通过',rosterStatus:'approved',rosterStatusText:'名单已审核',rosterVersion:2,state:'approved',stateText:'已进入正式名单',stateTone:'ok',reason:'',materials:materials('郑晓峰','2018-03-12','410***********5678',10,true,true,'pending'),teamLogoUrl:'./assets/logo-saixiaofeng-football.png',insurance:{required:true,ready:false,canUpload:true,state:'pending',text:'个人保单待提交',tone:'warn',personalPolicy:mockPersonalPolicy(),personalApplied:true,productType:'',purchaseUrl:BUY,purchaseLabel:'去购买保险',uploaderHint:'请由监护人上传保单 PDF',disclaimer:'平台仅核验保单文字与赛事要求，不替代保险公司承保确认。'},pass:{eligible:false,stateText:'需先提交本赛事保险资料',mode:'youth',number:'',issuedAt:null,note:'本组别要求保险；确认提交保单后方可出示参赛证。青少年现场不扫码，由助理裁判按照片核验。',qr:{status:'locked',reason:'需先提交本赛事保险资料',matches:[]}}},
    {id:'p2|e2|t1|d3',playerId:'p2',playerName:'郑晓峰',relation:'guardian',photoUrl:'',gender:'男',birthDate:'2018-03-12',identityMasked:'410***********5678',jerseyNumber:'10',position:'中场',tournamentId:'e2',tournamentName:'2026开封周末联赛秋季赛',eventStatus:'registering',startDate:'2026-11-01',endDate:'2026-11-15',venue:'开封体育场',divisionId:'d3',divisionName:'U9 男子组',teamId:'t1',teamName:'郑州青少队',registrationStatus:'approved',registrationStatusText:'报名已通过',rosterStatus:'submitted',rosterStatusText:'名单待审核',rosterVersion:1,state:'reviewing',stateText:'名单待主办方审核',stateTone:'pending',reason:'',materials:[{key:'name',label:'姓名',value:'郑晓峰',state:'ok'},{key:'birthDate',label:'出生日期',value:'2018-03-12',state:'ok'},{key:'identity',label:'证件信息',value:'410***********5678',state:'ok'},{key:'photo',label:'形象照',value:'待补',state:'warn'},{key:'jersey',label:'球衣号',value:'10',state:'ok'},{key:'identityCheck',label:'人证核验',value:'未要求',state:'muted'},{key:'insurance',label:'保险资料',value:'未要求',state:'muted'}],teamLogoUrl:'./assets/logo-saixiaofeng-football.png',insurance:{required:false,ready:false,canUpload:false,state:'not_required',text:'本赛事未要求保险',tone:'muted',purchaseUrl:'',purchaseLabel:''},pass:{eligible:false,stateText:'正式名单通过后可出示',mode:'youth',number:'',issuedAt:null,note:'青少年现场不扫码，由助理裁判按照片逐人核验。',qr:{status:'locked',reason:'正式名单通过后可出示',matches:[]}}}
   ]
  }
@@ -60,7 +63,8 @@
   if(p.action==='servicePrivatePlayerData')return Promise.resolve({success:true,data:{player:state.overview.players.filter(function(x){return x.id===p.playerId})[0]||state.overview.players[0],metrics:{appearances:12,goals:8,assists:5,starts:9,yellowCards:2,redCards:0},coverage:{goals:'complete'},matches:[{id:'m1',tournamentName:'2026郑州市青少年足球邀请赛',homeName:'郑州青少队',awayName:'洛阳金茂队',status:'finished',homeScore:3,awayScore:1,matchDate:'2026-10-12',matchTime:'15:00',venue:'郑州市体育中心'},{id:'m2',tournamentName:'2026郑州市青少年足球邀请赛',homeName:'开封铁路队',awayName:'郑州青少队',status:'upcoming',homeScore:null,awayScore:null,matchDate:'2026-10-19',matchTime:'10:00',venue:'开封体育场'}],events:[{matchId:'m1',type:'goal',minute:23,counted:true},{matchId:'m1',type:'assist',minute:56,counted:true}]}})
   if(p.action==='servicePrivateRefereeData')return Promise.resolve({success:true,data:{referee:state.overview.referee,summary:{total:18,completed:14,upcoming:4},matches:[{id:'r1',tournamentName:'2026郑州市青少年足球邀请赛',homeName:'郑州青少队',awayName:'洛阳金茂队',status:'finished',homeScore:3,awayScore:1,matchDate:'2026-10-12',matchTime:'15:00',venue:'郑州市体育中心',roles:['主裁判']}],workbenchUrl:'./?entry=workbench'}})
   if(p.action==='servicePrivateAccountData')return Promise.resolve({success:true,data:{wallet:{status:'ready',balance:1200,entries:[{label:'会员赠滴',delta:500,time:Date.now()-86400000},{label:'AI 定妆照',delta:-95,time:Date.now()}]},messages:{status:'ready',entries:[]},membership:mockMembershipCard()}})
-  if(p.action==='servicePrivateParticipation')return Promise.resolve({success:true,data:{schemaVersion:'service-personal/4',items:mockParticipation()}})
+  if(p.action==='servicePrivateParticipation')return Promise.resolve({success:true,data:{schemaVersion:'service-personal/4',items:/[?&]empty=1/.test(location.search)?[]:mockParticipation(),purchase:{url:'https://anlan-dplatform-h5.cn-anlan.com/?channelCode=100998&goodsId=170&promotionId=144&tenantFrom=ba&thirdOrderNo=100998_339015&thirdOrderNoType=1&flag=aquarius',label:'点击购买'},personalPolicies:/[?&]empty=1/.test(location.search)?[]:[mockPersonalPolicy()]}})
+  if(p.action==='servicePrivateInsuranceApplyPersonal')return Promise.resolve({success:true,personal:true,qualificationId:'q-mock',insurance:{required:true,ready:true,canUpload:false,state:'submitted',text:'保险资料已提交',tone:'ok'}})
   if(p.action==='servicePrivateAdultMatchPass'){var svg='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240"><rect width="240" height="240" fill="#fff"/><rect x="16" y="16" width="48" height="48" fill="#083d27"/><rect x="176" y="16" width="48" height="48" fill="#083d27"/><rect x="16" y="176" width="48" height="48" fill="#083d27"/><rect x="80" y="80" width="80" height="80" fill="#083d27"/><rect x="96" y="96" width="48" height="48" fill="#fff"/><text x="120" y="228" text-anchor="middle" font-size="12" fill="#083d27">MOCK QR</text></svg>');return Promise.resolve({success:true,data:{certificate:{id:'c1',number:'SXF-20261030-K7F2X'},matchPass:{id:'pass1',expiresAt:Date.now()+2*60*60*1000,qrUrl:svg},match:{id:p.matchId||'m-ready',teamsText:'郑州青少队 vs 洛阳金茂队',timeText:'2026-10-30 15:00'},player:{id:p.playerId||'p1',name:'郑旭升',jerseyNumber:'7'}}})}
   if(p.action==='servicePrivateMembershipStatus')return Promise.resolve(Object.assign({success:true},mockMembershipStatus()))
   if(p.action==='servicePrivateMembershipOrders')return Promise.resolve({success:true,rows:mockMembershipOrders(),subscription:mockMemberActive()?mockMemberSub():null,purchaseEnabled:true})
@@ -68,6 +72,8 @@
   if(p.action==='servicePrivateMembershipSubscribe')return Promise.reject(Error('本地预览不发起真实支付，请用真实微信打开'))
   if(p.action==='serviceFeedbackSubmit')return Promise.resolve({success:true,feedbackId:'mockfb'+Date.now().toString().slice(-6)})
   if(p.action==='servicePrivateInsurancePurchaseClick')return Promise.resolve({success:true,recorded:true})
+  if(p.action==='servicePrivateInsurancePersonalUpload')return Promise.resolve({success:true,personal:true,draft:{draftId:'mockins'+Date.now().toString().slice(-6),insuredName:'郑旭升',coverStart:'2026-10-01',coverEnd:'2027-09-30',productType:'运动意外险',insurer:'蚂蚁保',policyNo:'MOCK-POLICY-001',matchResult:'matched',reviewFlag:'ok',message:'本地预览：姓名与保障期已识别',disclaimer:'本地预览不对接真实 OCR'}})
+  if(p.action==='servicePrivateInsurancePersonalConfirm')return Promise.resolve({success:true,personal:true,policyId:'pip_mock'})
   if(p.action==='servicePrivateInsuranceUpload'||p.action==='servicePrivateInsuranceRecognize'){
    return Promise.resolve({success:true,draft:{draftId:'mock-draft-1',playerId:p.playerId||'p2',tournamentId:p.tournamentId||'e1',divisionId:p.divisionId||'d2',status:'recognized',insuredName:'郑晓峰',coverStart:'2026-10-01',coverEnd:'2026-10-31',policyNo:'MOCK20261030',productType:'人身意外伤害保险',matchResult:'matched',reviewFlag:'auto_matched',message:'姓名与保障期核对一致（本地预览假数据）',disclaimer:'平台仅核验保单文字与赛事要求，不替代保险公司承保确认。'}})
   }
@@ -121,7 +127,7 @@
   return '<section class="me-home-participation" aria-label="我的参赛"><div class="me-home-participation-head"><strong>我的参赛</strong><span id="homeParticipationSummary">正在读取…</span></div><div class="me-pp-entries">'+
    '<button class="me-pp-entry" data-action="homeParticipationProfile">'+homeIcon('list')+'<span class="me-pp-entry-text"><strong>我的参赛资料</strong><small id="ppProfileNote">赛事 · 组别 · 球队 · 号码</small></span><i aria-hidden="true">›</i></button>'+
    '<button class="me-pp-entry" data-action="homeParticipationPass">'+homeIcon('shield')+'<span class="me-pp-entry-text"><strong>我的电子参赛证</strong><small id="ppPassNote">正式名单通过后可出示</small></span><i aria-hidden="true">›</i></button>'+
-   '<button class="me-pp-entry" data-action="homeParticipationInsurance">'+homeIcon('event')+'<span class="me-pp-entry-text"><strong>赛事保险资料</strong><small id="ppInsuranceNote">保单上传 · 可选购买引导</small></span><i aria-hidden="true">›</i></button>'+
+   '<button class="me-pp-entry" data-action="homeParticipationInsurance">'+homeIcon('event')+'<span class="me-pp-entry-text"><strong>我的保险</strong><small id="ppInsuranceNote">保单上传 · 可选购买引导</small></span><i aria-hidden="true">›</i></button>'+
   '</div><p class="me-pp-foot">只显示本人或监护球员的参赛关系，结果以主办方审核的正式名单为准</p></section>'
  }
  function loadParticipation(force){
@@ -138,11 +144,11 @@
  function paintParticipationHome(failed){
   var summary=document.getElementById('homeParticipationSummary'),profileNote=document.getElementById('ppProfileNote'),passNote=document.getElementById('ppPassNote'),insNote=document.getElementById('ppInsuranceNote')
   if(!summary||!profileNote||!passNote)return
-  var items=playerParticipation(),latest=items[0]||null,eligible=items.filter(function(item){return item.pass&&item.pass.eligible}),pendingIns=items.filter(function(item){return item.insurance&&item.insurance.canUpload})
+  var items=playerParticipation(),latest=items[0]||null,eligible=items.filter(function(item){return item.pass&&item.pass.eligible}),pendingIns=items.filter(function(item){return item.insurance&&item.insurance.canUpload&&!item.insurance.personalApplied})
   summary.textContent=failed?'暂不可用':items.length?items.length+' 项参赛':'暂无参赛'
   profileNote.textContent=failed?'参赛资料暂不可用':latest?latest.tournamentName+' · '+latest.stateText:'报名通过后在此查看参赛资料'
   passNote.textContent=failed?'参赛证暂不可用':eligible.length?eligible.length+' 张可出示':items.length?'正式名单通过后可出示':'暂无可用参赛证'
-  if(insNote)insNote.textContent=failed?'保险资料暂不可用':pendingIns.length?pendingIns.length+' 项待上传保单':items.some(function(item){return item.insurance&&item.insurance.required})?'保单已齐或待核对':'本赛事未要求保险'
+  if(insNote)insNote.textContent=failed?'保险资料暂不可用':pendingIns.length?pendingIns.length+' 项待上传保单':items.some(function(item){return item.insurance&&item.insurance.personalApplied&&item.insurance.state==='pending'})?'个人保单待提交':items.some(function(item){return item.insurance&&item.insurance.personalApplied})?'已调用个人保单':items.some(function(item){return item.insurance&&item.insurance.required})?'保单已齐或待核对':'本赛事未要求保险'
  }
  function participationTone(value){return ['ok','pending','warn','muted'].indexOf(value)>=0?value:'muted'}
  function participationFact(label,value){return '<div><span>'+esc(label)+'</span><b>'+esc(value||'—')+'</b></div>'}
@@ -294,22 +300,126 @@
    loadAdultPassQr(id,(qr.matches&&qr.matches[0]&&qr.matches[0].matchId)||'',{present:true})
   }
  }
+ // ---------- 个人保险：购买入口与个人保单（个人随时可买，参赛时自动调用） ----------
+ function personalInsuranceActions(){
+  var purchase=(state.participation&&state.participation.purchase)||{}
+  return '<div class="pp-personal-actions">'+
+   '<button type="button" class="pp-ins-cta buy" data-personal-buy="1">'+esc(purchase.label||'点击购买')+'</button>'+
+   '<button type="button" class="pp-ins-cta upload" data-personal-upload="1">上传保险单</button>'+
+  '</div>'
+ }
+ function personalInsuranceHome(){
+  var data=state.participation||{},policies=Array.isArray(data.personalPolicies)?data.personalPolicies:[]
+  return '<section class="pp-empty pp-personal">'+
+   '<strong>暂无保险资料</strong>'+
+   '<p>保险是个人随时可以买的：先买一份或把已有保单存到球员名下，报名参赛时直接调用，不用再传。</p>'+
+   (policies.length?'<div class="pp-personal-list">'+policies.map(personalPolicyCard).join('')+'</div>':'')+
+   personalInsuranceActions()+
+  '</section>'
+ }
+ function personalPolicyCard(policy){
+  var cover=(policy.coverStart||policy.coverEnd)?((policy.coverStart||'?')+' — '+(policy.coverEnd||'?')):'待识别'
+  return '<article class="pp-personal-card">'+
+   '<div class="pp-personal-head"><strong>'+esc(policy.playerName||'球员')+'</strong><span class="pp-state ok">已保存</span></div>'+
+   '<div class="pp-ins-grid">'+
+    '<div><span>险种</span><b>'+esc(policy.productType||'待识别')+'</b></div>'+
+    '<div><span>保单号</span><b>'+esc(policy.policyNo||'—')+'</b></div>'+
+    '<div><span>保障期</span><b>'+esc(cover)+'</b></div>'+
+   '</div>'+
+   '<p class="pp-ins-guide">已存为个人保单；报名进入赛事后可在此赛事保险中使用。</p>'+
+  '</article>'
+ }
+ function openPersonalBuy(){
+  var purchase=(state.participation&&state.participation.purchase)||{}
+  if(!purchase.url){toast('平台暂未配置保险购买链接，请联系客服');return}
+  window.location.href=purchase.url
+ }
+ function personalPlayer(){
+  var players=state.overview.players||[]
+  return players.filter(function(p){return p.id===state.personalPlayerId})[0]||null
+ }
+ function personalPlayerPicker(){
+  var players=state.overview.players||[]
+  if(players.length<2)return ''
+  return '<div class="pp-players">'+players.map(function(p){return '<button type="button" data-personal-player="'+esc(p.id)+'" aria-pressed="'+(p.id===state.personalPlayerId)+'">'+esc(p.name)+'<small>'+esc(p.teamName||'')+'</small></button>'}).join('')+'</div>'
+ }
+ function openPersonalInsurance(){
+  var players=state.overview.players||[]
+  if(!players.length){toast('请先绑定球员后再上传保单');return}
+  if(!state.personalPlayerId||!players.filter(function(p){return p.id===state.personalPlayerId}).length)state.personalPlayerId=state.playerId||players[0].id
+  state.personalDraft=null;state.insuranceBusy=false
+  modal('上传保险单','<div class="pp-ins" id="personalInsurancePanel">'+
+   '<p class="me-modal-text">选择球员后上传已购买的意外险保单 PDF（小于 3MB）。平台会识别姓名与保障期，核对后保存到该球员名下；报名进入赛事后可在此使用。</p>'+
+   personalPlayerPicker()+
+   '<label class="pp-ins-pick"><input id="personalInsurancePdf" type="file" accept="application/pdf,.pdf" hidden><em aria-hidden="true">PDF</em><span>选择 PDF 保单</span><small>小于 3MB · 自动识别姓名与保障期</small></label>'+
+   '<p class="me-modal-text muted">平台只核验保单文字，不替代保险公司承保确认。</p>'+
+   '<div id="insuranceResult" class="pp-ins-result" hidden></div>'+
+   '<div class="me-modal-actions" id="insuranceActions" hidden><button class="me-modal-confirm pp-ins-confirm" data-personal-confirm="1">保存到球员名下</button><button class="me-modal-cancel">取消</button></div>'+
+  '</div>',true)
+  var input=document.getElementById('personalInsurancePdf')
+  if(input)input.addEventListener('change',function(){if(input.files&&input.files[0])uploadPersonalInsurancePdf(input.files[0])})
+ }
+ function uploadPersonalInsurancePdf(file){
+  if(state.insuranceBusy)return
+  var player=personalPlayer()
+  if(!player){toast('请先选择球员');return}
+  state.insuranceBusy=true;state.personalDraft=null;paintInsuranceResult(null);toast('正在上传并识别…')
+  readPdfAsDataUrl(file).then(function(dataUrl){
+   return api({action:'servicePrivateInsurancePersonalUpload',playerId:player.id,base64Data:dataUrl})
+  }).then(function(r){
+   state.insuranceBusy=false
+   state.personalDraft=r&&r.draft||null
+   paintInsuranceResult(state.personalDraft)
+   toast('识别完成，请核对后保存')
+  }).catch(function(e){state.insuranceBusy=false;toast(e.message||'上传失败，请稍后重试')})
+ }
+ function confirmPersonalInsurance(){
+  if(state.insuranceBusy||!state.personalDraft||!state.personalDraft.draftId){toast('请先上传并识别保单');return}
+  var draft=state.personalDraft
+  state.insuranceBusy=true;toast('正在保存…')
+  api({action:'servicePrivateInsurancePersonalConfirm',draftId:draft.draftId}).then(function(){
+   state.insuranceBusy=false;state.personalDraft=null
+   var mask=app.querySelector('.me-modal-mask');if(mask)mask.remove()
+   toast(draft.reviewFlag==='needs_manual_review'?'已保存到球员名下，报名后请核对':'保单已保存到球员名下')
+   loadParticipation(true).then(function(){paintParticipation()})
+  }).catch(function(e){state.insuranceBusy=false;toast(e.message||'保存失败，请稍后重试')})
+ }
+ // 调用已保存的个人保单提交本赛事：复用原保单文件，仍进入主办方审核流程
+ function applyPersonalPolicy(itemId){
+  var item=playerParticipation().filter(function(x){return x.id===itemId})[0]
+  if(!item||!item.insurance||!item.insurance.personalPolicy)return
+  if(state.personalApplyBusy)return
+  if(!window.confirm('用'+item.playerName+'的个人保单提交「'+item.tournamentName+'」保险？提交后由主办方审核。'))return
+  state.personalApplyBusy=true
+  api({action:'servicePrivateInsuranceApplyPersonal',playerId:item.playerId,tournamentId:item.tournamentId,divisionId:item.divisionId}).then(function(r){
+   if(!r||r.success!==true)throw new Error((r&&r.error)||'提交失败')
+   state.personalApplyBusy=false
+   toast(r.insurance&&r.insurance.state==='manual_review'?'已提交，等待人工核对':'已用个人保单提交，等待主办方审核')
+   loadParticipation(true).then(function(){paintParticipation()})
+  }).catch(function(e){state.personalApplyBusy=false;toast(e.message||'提交失败，请稍后重试')})
+ }
  function insuranceListCard(item){
   var info=item.insurance||{},tone=participationTone(info.tone||'muted')
-  var cover=(info.coverStart||info.coverEnd)?((info.coverStart||'?')+' — '+(info.coverEnd||'?')):'待上传后识别'
+  var pp=info.personalPolicy||null
+  var productType=(pp&&pp.productType)||info.productType
+  var policyNo=(pp&&pp.policyNo)||info.policyNo
+  var start=(pp&&pp.coverStart)||info.coverStart,end=(pp&&pp.coverEnd)||info.coverEnd
+  var cover=(start||end)?((start||'?')+' — '+(end||'?')):'待上传后识别'
   var actions=[]
+  if(pp&&info.state==='pending')actions.push('<button type="button" class="pp-ins-cta apply" data-personal-apply="'+esc(item.id)+'">用个人保单提交</button>')
   if(info.purchaseUrl)actions.push('<button type="button" class="pp-ins-cta buy" data-insurance-buy="'+esc(item.id)+'">'+esc(info.purchaseLabel||'去购买保险')+'</button>')
-  if(info.canUpload)actions.push('<button type="button" class="pp-ins-cta upload" data-insurance-upload="'+esc(item.id)+'">上传保单 PDF</button>')
+  if(info.canUpload)actions.push('<button type="button" class="pp-ins-cta upload" data-insurance-upload="'+esc(item.id)+'">'+(pp&&info.state!=='pending'?'更换保单':'上传保单 PDF')+'</button>')
   return '<article class="pp-ins-sheet '+tone+'">'+
    '<div class="pp-ins-sheet-top"><span class="pp-ins-mark">赛事保险</span><span class="pp-state '+tone+'">'+esc(info.text||'保险信息待确认')+'</span></div>'+
    '<h3 class="pp-ins-name">'+esc(item.playerName)+'</h3>'+
    '<p class="pp-ins-event">'+esc([item.tournamentName,item.divisionName].filter(Boolean).join(' · '))+'</p>'+
    '<div class="pp-ins-grid">'+
     '<div><span>球队</span><b>'+esc(item.teamName||'—')+'</b></div>'+
-    '<div><span>险种</span><b>'+esc(info.productType||'待识别')+'</b></div>'+
-    '<div><span>保单号</span><b>'+esc(info.policyNo||'—')+'</b></div>'+
+    '<div><span>险种</span><b>'+esc(productType||'待识别')+'</b></div>'+
+    '<div><span>保单号</span><b>'+esc(policyNo||'—')+'</b></div>'+
     '<div><span>保障期</span><b>'+esc(cover)+'</b></div>'+
    '</div>'+
+   (pp?'<p class="pp-ins-guide">已调用个人保单'+(pp.insuredName?'（'+esc(pp.insuredName)+'）':'')+'：'+(info.state==='pending'?'本赛事要求主办方审核，可用个人保单提交，无需重新购买。':'本赛事保险已通过，参赛时直接使用。')+'</p>':'')+
    (info.uploaderHint?'<p class="pp-ins-note">'+esc(info.uploaderHint)+'</p>':'')+
    (info.message?'<p class="pp-ins-msg">'+esc(info.message)+'</p>':'')+
    (info.purchaseUrl&&info.canUpload?'<p class="pp-ins-guide">外链购买仅作投保引导，买成后请回到本页上传 PDF。</p>':'')+
@@ -321,10 +431,12 @@
   var players=state.overview.players||[],items=playerParticipation(),kind=state.participationKind,isPass=kind==='pass',isIns=kind==='insurance'
   var selector=players.length>1?'<div class="pp-players">'+players.map(function(p){return '<button data-pp-player="'+esc(p.id)+'" aria-pressed="'+(p.id===state.playerId)+'">'+esc(p.name)+'<small>'+esc(p.teamName)+'</small></button>'}).join('')+'</div>':''
   var body=''
-  if(!items.length){
-   body='<section class="pp-empty"><strong>'+(isPass?'暂无可出示的参赛证':isIns?'暂无保险资料':'暂无参赛资料')+'</strong><p>球队报名并通过正式名单审核后，这里会显示参赛资料、电子参赛证与保险补件。</p></section>'
+  if(!items.length&&isIns){
+   body=personalInsuranceHome()
+  }else if(!items.length){
+   body='<section class="pp-empty"><strong>'+(isPass?'暂无可出示的参赛证':'暂无参赛资料')+'</strong><p>球队报名并通过正式名单审核后，这里会显示参赛资料、电子参赛证与保险补件。</p></section>'
   }else if(isIns){
-   body=items.map(insuranceListCard).join('')
+   body=items.map(insuranceListCard).join('')+personalInsuranceActions()
   }else if(isPass){
    var eligible=items.filter(function(item){return item.pass&&item.pass.eligible})
    var waiting=items.filter(function(item){return !(item.pass&&item.pass.eligible)})
@@ -344,7 +456,7 @@
   }else{
    body=items.map(participationProfileCard).join('')
   }
-  app.innerHTML='<main class="me-body me-body-participation'+(isIns?' me-body-insurance':'')+'"><button class="personal-back" data-home="true">‹ 返回我的</button><header class="pp-head'+(isIns?' pp-head-ins':'')+'">'+(isIns?'<span class="pp-head-kicker">个人投保凭证</span>':'')+'<h1>'+(isPass?'我的电子参赛证':isIns?'赛事保险资料':'我的参赛资料')+'</h1><p>'+(isPass?'正式名单通过后可出示。青少年现场按名单核验、不扫码；成人可随时点开刷新动态签名二维码，供第二/第三助理裁判现场扫码做资格审查。':isIns?'成人本人上传保单，青少年由监护人代传。外链购买仅作引导，买成后须回传 PDF。':'报名、名单和资料状态均以主办方审核结果为准，本页只读。')+'</p></header>'+selector+body+'<p class="pp-foot-note">资料修改请联系球队管理员在球队端更新后重新提交；有疑问请通过客服中心反馈。</p></main>'
+  app.innerHTML='<main class="me-body me-body-participation'+(isIns?' me-body-insurance':'')+'"><button class="personal-back" data-home="true">‹ 返回我的</button><header class="pp-head'+(isIns?' pp-head-ins':'')+'">'+(isIns?'<span class="pp-head-kicker">个人投保凭证</span>':'')+'<h1>'+(isPass?'我的电子参赛证':isIns?'我的保险':'我的参赛资料')+'</h1><p>'+(isPass?'正式名单通过后可出示。青少年现场按名单核验、不扫码；成人可随时点开刷新动态签名二维码，供第二/第三助理裁判现场扫码做资格审查。':isIns?'成人本人上传保单，青少年由监护人代传。外链购买仅作引导，买成后须回传 PDF。':'报名、名单和资料状态均以主办方审核结果为准，本页只读。')+'</p></header>'+selector+body+'<p class="pp-foot-note">资料修改请联系球队管理员在球队端更新后重新提交；有疑问请通过客服中心反馈。</p></main>'
   if(isPass){
    items.filter(function(item){return item.pass&&item.pass.eligible&&item.pass.mode==='adult'&&item.pass.qr&&item.pass.qr.status==='ready'&&!(state.passQrCache&&state.passQrCache[item.id]&&state.passQrCache[item.id].qrUrl)}).slice(0,2).forEach(function(item){
     loadAdultPassQr(item.id,(item.pass.qr.matches&&item.pass.qr.matches[0]&&item.pass.qr.matches[0].matchId)||'',{silent:true})
@@ -860,6 +972,11 @@
   else if(t.dataset.insuranceBuy){openInsuranceBuy(t.dataset.insuranceBuy)}
   else if(t.dataset.insuranceUpload){openInsuranceUpload(t.dataset.insuranceUpload)}
   else if(t.dataset.insuranceConfirm){confirmInsuranceUpload()}
+  else if(t.dataset.personalBuy){openPersonalBuy()}
+  else if(t.dataset.personalUpload){openPersonalInsurance()}
+  else if(t.dataset.personalConfirm){confirmPersonalInsurance()}
+  else if(t.dataset.personalApply){applyPersonalPolicy(t.dataset.personalApply)}
+  else if(t.dataset.personalPlayer){if(t.dataset.personalPlayer===state.personalPlayerId)return;state.personalPlayerId=t.dataset.personalPlayer;state.personalDraft=null;openPersonalInsurance()}
   else if(t.dataset.passClose){closePassPresent()}
   else if(t.dataset.memberBuy){membershipBuy(t.dataset.memberBuy)}
   else if(t.dataset.memberPlan){if(!t.disabled)chooseMemberPlan(t.dataset.memberPlan)}
