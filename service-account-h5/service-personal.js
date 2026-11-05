@@ -326,7 +326,7 @@
     '<div><span>保单号</span><b>'+esc(policy.policyNo||'—')+'</b></div>'+
     '<div><span>保障期</span><b>'+esc(cover)+'</b></div>'+
    '</div>'+
-   '<p class="pp-ins-guide">已存为个人保单，有效期至 '+esc(policy.coverEnd||'待识别')+'；报名进入赛事后按赛事日期核验，覆盖赛事期间可直接提交，不覆盖需重新上传。</p>'+
+   '<p class="pp-ins-guide">已存为个人保单，有效期 '+esc(policy.coverStart||'待识别')+' 至 '+esc(policy.coverEnd||'待识别')+'；报名后按赛事日期核验，覆盖参赛当日即可提交，没有交集需重新购买上传。</p>'+
   '</article>'
  }
  function openPersonalBuy(){
@@ -420,7 +420,7 @@
     '<div><span>保单号</span><b>'+esc(policyNo||'—')+'</b></div>'+
     '<div><span>保障期</span><b>'+esc(cover)+'</b></div>'+
    '</div>'+
-   (pp?'<p class="pp-ins-guide">已调用个人保单'+(pp.insuredName?'（'+esc(pp.insuredName)+'）':'')+'：'+(info.state!=='pending'?'本赛事保险已通过，参赛时直接使用。':pp.coverageOk?'本赛事要求主办方审核，可用个人保单提交，无需重新购买。':'当前保单有效期 '+esc(cover)+'，未覆盖赛事日期'+(eventRange?'（'+esc(eventRange)+'）':'')+'，请上传覆盖赛事期间的保单。')+'</p>':'')+
+   (pp?'<p class="pp-ins-guide">已调用个人保单'+(pp.insuredName?'（'+esc(pp.insuredName)+'）':'')+'：'+(info.state!=='pending'?'本赛事保险已通过，参赛时直接使用。':pp.coverageOk?'本赛事要求主办方审核，可用个人保单提交（保单有效期 '+esc(cover)+'），按实际参赛场次核对。':'当前保单有效期 '+esc(cover)+'，与赛事日期'+(eventRange?'（'+esc(eventRange)+'）':'')+'没有交集，请上传覆盖参赛当日的保单。')+'</p>':'')+
    (info.uploaderHint?'<p class="pp-ins-note">'+esc(info.uploaderHint)+'</p>':'')+
    (info.message?'<p class="pp-ins-msg">'+esc(info.message)+'</p>':'')+
    (info.purchaseUrl&&info.canUpload?'<p class="pp-ins-guide">外链购买仅作投保引导，买成后请回到本页上传 PDF。</p>':'')+
