@@ -1,0 +1,7 @@
+{
+  "name": "resolveCity",
+  "version": "1.0.0",
+  "description": "逆地理编码：经纬度转城市（发现页同城排序）",
+  "main": "index.js",
+  "dependencies": {}
+}
