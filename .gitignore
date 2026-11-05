@@ -73,3 +73,22 @@ rollup.sdk.config.*
 vite.sdk.config.*
 *.bak
 dist-preview/
+
+# 本地中间产物、会话缓存与大体量设计素材（不进 Git；重要资料由知识库统一归档）
+output/
+outputs/
+artifacts/
+.trae-html-share-packages/
+.codex-attachments/
+产品设计/
+assets/guest-experience-v1/
+assets/discover-transfer-reference-20261028/
+docs/prototypes/
+docs/design/*.png
+docs/design/*.html
+design.html
+registration-ai-test.html
+
+# Android 构建缓存与本地工具链
+android-platform/.gradle/
+android-platform/build/

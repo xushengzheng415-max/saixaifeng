@@ -1,0 +1,12 @@
+{
+  "platform": "android",
+  "packageId": "cn.sxffootball.platform",
+  "versionCode": 1,
+  "version": "1.0.0",
+  "minSdk": 24,
+  "targetSdk": 34,
+  "downloadUrl": "https://www.sxffootball.cn/desktop/platform/android/SxfPlatform-1.0.0.apk",
+  "sha256": "f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011dc68f947889d8",
+  "size": 60276,
+  "notes": "平台运营中心安卓平板客户端首版：登录、权限与数据全部走 pingtai.sxffootball.cn 线上页面，不复制后台逻辑。"
+}
