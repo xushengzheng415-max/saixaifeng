@@ -38,7 +38,7 @@
   ]
  }
  function mockPersonalPolicy(){
-  return {playerId:'p2',playerName:'郑晓峰',insuredName:'郑晓峰',productType:'人身意外伤害保险',policyNo:'PA2026010100123',coverStart:'2026-01-01',coverEnd:'2026-12-31',matchResult:'matched',reviewFlag:'ok'}
+  return {playerId:'p2',playerName:'郑晓峰',insuredName:'郑晓峰',productType:'人身意外伤害保险',policyNo:'PA2026010100123',coverStart:'2026-01-01',coverEnd:'2026-12-31',matchResult:'matched',reviewFlag:'ok',coverageOk:true}
  }
  function mockParticipation(){
   var BUY='https://anlan-dplatform-h5.cn-anlan.com/?channelCode=100998&goodsId=170&promotionId=144&tenantFrom=ba&thirdOrderNo=100998_261606&thirdOrderNoType=1&flag=aquarius'
@@ -326,7 +326,7 @@
     '<div><span>保单号</span><b>'+esc(policy.policyNo||'—')+'</b></div>'+
     '<div><span>保障期</span><b>'+esc(cover)+'</b></div>'+
    '</div>'+
-   '<p class="pp-ins-guide">已存为个人保单；报名进入赛事后可在此赛事保险中使用。</p>'+
+   '<p class="pp-ins-guide">已存为个人保单，有效期至 '+esc(policy.coverEnd||'待识别')+'；报名进入赛事后按赛事日期核验，覆盖赛事期间可直接提交，不覆盖需重新上传。</p>'+
   '</article>'
  }
  function openPersonalBuy(){
@@ -405,8 +405,9 @@
   var policyNo=(pp&&pp.policyNo)||info.policyNo
   var start=(pp&&pp.coverStart)||info.coverStart,end=(pp&&pp.coverEnd)||info.coverEnd
   var cover=(start||end)?((start||'?')+' — '+(end||'?')):'待上传后识别'
+  var eventRange=[item.startDate,item.endDate].filter(Boolean).join(' — ')
   var actions=[]
-  if(pp&&info.state==='pending')actions.push('<button type="button" class="pp-ins-cta apply" data-personal-apply="'+esc(item.id)+'">用个人保单提交</button>')
+  if(pp&&info.state==='pending'&&pp.coverageOk)actions.push('<button type="button" class="pp-ins-cta apply" data-personal-apply="'+esc(item.id)+'">用个人保单提交</button>')
   if(info.purchaseUrl)actions.push('<button type="button" class="pp-ins-cta buy" data-insurance-buy="'+esc(item.id)+'">'+esc(info.purchaseLabel||'去购买保险')+'</button>')
   if(info.canUpload)actions.push('<button type="button" class="pp-ins-cta upload" data-insurance-upload="'+esc(item.id)+'">'+(pp&&info.state!=='pending'?'更换保单':'上传保单 PDF')+'</button>')
   return '<article class="pp-ins-sheet '+tone+'">'+
@@ -419,7 +420,7 @@
     '<div><span>保单号</span><b>'+esc(policyNo||'—')+'</b></div>'+
     '<div><span>保障期</span><b>'+esc(cover)+'</b></div>'+
    '</div>'+
-   (pp?'<p class="pp-ins-guide">已调用个人保单'+(pp.insuredName?'（'+esc(pp.insuredName)+'）':'')+'：'+(info.state==='pending'?'本赛事要求主办方审核，可用个人保单提交，无需重新购买。':'本赛事保险已通过，参赛时直接使用。')+'</p>':'')+
+   (pp?'<p class="pp-ins-guide">已调用个人保单'+(pp.insuredName?'（'+esc(pp.insuredName)+'）':'')+'：'+(info.state!=='pending'?'本赛事保险已通过，参赛时直接使用。':pp.coverageOk?'本赛事要求主办方审核，可用个人保单提交，无需重新购买。':'当前保单有效期 '+esc(cover)+'，未覆盖赛事日期'+(eventRange?'（'+esc(eventRange)+'）':'')+'，请上传覆盖赛事期间的保单。')+'</p>':'')+
    (info.uploaderHint?'<p class="pp-ins-note">'+esc(info.uploaderHint)+'</p>':'')+
    (info.message?'<p class="pp-ins-msg">'+esc(info.message)+'</p>':'')+
    (info.purchaseUrl&&info.canUpload?'<p class="pp-ins-guide">外链购买仅作投保引导，买成后请回到本页上传 PDF。</p>':'')+
