@@ -196,6 +196,10 @@
           </el-form>
         </div>
         <div class="toolbar-right">
+          <el-button v-if="isPadLayout" size="default" @click="benchCollapsed = !benchCollapsed">
+            <el-icon><ArrowUp v-if="!benchCollapsed" /><ArrowDown v-else /></el-icon>
+            {{ benchCollapsed ? '展开替补席' : '收起替补席' }}
+          </el-button>
           <el-button @click="handleExportImageDual" size="default">
             <el-icon><Picture /></el-icon>
             导出
@@ -289,7 +293,7 @@
       </div>
 
       <!-- 替补席区域 -->
-      <div class="dual-substitutes-bar">
+      <div class="dual-substitutes-bar" :class="{ 'is-collapsed': benchCollapsedNow }">
         <!-- 主队替补席 -->
         <div class="dual-squad-bench home-squad-bench">
           <div class="bench-section" style="flex: 1; min-width: auto;">
@@ -493,18 +497,34 @@
 
 <script setup>
 import { parseBenchLimit } from '../../utils/lineupBenchLimit.js'
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Check,
   Picture,
   Document,
   Search,
-  RefreshRight
+  RefreshRight,
+  ArrowUp,
+  ArrowDown
 } from '@element-plus/icons-vue'
 import PlayerCard from '@/components/player/PlayerCard.vue'
 import formationData from '@/data/formation-data.json'
 import fieldBgImage from '@/assets/images/football-field-dual.jpg'
+import { TABLET_LAYOUT_EVENT } from '../../utils/tabletLayout.js'
+
+// 平板横屏固定版面：替补席可收起，收起后球场占满剩余高度
+const isPadLayout = ref(false)
+const benchCollapsed = ref(false)
+const benchCollapsedNow = computed(() => isPadLayout.value && benchCollapsed.value)
+function syncPadLayout() {
+  isPadLayout.value = document.documentElement.hasAttribute('data-tablet-landscape')
+}
+onMounted(() => {
+  syncPadLayout()
+  window.addEventListener(TABLET_LAYOUT_EVENT, syncPadLayout)
+})
+onUnmounted(() => window.removeEventListener(TABLET_LAYOUT_EVENT, syncPadLayout))
 
 // ==================== Props ====================
 const props = defineProps({
@@ -2239,11 +2259,41 @@ function handlePlayerSearch() {}
   }
 }
 
-// ==================== 平板横屏：球员卡整体等比缩小 ====================
-// 只改平板断点下卡的外框尺寸，仍按成卡原始比例 30:43 缩放；
-// 卡内模板、字段、坐标与绘制逻辑不变，手机端与 PC 端不受影响。
+// ==================== 平板横屏：固定版面 + 替补席可收起 ====================
+// 只影响平板断点，手机端与 PC 端布局和尺寸不变。
+// 1) 球员卡整体等比缩放（成卡原始比例 30:43），卡内布局与绘制逻辑不动。
 html[data-tablet-landscape] .visual-lineup-editor .dual-player-slot .slot-card-wrapper {
-  width: 64px;
-  height: 92px;
+  width: 76px;
+  height: 109px;
+}
+
+// 2) 编辑器撑满弹窗正文，取消整页上下滚动；收起替补席后球场占满剩余高度。
+html[data-tablet-landscape] .visual-lineup-editor.is-dual-mode {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+
+  .dual-field-outer {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .dual-substitutes-bar {
+    flex: 0 0 auto;
+    max-height: 32vh;
+    overflow: hidden;
+  }
+
+  .dual-substitutes-bar.is-collapsed {
+    display: none;
+  }
+
+  .dual-squad-bench {
+    padding: 8px 12px;
+  }
+
+  .bench-list {
+    max-height: 20vh;
+  }
 }
 </style>

@@ -118,3 +118,8 @@ html[data-tablet-landscape] #app .division-management .operation-cell .el-button
   html[data-tablet-landscape] #app .division-management .division-table td,html[data-tablet-landscape] #app .division-management .division-table th { padding-inline:8px; }
   html[data-tablet-landscape] #app .division-management .operation-cell { flex-wrap:wrap; gap:0 6px; }
 }
+
+/* 平板横屏：编辑阵容弹窗固定高度，正文不滚动，高度由球场与替补席内部自适应 */
+html[data-tablet-landscape] .lineup-editor-dialog { height: 96vh; margin-top: 0; margin-bottom: 0; display: flex; flex-direction: column; }
+html[data-tablet-landscape] .lineup-editor-dialog .el-dialog__header { flex: 0 0 auto; margin-right: 0; }
+html[data-tablet-landscape] .lineup-editor-dialog .el-dialog__body { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 0 8px 8px; }

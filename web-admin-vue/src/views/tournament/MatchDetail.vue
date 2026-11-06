@@ -600,8 +600,9 @@
       v-model="visualEditorVisible"
       title="编辑阵容"
       width="95%"
-      :close-on-click-modal="false"
       top="2vh"
+      class="lineup-editor-dialog"
+      :close-on-click-modal="false"
     >
       <VisualLineupEditor
         v-if="visualEditorVisible"
