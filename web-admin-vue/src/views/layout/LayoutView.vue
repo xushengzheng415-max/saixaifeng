@@ -58,8 +58,9 @@
     </el-dialog>
 
     <el-dialog v-model="organizationDialogVisible" title="修改机构资料" width="560px">
-      <el-form label-position="top"><el-form-item label="机构名称"><el-input v-model.trim="organizationForm.name" maxlength="80" /></el-form-item><el-form-item label="机构类型"><el-select v-model="organizationForm.organizationType"><el-option v-for="item in organizationTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item><div class="account-location-grid"><el-form-item label="所在省份"><el-select v-model="organizationForm.provinceCode" filterable @change="organizationForm.city=''"><el-option v-for="item in provinceOptions" :key="item.code" :label="item.name" :value="item.code" /></el-select></el-form-item><el-form-item label="所在城市"><el-select v-model="organizationForm.city" filterable :disabled="!organizationForm.provinceCode"><el-option v-for="item in organizationCityOptions" :key="item.code" :label="item.name" :value="item.name" /></el-select></el-form-item></div></el-form>
-      <template #footer><el-button @click="organizationDialogVisible=false">取消</el-button><el-button type="primary" :loading="organizationSubmitting" @click="saveOrganization">保存机构资料</el-button></template>
+      <div v-if="!organizationCanManage" class="organization-readonly-note">仅机构负责人可修改机构资料，请联系负责人。</div>
+      <el-form label-position="top" :disabled="!organizationCanManage"><el-form-item label="机构名称"><el-input v-model.trim="organizationForm.name" maxlength="80" /></el-form-item><el-form-item label="机构类型"><el-select v-model="organizationForm.organizationType"><el-option v-for="item in organizationTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item><div class="account-location-grid"><el-form-item label="所在省份"><el-select v-model="organizationForm.provinceCode" filterable @change="organizationForm.city=''"><el-option v-for="item in provinceOptions" :key="item.code" :label="item.name" :value="item.code" /></el-select></el-form-item><el-form-item label="所在城市"><el-select v-model="organizationForm.city" filterable :disabled="!organizationForm.provinceCode"><el-option v-for="item in organizationCityOptions" :key="item.code" :label="item.name" :value="item.name" /></el-select></el-form-item></div><div class="account-location-grid"><el-form-item label="联系人"><el-input v-model.trim="organizationForm.contactName" maxlength="40" /></el-form-item><el-form-item label="联系电话"><el-input v-model.trim="organizationForm.contactPhone" maxlength="24" /></el-form-item></div></el-form>
+      <template #footer><el-button @click="organizationDialogVisible=false">{{ organizationCanManage ? '取消' : '关闭' }}</el-button><el-button v-if="organizationCanManage" type="primary" :loading="organizationSubmitting" @click="saveOrganization">保存机构资料</el-button></template>
     </el-dialog>
 
     <!-- 强制设置密码弹窗（不可关闭） -->
@@ -421,8 +422,9 @@ const organizationDialogVisible = ref(false)
 const profileSubmitting = ref(false)
 const accountDeleting = ref(false)
 const organizationSubmitting = ref(false)
+const organizationCanManage = ref(true)
 const profileForm = reactive({ nickname: '' })
-const organizationForm = reactive({ name: '', organizationType: '', provinceCode: '', city: '' })
+const organizationForm = reactive({ name: '', organizationType: '', provinceCode: '', city: '', contactName: '', contactPhone: '' })
 const organizationRecord = ref(initialStoredOrganization || {})
 const organizationTypeOptions = [{ value:'event_company', label:'赛事公司' }, { value:'club', label:'足球俱乐部' }, { value:'school', label:'学校' }, { value:'association', label:'足协/体育组织' }, { value:'other', label:'其他机构' }]
 const provinceOptions = provincesData
@@ -546,10 +548,14 @@ async function openOrganizationDialog() {
     return
   }
   const organization = state.organization
+  organizationCanManage.value = state.canManageWorkspace === true
+  if (state.accessError) ElMessage.warning(state.accessError)
   organizationForm.name = organization.name || organization.organizationName || organizationDisplayName.value
   organizationForm.organizationType = organization.organizationType || ''
   organizationForm.provinceCode = organization.provinceCode || ''
   organizationForm.city = organization.city || ''
+  organizationForm.contactName = organization.contactName || ''
+  organizationForm.contactPhone = organization.contactPhone || ''
   organizationDialogVisible.value = true
 }
 async function saveProfile() {
@@ -593,6 +599,7 @@ async function deleteCurrentAccount() {
 }
 async function saveOrganization() {
   if (organizationSubmitting.value) return
+  if (!organizationCanManage.value) return ElMessage.warning('仅机构负责人可修改机构资料，请联系负责人')
   if (organizationForm.name.length < 2 || !organizationForm.organizationType || !organizationForm.provinceCode || !organizationForm.city) return ElMessage.warning('请完整填写机构资料')
   organizationSubmitting.value = true
   try {
@@ -1419,6 +1426,7 @@ onUnmounted(() => {
 .account-dropdown-summary strong { color:#1f3026; font-size:14px; }.account-dropdown-summary span { color:#758079; font-size:12px; }
 .phone-bind-note { margin-bottom:14px; color:#66736b; font-size:13px; }
 .profile-phone-row { display:flex; min-height:32px; align-items:center; gap:10px; }
+.organization-readonly-note { margin-bottom:12px; padding:8px 12px; border-radius:8px; background:#fdf6ec; color:#b9770e; font-size:13px; line-height:1.5; }
 .profile-phone-row>span { color:#26332c; font-size:15px; }
 .profile-dialog-footer { display:flex; width:100%; align-items:center; justify-content:space-between; gap:12px; }
 .account-location-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }.account-location-grid :deep(.el-select),.layout :deep(.el-dialog .el-select) { width:100%; }
