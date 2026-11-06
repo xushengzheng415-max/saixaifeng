@@ -2238,4 +2238,12 @@ function handlePlayerSearch() {}
     padding: 4px 8px;
   }
 }
+
+// ==================== 平板横屏：球员卡整体等比缩小 ====================
+// 只改平板断点下卡的外框尺寸，仍按成卡原始比例 30:43 缩放；
+// 卡内模板、字段、坐标与绘制逻辑不变，手机端与 PC 端不受影响。
+html[data-tablet-landscape] .visual-lineup-editor .dual-player-slot .slot-card-wrapper {
+  width: 96px;
+  height: 138px;
+}
 </style>
