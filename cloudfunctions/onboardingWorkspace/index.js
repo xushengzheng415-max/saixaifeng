@@ -45,6 +45,18 @@ async function safeRows(collection, condition, limit) {
   }
 }
 
+// 成员关系查询失败不能等同于“没有成员”，否则会把读取异常误报成“只有机构负责人可以修改”。
+async function queryRowsOrThrow(collection, condition, limit) {
+  const result = await db.collection(collection).where(condition).limit(limit || 5).get()
+  return result.data || []
+}
+
+function membershipQueryError() {
+  const error = new Error('机构成员关系读取失败，请稍后重试')
+  error.code = 'MEMBERSHIP_QUERY_FAILED'
+  return error
+}
+
 async function rowsByIds(collection, ids, limit) {
   const uniqueIds = Array.from(new Set((ids || []).map(function(value) {
     return String(value || '').trim()
@@ -88,14 +100,19 @@ async function organizationAccess(identity, organization) {
   const organizationId = String(organization && (organization._id || organization.id) || '')
   if (!organizationId) return { isMember: false, canEvent: false, canTraining: false }
   const userId = String(identity.user._id)
-  const membershipRows = await safeRows('organization_memberships', _.or([
-    { orgId: organizationId, userId },
-    { orgId: organizationId, memberUserId: userId },
-    { organizationId, userId },
-    { organizationId, memberUserId: userId },
-    { organization_id: organizationId, userId },
-    { organization_id: organizationId, memberUserId: userId }
-  ]), 20)
+  let membershipRows = []
+  try {
+    membershipRows = await queryRowsOrThrow('organization_memberships', _.or([
+      { orgId: organizationId, userId },
+      { orgId: organizationId, memberUserId: userId },
+      { organizationId, userId },
+      { organizationId, memberUserId: userId },
+      { organization_id: organizationId, userId },
+      { organization_id: organizationId, memberUserId: userId }
+    ]), 20)
+  } catch (error) {
+    throw membershipQueryError()
+  }
   const membership = membershipRows.find(isActiveMembership) || null
   const isOwner = [organization.ownerId, organization.creatorId, organization.createdBy].some(function(value) {
     return identityMatches(value, userId)
@@ -105,6 +122,19 @@ async function organizationAccess(identity, organization) {
     canManageWorkspace: Boolean(isOwner || (membership && hasPermission(membership, 'workspace.manage'))),
     canEvent: Boolean(isOwner || (membership && hasPermission(membership, 'event.manage'))),
     canTraining: Boolean(isOwner || (membership && (hasPermission(membership, 'education.manage') || hasPermission(membership, 'workspace.manage'))))
+  }
+}
+
+async function withOrganizationAccess(identity, state) {
+  if (!state.organization) {
+    return Object.assign({}, state, { canManageWorkspace: false, accessError: '' })
+  }
+  try {
+    const access = await organizationAccess(identity, state.organization)
+    return Object.assign({}, state, { canManageWorkspace: access.canManageWorkspace === true, accessError: '' })
+  } catch (error) {
+    // 读取失败与“没有管理权限”分开返回，避免前端把异常显示成“只有机构负责人可以修改”。
+    return Object.assign({}, state, { canManageWorkspace: false, accessError: error.message || '机构成员关系读取失败，请稍后重试' })
   }
 }
 
@@ -123,14 +153,18 @@ async function updateOrganization(identity, event) {
   const province = cleanText(event.province, 40)
   const provinceCode = cleanText(event.provinceCode, 12)
   const city = cleanText(event.city, 40)
+  const contactName = cleanText(event.contactName, 40)
+  const contactPhone = cleanText(event.contactPhone, 24)
   if (name.length < 2) throw new Error('机构名称需为 2–80 个字')
   if (!ORGANIZATION_TYPES[organizationType]) throw new Error('请选择机构类型')
   if (!province || !provinceCode || !city) throw new Error('请选择机构所在省份和城市')
+  if (contactPhone && !/^[0-9+\-\s()]{6,24}$/.test(contactPhone)) throw new Error('联系电话格式不正确')
   const state = await loadOnboardingState(identity)
   if (!state.organization) throw new Error('当前账号尚未建立机构')
   const access = await organizationAccess(identity, state.organization)
   if (!access.canManageWorkspace) throw new Error('只有机构负责人可以修改机构资料')
   const orgId = String(state.organization._id || state.organization.id)
+  // 只允许改资料字段；机构归属（orgId/ownerId/creatorId/createdBy）不在此入口的写入范围内。
   await db.collection('organizations').doc(orgId).update({
     data: {
       name,
@@ -140,6 +174,8 @@ async function updateOrganization(identity, event) {
       province,
       provinceCode,
       city,
+      contactName,
+      contactPhone,
       updateTime: db.serverDate()
     }
   })
@@ -153,6 +189,8 @@ async function updateOrganization(identity, event) {
       province,
       provinceCode,
       city,
+      contactName,
+      contactPhone,
       capabilities: Array.isArray(state.organization.capabilities) ? state.organization.capabilities : []
     }
   }
@@ -331,11 +369,17 @@ async function loadOnboardingState(identity) {
   )
   const hasTeamRelation = allTeamRows.length > 0
   const trainingProvision = await findTrainingProvision(identity)
+  const ownedOrganizationIds = validOrganizationRows.filter(function(organization) {
+    return [organization.ownerId, organization.creatorId, organization.createdBy].some(function(value) {
+      return identityMatches(value, userId)
+    })
+  }).map(function(organization) { return organization._id })
   const choice = chooseOrganizerOrganization({
     validIds: validOrganizationRows.map(row => row._id),
     explicitIds: [user.orgId, user.organizationId],
     memberships: organizationMemberships,
-    tournamentOrgIds: (directTournaments.data || []).map(row => row.orgId || row.organizationId || row.organization_id)
+    tournamentOrgIds: (directTournaments.data || []).map(row => row.orgId || row.organizationId || row.organization_id),
+    ownedOrganizationIds
   })
   const organizationConflict = choice.organizationConflict
   const selectedOrgId = choice.orgId || (!organizationConflict && validOrganizationRows.length === 1 ? String(validOrganizationRows[0]._id) : '')
@@ -916,7 +960,7 @@ exports.main = async function(event) {
   event = event || {}
   try {
     const identity = await currentUser(event)
-    if (event.action === 'state') return await loadOnboardingState(identity)
+    if (event.action === 'state') return await withOrganizationAccess(identity, await loadOnboardingState(identity))
     if (event.action === 'organizerInboxList') return await organizerInboxList(identity)
     if (event.action === 'organizerInboxMarkRead') return await organizerInboxMarkRead(identity, event)
     if (event.action === 'updateProfile') return await updateProfile(identity, event)
