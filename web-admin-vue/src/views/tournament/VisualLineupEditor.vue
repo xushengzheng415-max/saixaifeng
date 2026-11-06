@@ -135,9 +135,6 @@
     <template v-if="props.mode === 'dual'">
       <!-- 顶部工具栏 -->
       <div class="editor-toolbar dual-toolbar">
-        <div class="toolbar-left">
-          <h2 class="editor-title">{{ props.homeTeamName || '主队' }} vs {{ props.awayTeamName || '客队' }}</h2>
-        </div>
         <div class="toolbar-center dual-formations">
           <el-form :inline="true">
             <el-form-item label="比赛人数">
@@ -1677,10 +1674,6 @@ function handlePlayerSearch() {}
   background: rgba(10, 31, 15, 0.92);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-
-  .editor-title {
-    color: #fff;
-  }
 
   :deep(.el-form-item__label) {
     color: rgba(255, 255, 255, 0.85);
