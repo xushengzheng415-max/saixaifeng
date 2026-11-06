@@ -26,7 +26,11 @@ public class MainActivity extends Activity {
     private Button more;
     private ValueCallback<Uri[]> upload;
     private byte[] exportBytes;
-    private String bridgeNonce = "", failedUrl = ClientPolicy.HOME, updateUrl = "", updateVersion = "", updateNotes = "";
+    private TextView title;
+    private SharedPreferences prefs;
+    private boolean previewChannel = true;
+    private String homeUrl = ClientPolicy.HOME_PREVIEW;
+    private String bridgeNonce = "", failedUrl = ClientPolicy.HOME_PREVIEW, updateUrl = "", updateVersion = "", updateNotes = "";
     private volatile boolean checking = false;
     private boolean updatePromptShown;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -35,6 +39,9 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         WebView.setWebContentsDebuggingEnabled(false);
+        prefs = getSharedPreferences("channel", MODE_PRIVATE);
+        previewChannel = !ClientPolicy.CHANNEL_PRODUCTION.equals(prefs.getString("channel", ClientPolicy.CHANNEL_PREVIEW));
+        homeUrl = ClientPolicy.home(previewChannel); failedUrl = homeUrl;
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.WHITE);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
@@ -42,15 +49,16 @@ public class MainActivity extends Activity {
         });
         if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(0, () -> back());
         LinearLayout bar = new LinearLayout(this); bar.setGravity(Gravity.CENTER_VERTICAL); bar.setPadding(dp(10), 0, dp(10), 0); bar.setBackgroundColor(Color.rgb(244,247,245));
-        TextView title = new TextView(this); title.setText("赛小蜂足球 · 平板测试版"); title.setTextColor(Color.rgb(18,75,48)); title.setTextSize(14);
+        title = new TextView(this); title.setText(channelTitle()); title.setTextColor(Color.rgb(18,75,48)); title.setTextSize(14);
         bar.addView(title, new LinearLayout.LayoutParams(0, dp(44), 1)); title.setGravity(Gravity.CENTER_VERTICAL);
         bar.addView(button("返回", () -> back())); bar.addView(button("刷新", () -> reload())); more = button("更多", () -> menu()); bar.addView(more);
         root.addView(bar); progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); root.addView(progress, new LinearLayout.LayoutParams(-1, dp(2)));
         content = new FrameLayout(this); root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1)); setContentView(root);
         createWeb(); createErrorPanel();
-        if (state == null || web.restoreState(state) == null) web.loadUrl(ClientPolicy.freshPageUrl(ClientPolicy.HOME, System.currentTimeMillis()));
+        if (state == null || web.restoreState(state) == null) web.loadUrl(ClientPolicy.freshPageUrl(homeUrl, System.currentTimeMillis(), homeUrl));
         checkUpdates(false);
     }
+    private String channelTitle() { return "赛小蜂足球 · 平板" + (previewChannel ? "测试版" : "正式版"); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private Button button(String text, Runnable action) {
         Button b = new Button(this); b.setText(text); b.setTextSize(12); b.setMinWidth(dp(60)); b.setMinimumWidth(dp(60));
@@ -91,9 +99,9 @@ public class MainActivity extends Activity {
             @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
                 if (request.isForMainFrame() && response.getStatusCode() >= 400) showError(request.getUrl().toString());
             }
-            @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); showError(ClientPolicy.HOME); }
+            @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); showError(homeUrl); }
             @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
-                content.removeView(view); view.destroy(); web = null; showError(ClientPolicy.HOME); return true;
+                content.removeView(view); view.destroy(); web = null; showError(homeUrl); return true;
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -125,7 +133,7 @@ public class MainActivity extends Activity {
         TextView text = new TextView(this); text.setText("暂时无法连接，请检查网络"); text.setTextSize(18); errorPanel.addView(text);
         errorPanel.addView(button("重新连接", () -> reload())); content.addView(errorPanel, new FrameLayout.LayoutParams(-1,-1)); errorPanel.setVisibility(View.GONE);
     }
-    private void showError(String url) { failedUrl = ClientPolicy.firstParty(url) ? url : ClientPolicy.HOME; if (errorPanel != null) { errorPanel.setVisibility(View.VISIBLE); errorPanel.bringToFront(); } progress.setVisibility(View.GONE); }
+    private void showError(String url) { failedUrl = ClientPolicy.firstParty(url) ? url : homeUrl; if (errorPanel != null) { errorPanel.setVisibility(View.VISIBLE); errorPanel.bringToFront(); } progress.setVisibility(View.GONE); }
     private void reload() {
         if (web == null) { createWeb(); errorPanel.bringToFront(); }
         String target = ClientPolicy.firstParty(web.getUrl()) ? web.getUrl() : failedUrl;
@@ -136,7 +144,7 @@ public class MainActivity extends Activity {
         web.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
         java.util.Map<String,String> headers = new java.util.HashMap<>();
         headers.put("Cache-Control", "no-cache, no-store, max-age=0"); headers.put("Pragma", "no-cache");
-        web.loadUrl(ClientPolicy.freshPageUrl(target, System.currentTimeMillis()), headers);
+        web.loadUrl(ClientPolicy.freshPageUrl(target, System.currentTimeMillis(), homeUrl), headers);
     }
     private void back() { if (web != null && web.canGoBack()) web.goBack(); else new AlertDialog.Builder(this).setMessage("退出赛小蜂足球？").setNegativeButton("取消", null).setPositiveButton("退出", (d,w) -> finish()).show(); }
     @Override public void onBackPressed() { back(); }
@@ -145,12 +153,39 @@ public class MainActivity extends Activity {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception ignored) { toast("没有可打开此链接的应用"); }
     }
     private void menu() {
-        String[] items = {updateUrl.isEmpty() ? "检查更新" : "发现新版本 " + updateVersion, "在浏览器打开", "应用信息"};
+        String[] items = {updateUrl.isEmpty() ? "检查更新" : "发现新版本 " + updateVersion, previewChannel ? "切换正式版" : "切换测试版", "在浏览器打开", "应用信息"};
         new AlertDialog.Builder(this).setTitle("赛小蜂足球 " + ClientPolicy.VERSION).setItems(items, (d,w) -> {
             if (w == 0) { if (!updateUrl.isEmpty()) confirmUpdate(); else checkUpdates(true); }
-            else if (w == 1) external(web != null && ClientPolicy.firstParty(web.getUrl()) ? web.getUrl() : ClientPolicy.HOME);
-            else new AlertDialog.Builder(this).setTitle("平板测试版 " + ClientPolicy.VERSION).setMessage("当前连接测试后台，数据与官网共用。\n页面更新联网生效；安装包升级将在此提示。").setPositiveButton("确定",null).show();
+            else if (w == 1) confirmSwitch();
+            else if (w == 2) external(web != null && ClientPolicy.firstParty(web.getUrl()) ? web.getUrl() : homeUrl);
+            else new AlertDialog.Builder(this).setTitle(channelTitle() + " " + ClientPolicy.VERSION).setMessage(channelMessage()).setPositiveButton("确定",null).show();
         }).show();
+    }
+    private String channelMessage() {
+        if (previewChannel) return "当前连接测试后台 /preview/admin/，与正式环境共用同一套云端数据，写操作请只使用明确的测试数据。\n页面更新联网生效；安装包升级将在此提示。";
+        return "当前连接正式后台 /admin/，审核、保存、删除等操作会直接写入真实业务数据，请谨慎操作。\n页面更新联网生效；安装包升级将在此提示。";
+    }
+    private void confirmSwitch() {
+        boolean target = !previewChannel;
+        new AlertDialog.Builder(this).setTitle(target ? "切换到正式版？" : "切换到测试版？")
+            .setMessage(target ? "正式版连接生产后台，审核、保存等操作会写入真实数据。\n切换后会清除本机网页登录会话，需要重新登录。" : "测试版连接测试后台，但与正式环境共用同一套云端数据，请只使用测试数据。\n切换后会清除本机网页登录会话，需要重新登录。")
+            .setNegativeButton("取消", null).setPositiveButton("切换", (d,w) -> switchChannel(target)).show();
+    }
+    private void switchChannel(boolean targetPreview) {
+        previewChannel = targetPreview; homeUrl = ClientPolicy.home(targetPreview);
+        prefs.edit().putString("channel", targetPreview ? ClientPolicy.CHANNEL_PREVIEW : ClientPolicy.CHANNEL_PRODUCTION).apply();
+        title.setText(channelTitle());
+        failedUrl = homeUrl; updateUrl = ""; updateVersion = ""; updateNotes = ""; updatePromptShown = false; more.setText("更多");
+        errorPanel.setVisibility(View.GONE);
+        if (web != null) { web.stopLoading(); web.clearCache(true); web.clearHistory(); }
+        // 两个通道同域，Cookie 与 DOM 存储必须清除，避免测试会话带到正式环境。
+        CookieManager.getInstance().removeAllCookies(cleared -> ui.post(() -> {
+            CookieManager.getInstance().flush();
+            WebStorage.getInstance().deleteAllData();
+            if (web == null) { createWeb(); errorPanel.bringToFront(); }
+            if (web != null) web.loadUrl(ClientPolicy.freshPageUrl(homeUrl, System.currentTimeMillis(), homeUrl));
+            toast("已切换为" + (previewChannel ? "测试版" : "正式版") + "，请重新登录");
+        }));
     }
     private void checkUpdates(boolean manual) {
         if (checking) return; checking = true;
@@ -196,7 +231,7 @@ public class MainActivity extends Activity {
             r.setDescription("正在下载平板更新包");
             r.setMimeType("application/vnd.android.package-archive");
             r.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, ClientPolicy.filename("SxfFootball-Pad-" + updateVersion + "-preview.apk"));
+            r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, ClientPolicy.filename("SxfFootball-Pad-" + updateVersion + ".apk"));
             ((android.app.DownloadManager)getSystemService(DOWNLOAD_SERVICE)).enqueue(r);
             toast("已开始后台下载，完成后打开通知安装");
         } catch (Exception ignored) { external(updateUrl); }

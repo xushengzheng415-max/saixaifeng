@@ -31,7 +31,7 @@ $password=[Net.NetworkCredential]::new('',$secure).Password
 
 try{
   $env:SXF_PAD_SIGN_PASSWORD=$password
-  $apk=Join-Path $release "SxfFootball-Pad-$version-preview.apk"
+  $apk=Join-Path $release "SxfFootball-Pad-$version.apk"
   Invoke-Checked (Join-Path $jdk 'bin/java.exe') @('-jar',(Join-Path $tools 'lib/apksigner.jar'),'sign','--ks',$key,'--ks-key-alias','football-pad-preview','--ks-pass','env:SXF_PAD_SIGN_PASSWORD','--key-pass','env:SXF_PAD_SIGN_PASSWORD','--out',$apk,(Join-Path $build 'aligned.apk'))
   Invoke-Checked (Join-Path $jdk 'bin/java.exe') @('-jar',(Join-Path $tools 'lib/apksigner.jar'),'verify','--verbose','--print-certs',$apk)
   Invoke-Checked (Join-Path $tools 'aapt2.exe') @('dump','badging',$apk)
