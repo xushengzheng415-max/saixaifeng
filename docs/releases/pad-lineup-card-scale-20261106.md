@@ -49,3 +49,15 @@ html[data-tablet-landscape] .visual-lineup-editor .dual-player-slot .slot-card-w
 - 第二轮部署：`preview/admin` 上传 409 个文件成功。
 - 第二轮读回：`/preview/admin/index.html` 200，入口 `/preview/admin/assets/index-DE0T0v6X.js`、`index-7eBerNJa.css`；线上 `MatchDetail-BzUCkaYr.css` SHA-256 `844EF9BF50BEDBF998E0BC6A562CF57A040FA6F75217747CA478A5E489C6A0B1` 与本地一致，含平板规则 `64×92` 与桌面基线 `126×181`；线上 `football-field-dual-BhX1KT2o.jpg` 为 232181 字节，SHA-256 `6E6737ABF3833558B9A9A216297262AC8A156CF47C54B6D063C95385C72EB076` 与本地一致。正式 `/admin/` 本次未部署。
 - 仍需真机确认：平板应用内「刷新」后看球场是否恢复、卡片大小是否合适。若球场依旧空白，则需要平板端 WebView 控制台或日志继续排查。
+
+## 第三轮（同日，固定版面 + 替补席可收起）
+
+真机确认球场已恢复。用户提出：卡片稍微放大一点；替补席可收起，收起时球场整体变大、展开时变小；整个界面固定，不再上下滚动（后续裁判执裁也用这个版面）。
+
+- 球员卡：平板断点由 `64×92` 调整为 `76×109`，仍是 30:43 等比缩放，卡内布局与绘制逻辑不变；桌面基线 `126×181` 未改。
+- 替补席收起：`VisualLineupEditor.vue` 增加 `benchCollapsed` 状态与工具栏按钮（仅平板显示），收起时替补席整块隐藏，球场用剩余高度自动变大；展开后恢复。
+- 固定版面：平板下编辑阵容弹窗 `el-dialog` 固定 `96vh` 并纵向 flex，正文 `overflow:hidden`；编辑器高度由 `100vh` 改为 `100%`，球场区 `flex:1` 吸收剩余高度，替补席限高 `32vh`、内部列表 `20vh`，页面不再上下滚动。
+- 影响范围：所有新增规则都限定在 `html[data-tablet-landscape]`；手机端与 PC 端布局、尺寸、滚动行为不变。`MatchDetail.vue` 只给阵容弹窗加了 `lineup-editor-dialog` 类名用于平板定位，`tablet-landscape.css` 末尾新增该弹窗的平板规则。
+- 第三轮构建：`pc-release.json` 为 `sourceCommit=802c1ab81`、`sourceDirty=false`；部署 `preview/admin` 409 个文件成功。
+- 第三轮读回：`/preview/admin/index.html` 200，入口 `index-CRrmwGWe.js`、`index-BOwWh4Jk.css`；`index-BOwWh4Jk.css` SHA-256 `8BB3A5C1E94546649ACAC95EAD9F48E7E671686CAABF425012ECE6344EC4A180`、`MatchDetail-DXSJhyqW.css` SHA-256 `014F983B302DA213E7184AF0C56C995B589A366F110E1244CFE14EA88E4AB10D`，均与本地一致。正式 `/admin/` 本次未部署。
+- 仍需真机确认：收起/展开替补席后的球场高度、固定版面在你的平板上没有溢出或被裁切；如仍有留白或按钮挤压，只需微调 `32vh`、`20vh` 与卡片 `76×109` 这几处数值。
