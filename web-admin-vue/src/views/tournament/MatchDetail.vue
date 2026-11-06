@@ -655,7 +655,7 @@
 
     <!-- 添加比赛事件弹窗 -->
     <el-dialog v-model="eventDialogVisible" title="添加比赛事件" width="680px" class="event-dialog">
-      <el-form v-loading="eventPlayersLoading" :model="eventForm" label-position="top" class="event-form">
+      <el-form :model="eventForm" label-position="top" class="event-form">
         <div class="event-form-grid">
           <el-form-item label="时间（分钟）" required>
             <el-select v-model="eventForm.minute" filterable placeholder="先选择比赛分钟" style="width:100%">
@@ -695,9 +695,9 @@
             <header><div><strong>换人名单</strong><span>每次最多5组</span></div><el-button size="small" plain type="primary" :disabled="eventForm.substitutions.length >= 5" @click="addSubstitutionRow"><el-icon><Plus /></el-icon>增加一组</el-button></header>
             <div v-for="(row,index) in eventForm.substitutions" :key="index" class="substitution-row">
               <span class="substitution-index">{{ index + 1 }}</span>
-              <el-select v-model="row.outId" filterable clearable placeholder="选择当前在场球员"><el-option v-for="player in substitutionOutOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-select v-model="row.outId" filterable clearable :loading="eventPlayersLoading" placeholder="选择当前在场球员"><el-option v-for="player in substitutionOutOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
               <el-icon class="substitution-arrow"><Right /></el-icon>
-              <el-select v-model="row.inId" filterable clearable placeholder="选择可用替补"><el-option v-for="player in substitutionInOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-select v-model="row.inId" filterable clearable :loading="eventPlayersLoading" placeholder="选择可用替补"><el-option v-for="player in substitutionInOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
               <el-button v-if="eventForm.substitutions.length > 1" text type="danger" circle aria-label="删除这组换人" @click="removeSubstitutionRow(index)"><el-icon><Delete /></el-icon></el-button>
             </div>
           </section>
@@ -713,12 +713,12 @@
             :description="eventOnFieldTip.description"
           />
           <el-form-item :label="eventPlayerFieldLabel" required>
-            <el-select v-model="eventForm.playerName" filterable clearable :disabled="!eventMinuteSelected" :placeholder="eventPlayerPlaceholder" style="width:100%">
+            <el-select v-model="eventForm.playerName" filterable clearable :loading="eventPlayersLoading" :disabled="!eventMinuteSelected" :placeholder="eventPlayerPlaceholder" style="width:100%">
               <el-option v-for="player in eventPlayerOptions" :key="player.value" :label="player.label" :value="player.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="助攻球员" v-if="eventForm.type === 'goal'">
-            <el-select v-model="eventForm.assistName" filterable clearable :disabled="!eventMinuteSelected" placeholder="选择助攻球员（可选）" style="width:100%">
+            <el-select v-model="eventForm.assistName" filterable clearable :loading="eventPlayersLoading" :disabled="!eventMinuteSelected" placeholder="选择助攻球员（可选）" style="width:100%">
               <el-option v-for="player in eventAssistOptions" :key="player.value" :label="player.label" :value="player.value" />
             </el-select>
           </el-form-item>
@@ -1656,9 +1656,10 @@ const selectedCrewOptions = computed(() => {
 })
 const operationRefereeName = computed(() => {
   const id = match.value.operationRefereeId
+  if (!id) return ''
   for (const role of refereeRoleOptions.value) {
     const referee = refereeCrew.value[role.key]
-    if (referee?._id === id) return referee.name
+    if (referee && String(referee._id || '') === String(id)) return referee.name || ''
   }
   return ''
 })
@@ -1921,9 +1922,24 @@ async function loadMatch() {
     if (!m.matchSequence && !m.sequence) {
       calculateMatchSequence(m)
     }
+    prefetchEventPlayers()
   } catch (err) {
     ElMessage.error('加载比赛失败: ' + err.message)
   }
+}
+
+// 详情页打开后预热两队球员名单，避免首次点“添加事件”时再等一轮网络。
+function prefetchEventPlayers() {
+  const targets = [
+    [homePlayers, match.value.homeTeamId],
+    [awayPlayers, match.value.awayTeamId]
+  ]
+  targets.forEach(([target, teamId]) => {
+    if (!teamId || target.value.length) return
+    loadTeamPlayers(teamId).then(players => {
+      if (players.length && !target.value.length) target.value = players
+    })
+  })
 }
 
 // 自动计算场序（按比赛日期时间排序）
@@ -2405,6 +2421,8 @@ async function openAddEventDialog() {
     ])
     homePlayers.value = home
     awayPlayers.value = away
+  } catch (error) {
+    ElMessage.error('加载球员名单失败：' + (error?.message || '请稍后重试'))
   } finally {
     eventPlayersLoading.value = false
   }
