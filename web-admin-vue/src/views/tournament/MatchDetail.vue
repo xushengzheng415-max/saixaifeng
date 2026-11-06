@@ -19,14 +19,14 @@
       </div>
 
       <div class="hero-score-area">
-        <template v-if="match.status === 'finished' || match.status === 'completed'">
+        <template v-if="showHeroScore">
           <div class="hero-score">
             <span class="score-num">{{ displayHomeScore }}</span>
             <span class="score-sep">:</span>
             <span class="score-num">{{ displayAwayScore }}</span>
           </div>
           <div class="hero-match-time">{{ match.matchDate }} {{ match.matchTime }}</div>
-          <MatchDecision :match="match" style="color:#f6d992" />
+          <MatchDecision v-if="isMatchFinished" :match="match" style="color:#f6d992" />
           <div class="hero-venue">{{ match.venue || '场地待定' }}</div>
         </template>
         <template v-else>
@@ -624,6 +624,11 @@
     <el-dialog v-model="eventDialogVisible" title="添加比赛事件" width="680px" class="event-dialog">
       <el-form v-loading="eventPlayersLoading" :model="eventForm" label-position="top" class="event-form">
         <div class="event-form-grid">
+          <el-form-item label="时间（分钟）" required>
+            <el-select v-model="eventForm.minute" filterable placeholder="先选择比赛分钟" style="width:100%">
+              <el-option v-for="option in eventMinuteOptions" :key="option.value" :label="option.label" :value="option.value" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="事件类型">
           <el-select v-model="eventForm.type" style="width:100%">
             <el-option label="进球 ⚽" value="goal" />
@@ -636,11 +641,6 @@
             <el-option label="点球未进" value="penalty_missed" />
             <el-option label="乌龙球 ⚽（OG）" value="own_goal" />
           </el-select>
-          </el-form-item>
-          <el-form-item label="时间（分钟）">
-            <el-select v-model="eventForm.minute" filterable placeholder="选择比赛分钟" style="width:100%">
-              <el-option v-for="option in eventMinuteOptions" :key="option.value" :label="option.label" :value="option.value" />
-            </el-select>
           </el-form-item>
         </div>
         <el-form-item label="球队" class="event-team-item">
@@ -669,16 +669,27 @@
             </div>
           </section>
         </template>
-        <el-form-item v-else :label="eventPlayerFieldLabel" required>
-          <el-select v-model="eventForm.playerName" filterable clearable :placeholder="eventPlayerPlaceholder" style="width:100%">
-            <el-option v-for="player in eventPlayerOptions" :key="player.value" :label="player.label" :value="player.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="助攻球员" v-if="eventForm.type === 'goal'">
-          <el-select v-model="eventForm.assistName" filterable clearable placeholder="选择助攻球员（可选）" style="width:100%">
-            <el-option v-for="player in eventAssistOptions" :key="player.value" :label="player.label" :value="player.value" />
-          </el-select>
-        </el-form-item>
+        <template v-else>
+          <el-alert
+            v-if="eventOnFieldTip"
+            class="event-on-field-tip"
+            :type="eventOnFieldTip.type"
+            :closable="false"
+            show-icon
+            :title="eventOnFieldTip.title"
+            :description="eventOnFieldTip.description"
+          />
+          <el-form-item :label="eventPlayerFieldLabel" required>
+            <el-select v-model="eventForm.playerName" filterable clearable :placeholder="eventPlayerPlaceholder" style="width:100%">
+              <el-option v-for="player in eventPlayerOptions" :key="player.value" :label="player.label" :value="player.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="助攻球员" v-if="eventForm.type === 'goal'">
+            <el-select v-model="eventForm.assistName" filterable clearable placeholder="选择助攻球员（可选）" style="width:100%">
+              <el-option v-for="player in eventAssistOptions" :key="player.value" :label="player.label" :value="player.value" />
+            </el-select>
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="eventDialogVisible = false">取消</el-button>
@@ -1159,6 +1170,7 @@ import PenaltyShootoutEditor from '../../components/match/PenaltyShootoutEditor.
 import { evaluatePenaltyShootout } from '../../../../cloudfunctions/dataCenter/shared/penalty-shootout.mjs'
 import {groupedTimeline} from '../../utils/refereeGroupedSubstitutions.js'
 import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
+import { calculateMatchEventScore } from '../../../../cloudfunctions/dataCenter/shared/match-events.mjs'
 
 const route = useRoute()
 const router = useRouter()
@@ -1268,7 +1280,7 @@ const forfeitReason = ref('')
 const eventDialogVisible = ref(false)
 const eventPlayersLoading = ref(false)
 const emptySubstitution = () => ({ outId:'',inId:'' })
-const newEventForm = () => ({ type:'goal',minute:0,teamSide:'home',playerName:'',assistName:'',substitutionPeriod:'first_half',substitutions:[emptySubstitution()] })
+const newEventForm = () => ({ type:'goal',minute:'',teamSide:'home',playerName:'',assistName:'',substitutionPeriod:'first_half',substitutions:[emptySubstitution()] })
 const eventForm = ref(newEventForm())
 const eventMinuteOptions = Array.from({ length:131 }, (_,minute) => ({ value:minute,label:`${minute}′` }))
 const substitutionPeriodOptions = [{ label:'上半场',value:'first_half' },{ label:'中场休息',value:'halftime' },{ label:'下半场',value:'second_half' }]
@@ -1276,13 +1288,42 @@ const eventPlayerFieldLabel = computed(() => ['yellow_card','red_card','second_y
 const eventPlayerPlaceholder = computed(() => ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员')
 const isPlayerRecord = player => Boolean(player && typeof player === 'object' && !Array.isArray(player))
 const getPlayerId = player => isPlayerRecord(player) ? String(player.playerId || player.id || player._id || '') : ''
+const eventMinuteSelected = computed(() => eventForm.value.minute !== '' && eventForm.value.minute != null)
+// 在场球员按所填时间点从首发 + 已记录的换人/罚下事件推导，复用数据中心统一换人状态。
+// 口径：换人当分钟即时生效（事件 minute <= 所选分钟都会计入），第 45 分钟换人时选 45 分钟看到的就是换上的人；
+// 该分钟及之后的事件应记在换上球员名下。现有事件只有分钟、没有补时/加时阶段字段，
+// 补时与加时场景的在场推导可能不精确，不额外造阶段数据。
+const eventOnFieldState = computed(() => {
+  if (!eventMinuteSelected.value) return { known: false, players: [] }
+  const state = substitutionState(match.value, effectiveSubstitutionRules.value, match.value.events || [], Number(eventForm.value.minute))
+  const side = state?.sides?.[eventForm.value.teamSide] || {}
+  return { known: Boolean(side.known), players: Array.isArray(side.outgoing) ? side.outgoing.filter(isPlayerRecord) : [] }
+})
+// 阵容或时间点无法判定时返回 null，候选回退为全队名单并在弹窗内提示。
+const eventOnFieldFilter = computed(() => {
+  const { known, players } = eventOnFieldState.value
+  if (!known || !players.length) return null
+  return { ids: new Set(players.map(getPlayerId).filter(Boolean)), players }
+})
+function isOnFieldAtEventMinute(player) {
+  const filter = eventOnFieldFilter.value
+  if (!filter) return true
+  const id = getPlayerId(player)
+  if (id && filter.ids.has(id)) return true
+  // 名单与球员库 ID 不一致时，用姓名 + 号码兼容匹配，不做跨人合并。
+  const name = String(player?.name || player?.playerName || '').trim()
+  if (!name) return false
+  const number = String(player?.jerseyNumber ?? player?.number ?? '').trim()
+  return filter.players.some(row => String(row.name || row.playerName || '').trim() === name &&
+    (!number || !String(row.number ?? row.jerseyNumber ?? '').trim() || String(row.number ?? row.jerseyNumber ?? '').trim() === number))
+}
 const activeEventPlayers = computed(() => {
   const players = eventForm.value.teamSide === 'away' ? awayPlayers.value : homePlayers.value
   return Array.isArray(players) ? players.filter(isPlayerRecord) : []
 })
-const eventPlayerOptions = computed(() => {
+function buildEventPlayerOptions(players) {
   const rows = new Map()
-  activeEventPlayers.value.forEach(player => {
+  ;(Array.isArray(players) ? players : []).forEach(player => {
     const name = String(player.name || player.playerName || '').trim()
     if (!name || rows.has(name)) return
     const number = player.jerseyNumber ?? player.number
@@ -1290,6 +1331,26 @@ const eventPlayerOptions = computed(() => {
     rows.set(name, { value:name,label:[number !== undefined && number !== '' ? `${number}号` : '',name,position && position !== '-' ? position : ''].filter(Boolean).join(' · ') })
   })
   return [...rows.values()]
+}
+const eventOnFieldOptions = computed(() => buildEventPlayerOptions(activeEventPlayers.value.filter(isOnFieldAtEventMinute)))
+// 领牌（黄牌/红牌/2黄变1红）可记在替补席，不改变在场名单；替补席红牌由数据中心罚下集合记录，该球员之后不能换入。
+const eventIsCardEvent = computed(() => ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type))
+// 在场筛选无匹配时回退全队名单，避免候选为空无法录入。
+const eventPlayerOptions = computed(() => {
+  if (eventIsCardEvent.value) return buildEventPlayerOptions(activeEventPlayers.value)
+  return eventOnFieldOptions.value.length ? eventOnFieldOptions.value : buildEventPlayerOptions(activeEventPlayers.value)
+})
+const eventOnFieldApplied = computed(() => Boolean(eventOnFieldFilter.value) && eventOnFieldOptions.value.length > 0)
+const eventOnFieldPlayerCount = computed(() => eventOnFieldOptions.value.length)
+const eventOnFieldTip = computed(() => {
+  if (!eventMinuteSelected.value) return { type:'info', title:'请先选择比赛时间（分钟）', description:'球员候选只显示该时间点在场的球员。' }
+  if (eventIsCardEvent.value) {
+    return eventOnFieldApplied.value
+      ? { type:'info', title:'领牌可选全队名单（含替补席）', description:`第 ${eventForm.value.minute}′ 在场 ${eventOnFieldPlayerCount.value} 人；替补席领牌不改动在场名单，替补席红牌后该球员不能换入。` }
+      : { type:'info', title:'领牌可选全队名单（含替补席）', description:'本场阵容缺失或名单未关联球员库，暂显示全队；替补席领牌不改动在场名单。' }
+  }
+  if (eventOnFieldApplied.value) return { type:'info', title:`第 ${eventForm.value.minute}′ 在场 ${eventOnFieldPlayerCount.value} 人`, description:'已按首发及已记录的换人、罚下事件筛选。' }
+  return { type:'warning', title:'暂无法判定该时间点在场球员，候选显示全队名单', description:'需本场首发与替补名单已录入且球员已关联球员库；补齐后候选会自动按时间点筛选。' }
 })
 const eventAssistOptions = computed(() => eventPlayerOptions.value.filter(player => player.value !== eventForm.value.playerName))
 
@@ -1302,6 +1363,13 @@ watch(() => eventForm.value.teamSide, (next, previous) => {
 watch(() => eventForm.value.playerName, playerName => {
   if (eventForm.value.assistName === playerName) eventForm.value.assistName = ''
 })
+// 时间、球队或事件类型变化后候选范围随之变化，已选球员不在候选内时清空，避免提交不匹配的记录。
+watch(() => [eventForm.value.minute, eventForm.value.teamSide, eventForm.value.type], () => {
+  if (!eventDialogVisible.value) return
+  const names = new Set(eventPlayerOptions.value.map(player => player.value))
+  if (eventForm.value.playerName && !names.has(eventForm.value.playerName)) eventForm.value.playerName = ''
+  if (eventForm.value.assistName && !names.has(eventForm.value.assistName)) eventForm.value.assistName = ''
+})
 watch(() => eventForm.value.type, type => {
   if (type !== 'goal') eventForm.value.assistName = ''
   if (type === 'substitution' && !eventForm.value.substitutions.length) eventForm.value.substitutions = [emptySubstitution()]
@@ -1310,7 +1378,7 @@ watch(() => eventForm.value.type, type => {
 function addSubstitutionRow() { if (eventForm.value.substitutions.length < 5) eventForm.value.substitutions.push(emptySubstitution()) }
 function removeSubstitutionRow(index) { if (eventForm.value.substitutions.length > 1) eventForm.value.substitutions.splice(index,1) }
 const substitutionInputState = computed(() => {
-  const state = substitutionState(match.value,effectiveSubstitutionRules.value,match.value.events || [],Number(eventForm.value.minute))
+  const state = substitutionState(match.value,effectiveSubstitutionRules.value,match.value.events || [],Number(eventForm.value.minute || 0))
   const side = state?.sides?.[eventForm.value.teamSide] || {}
   return {
     ...side,
@@ -1463,21 +1531,24 @@ const sortedEvents = computed(() => {
 })
 const displayedEvents = computed(() => groupedTimeline(sortedEvents.value))
 
+// 比分口径复用数据中心统一事件比分；事件缺失或进球球队异常时回退已保存比分，不伪造进球。
 function calculateEventScore(events) {
-  const score = { home: 0, away: 0 }
-  ;(Array.isArray(events) ? events : []).forEach(event => {
-    if (!isGoalEvent(event)) return
-    let side = event?.teamSide === 'away' || event?.side === 'away' ? 'away' : 'home'
-    const type = String(event?.type || event?.eventType || '').trim().toLowerCase()
-    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
-    score[side] = Math.min(99, score[side] + 1)
-  })
-  return score
+  try {
+    const score = calculateMatchEventScore({ ...match.value, events: Array.isArray(events) ? events : [] })
+    if (score) return score
+  } catch (error) {
+    console.warn('比赛事件比分口径异常，回退已保存比分', error)
+  }
+  return { home: Number(match.value.homeScore ?? 0), away: Number(match.value.awayScore ?? 0) }
 }
 const hasStructuredEvents = computed(() => Array.isArray(match.value.events) && !match.value.resultCorrection && match.value.resultType !== 'forfeit')
 const eventScore = computed(() => calculateEventScore(match.value.events))
 const displayHomeScore = computed(() => hasStructuredEvents.value ? eventScore.value.home : (match.value.homeScore ?? 0))
 const displayAwayScore = computed(() => hasStructuredEvents.value ? eventScore.value.away : (match.value.awayScore ?? 0))
+const isMatchFinished = computed(() => ['finished', 'completed'].includes(String(match.value.status || '').toLowerCase()))
+const showHeroScore = computed(() => isMatchFinished.value ||
+  ['ongoing', 'live', 'in_progress', 'started', 'halftime'].includes(String(match.value.status || '').toLowerCase()) ||
+  (match.value.events || []).length > 0)
 
 const localEventKeys = new WeakMap()
 let localEventKeySequence = 0
@@ -2222,6 +2293,7 @@ async function openAddEventDialog() {
 
 async function saveEvent() {
   if (!ensureEvidenceEditable()) return
+  if (!eventMinuteSelected.value) return ElMessage.warning('请先选择比赛时间（分钟）')
   let newEvents = []
   if (eventForm.value.type === 'substitution') {
     const rows = (Array.isArray(eventForm.value.substitutions) ? eventForm.value.substitutions : []).filter(row => row && typeof row === 'object' && (row.outId || row.inId))
@@ -3324,7 +3396,8 @@ onMounted(() => {
 .event-side { color: #409eff; font-size: 12px; margin-left: 6px; }
 .event-period { display: inline-flex; margin-right: 7px; padding: 2px 6px; border-radius: 4px; color: #7a5b0a; background: #fff4cc; font-size: 11px; }
 .event-form { min-height: 310px; padding: 2px 4px 0; }
-.event-form-grid { display: grid; grid-template-columns: minmax(0,1fr) 150px; gap: 14px; }
+.event-form-grid { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 14px; }
+.event-on-field-tip { margin-bottom: 14px; }
 .event-form :deep(.el-form-item) { margin-bottom: 18px; }
 .event-form :deep(.el-form-item__label) { height: auto; margin-bottom: 7px; color: #34443b; font-weight: 600; line-height: 1.4; }
 .event-team-item { padding: 12px 14px; border: 1px solid #e3e9e5; border-radius: 7px; background: #f8faf9; }
