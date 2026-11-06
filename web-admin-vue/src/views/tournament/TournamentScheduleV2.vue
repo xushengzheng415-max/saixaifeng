@@ -617,7 +617,7 @@ const filteredPendingMatches = computed(() => pendingMatches.value.filter(match 
 // 延期占位：原日期分组里补一张灰卡标明原定时间；只做渲染，不新增比赛记录
 const postponedPlaceholders = computed(() => matches.value
   .filter(match => match.postponedFrom && String(match.postponedFrom.matchDate || '').trim())
-  .filter(match => String(match.postponedFrom.matchDate) !== String(match.matchDate || ''))
+  .filter(match => String(match.postponedFrom.matchDate).slice(0,10) !== String(match.matchDate || '').slice(0,10))
 // 先快照「当前编排」到 postponedTo，再覆盖回原定时间；否则两行都读同一组值
   .map(match => ({ ...match, postponedTo: { matchDate: match.matchDate || '', matchTime: match.matchTime || '', venue: match.venue || '' }, matchDate: match.postponedFrom.matchDate, matchTime: match.postponedFrom.matchTime || match.matchTime, venue: match.postponedFrom.venue || match.venue, isPostponedPlaceholder: true })))
 const allCalendarDays = computed(() => { if (!config.startDate || !config.endDate) return []; const start = new Date(`${config.startDate}T00:00:00`), end = new Date(`${config.endDate}T00:00:00`), names=['周日','周一','周二','周三','周四','周五','周六'], allowedDates=Array.isArray(config.matchDates)&&config.matchDates.length?new Set(config.matchDates):null, rows=[]; for (let day=new Date(start);day<=end;day.setDate(day.getDate()+1)) { const weekday=names[day.getDay()]; const date=`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`; if (allowedDates ? !allowedDates.has(date) : !config.matchDays.includes(weekday)) continue; rows.push({ date,weekday,short:`${day.getMonth()+1}.${day.getDate()}` }) } return rows })
@@ -811,7 +811,7 @@ function cardStageLabel(match) {
 function matchesForCell(venue,time) { return selectedDayMatches.value.filter(match => match.venue === venue && match.matchTime === time) }
 // 场地占用判定必须跨组别：组别筛选只影响“显示哪些比赛”，不影响“哪些时段已被占用”
 const dayVenueMatches = computed(() => arrangedMatches.value.filter(match => match.matchDate === selectedDate.value))
-const calendarCellMatches = computed(() => [...dayVenueMatches.value, ...postponedPlaceholders.value.filter(match => match.matchDate === selectedDate.value)])
+const calendarCellMatches = computed(() => [...dayVenueMatches.value, ...postponedPlaceholders.value.filter(match => String(match.matchDate || '').slice(0,10) === String(selectedDate.value || '').slice(0,10))])
 function matchDurationMinutes(match) {
   const direct = Number(match?.durationMinutes || 0)
   if (direct > 0) return direct
