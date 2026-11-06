@@ -38,3 +38,14 @@ html[data-tablet-landscape] .visual-lineup-editor .dual-player-slot .slot-card-w
 - 用户需在平板应用内点「刷新」或重开应用，才会加载新的 `/preview/admin/` 资源。
 - 该效果为构建产物与线上资源读回验证，未在 vivo Pad3 Pro 真机复验；如仍偏大或偏小，只需调这一处尺寸。
 - 正式 `/admin/` 需要另行授权，把它合入 `main` 并按正式流程发布。
+
+## 第二轮（同日真机反馈后）
+
+真机反馈两点：卡片 96×138 仍然偏大；球场背景草皮与白线完全不显示。
+
+- 卡片：平板断点尺寸由 `96×138` 继续改为 `64×92`，比例仍为 30:43，卡内布局与绘制逻辑不变；桌面基线 `126×181` 未改。
+- 球场：用同一构建产物、线上 CSS 与线上图片在 1237×688 视口复现，球场正常显示，说明页面代码、样式与图片本身没有问题；平板端不显示更可能卡在这张 `10667×4583 / 884332 字节` 的超大背景图在 WebView 里加载或解码失败。为此把 `src/assets/images/football-field-dual.jpg` 等比压到 `3200×1375 / 232181 字节`（质量 86），白线与草皮视觉保留。该文件同时被 PC 双队球场使用，视觉一致，只是体积和像素尺寸下降。
+- 第二轮构建：`VITE_APP_BASE=/preview/admin/ npm run build` 通过，`pc-release.json` 为 `sourceCommit=aa9669d4f`、`sourceDirty=false`；`dist` 409 个文件。
+- 第二轮部署：`preview/admin` 上传 409 个文件成功。
+- 第二轮读回：`/preview/admin/index.html` 200，入口 `/preview/admin/assets/index-DE0T0v6X.js`、`index-7eBerNJa.css`；线上 `MatchDetail-BzUCkaYr.css` SHA-256 `844EF9BF50BEDBF998E0BC6A562CF57A040FA6F75217747CA478A5E489C6A0B1` 与本地一致，含平板规则 `64×92` 与桌面基线 `126×181`；线上 `football-field-dual-BhX1KT2o.jpg` 为 232181 字节，SHA-256 `6E6737ABF3833558B9A9A216297262AC8A156CF47C54B6D063C95385C72EB076` 与本地一致。正式 `/admin/` 本次未部署。
+- 仍需真机确认：平板应用内「刷新」后看球场是否恢复、卡片大小是否合适。若球场依旧空白，则需要平板端 WebView 控制台或日志继续排查。
