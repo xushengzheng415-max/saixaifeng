@@ -61,3 +61,32 @@
 2. 排期占用统一用整场时长（现为 `config.matchDuration || 50`），与前端 `matchDurations`（整场）一致。
 3. `windowOverflow` 按场地末场判定，并遵守场地首场起点。
 4. 场地列在已保存数据里可能是旧共用点位，需要一次重置或在下次保存时按场地重写。
+
+## 六、延期占位日期归一化补丁 + 与报名线合并发布
+
+日期：2026-11-06（第二次预览发布）
+
+延期线只读排查结论：灰卡链路完好，不做大改，只补两处防御性归一化，避免 `postponedFrom.matchDate` 带时间戳或为 Date 对象时占位卡被误判为「没改过」而整体消失。
+
+- `postponedPlaceholders` 过滤条件：`String(match.postponedFrom.matchDate).slice(0,10) !== String(match.matchDate || '').slice(0,10)`
+- `calendarCellMatches` 落格条件：`String(match.matchDate || '').slice(0,10) === String(selectedDate.value || '').slice(0,10)`
+
+不涉及场地窗口、开赛点与容量逻辑。
+
+### 发布与回读
+
+| 项 | 值 |
+|---|---|
+| 源码 commit | `b0ee26493`（归一化补丁）+ `8c37e3f8f`（报名线 `3f66ee031`） |
+| 构建基点 | `origin/preview` = `8c37e3f8f`（构建前与推送前各 fetch 一次，异地一致） |
+| 构建参数 | `VITE_APP_BASE=/preview/admin/`，410 个文件 |
+| 线上 `index.html` 引用 | `assets/index-CO5cX_s7.js`（Last-Modified 11:24:39 GMT） |
+| 入口 SHA-256 | `382BE4267B49E70DF52F8092B65EFDC47EBF488015848C847C8E4C767D7B9F57`（本地=线上） |
+| 赛程块 | `assets/TournamentScheduleV2-DLcgcN7v.js`，SHA-256 `4A66FE894671F99F545A7D450AA7A9EB3B3CDE5D50C01850B2EC510A85671A9B`（本地=线上） |
+| 报名块 | `assets/TournamentTeams-BPsFO0vA.js`，SHA-256 `EE434F571228883FAE191BBA50F49D3D7E4AC16D0D508159D4CC358CCDF0EA54`（本地=线上） |
+
+赛程块线上命中：`postponedTo` 3、`isPostponedPlaceholder` 7、`postpone-badge` 1、`原定为` 1、`延期至` 1、`首场开赛` 1、`末场开赛` 1、`整场` 4、`data-sxf-pad-client` 1、`pointer: coarse` 1、`sxfSchedulePendingPool` 0、日期归一化 `slice(0,10)` 10。
+
+报名块线上命中：`同一球员限报一个组别` 2、`报名材料` 5、`idDocs` 10（`idDocsEnabled` 为函数名，压缩后以 `idDocs` 形态存在，非字符串标识）。
+
+三条线标记在同一次构建中齐全，正式 `/admin/` 与 `main` 本轮未动。
