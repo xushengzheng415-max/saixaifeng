@@ -56,7 +56,7 @@
         :loading="saving"
       >开始比赛</el-button>
       <el-button
-        v-if="['scheduled', 'ongoing', 'finished', 'completed', 'ended'].includes(String(match.status || '').toLowerCase()) && match.resultType !== 'forfeit'"
+        v-if="['scheduled', 'postponed', 'ongoing', 'finished', 'completed', 'ended'].includes(String(match.status || '').toLowerCase()) && match.resultType !== 'forfeit'"
         type="danger"
         size="small"
         @click="openForfeitDialog"
@@ -84,11 +84,11 @@
         :loading="saving"
       >重置为未开始</el-button>
       <el-button
-        v-if="match.status === 'scheduled'"
+        v-if="canPostpone"
         type="warning"
         size="small"
-        @click="updateStatus('postponed')"
-        :loading="saving"
+        @click="openPostponeDialog"
+        :loading="postponing"
       >延期</el-button>
     </div>
 
@@ -442,6 +442,38 @@
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="saveMatchEdit" :loading="saving">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 延期弹窗 -->
+    <el-dialog v-model="postponeDialogVisible" title="比赛延期" width="520px" class="postpone-dialog">
+      <el-form :model="postponeForm" label-width="96px">
+        <el-form-item label="延期方式">
+          <el-radio-group v-model="postponeForm.mode">
+            <el-radio label="fixed">固定延期时间</el-radio>
+            <el-radio label="end">排到所有比赛最后</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <template v-if="postponeForm.mode === 'fixed'">
+          <el-form-item label="比赛日期" required>
+            <el-date-picker v-model="postponeForm.matchDate" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" placeholder="选择延期日期" style="width:100%;" />
+          </el-form-item>
+          <el-form-item label="开赛时间" required>
+            <el-time-select v-model="postponeForm.matchTime" start="06:00" step="00:15" end="23:00" format="HH:mm" placeholder="选择开赛时间" style="width:100%;" />
+          </el-form-item>
+          <el-form-item label="场地" required>
+            <el-select v-model="postponeForm.venue" filterable allow-create default-first-option placeholder="选择或填写场地" style="width:100%;">
+              <el-option v-for="item in venueOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+        </template>
+        <div v-else class="postpone-hint">
+          按本场原定星期几排到本赛事最晚比赛日之后：例如原定周六，就落到最后一个比赛日之后的第一个周六；开赛时间与场地沿用本场原定值。如果该日期同一时段同一场地已被占用，自动顺延到下一个同星期几（最多 8 周），具体落点由服务端计算并回显。
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="postponeDialogVisible = false">取消</el-button>
+        <el-button type="warning" @click="confirmPostpone" :loading="postponing">确认延期</el-button>
       </template>
     </el-dialog>
 
@@ -2010,6 +2042,88 @@ async function loadTeamLogos(homeId, awayId) {
   }
 }
 
+// 延期：改期能力复用 updateMatch 的 postponeMatch 动作，不改动其他字段。
+const postponeDialogVisible = ref(false)
+const postponing = ref(false)
+const postponeForm = ref({ mode:'fixed', matchDate:'', matchTime:'', venue:'' })
+const canPostpone = computed(() => {
+  const status = String(match.value.status || '')
+  return ['scheduled','postponed','pending','not_started','upcoming'].includes(status) &&
+    !isRefereeEvidenceLocked.value &&
+    !(Array.isArray(match.value.events) ? match.value.events.length : 0)
+})
+
+function openPostponeDialog() {
+  if (!ensureEvidenceEditable()) return
+  if (Array.isArray(match.value.events) && match.value.events.length) {
+    ElMessage.warning('本场已录入比赛事件，不能延期')
+    return
+  }
+  postponeForm.value = {
+    mode: 'fixed',
+    matchDate: match.value.matchDate || '',
+    matchTime: match.value.matchTime || '',
+    venue: match.value.venue || ''
+  }
+  postponeDialogVisible.value = true
+}
+
+function postponeDateLabel(dateText) {
+  const matched = String(dateText || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matched) return String(dateText || '')
+  return `${Number(matched[2])} 月 ${Number(matched[3])} 日`
+}
+function postponeResultText(target = {}) {
+  const weekday = target.weekdayText ? `（${target.weekdayText}）` : ''
+  const venue = target.venue ? ` · ${target.venue}` : ''
+  let text = `已延期至 ${postponeDateLabel(target.matchDate)}${weekday} ${target.matchTime || ''}${venue}`
+  if (Number(target.shiftWeeks) > 0) text += `，原定场地已被占用，顺延 ${Number(target.shiftWeeks)} 周`
+  if (target.fallbackReason) text += `。${target.fallbackReason}`
+  return text
+}
+
+async function confirmPostpone() {
+  if (postponing.value) return
+  const form = postponeForm.value
+  if (form.mode === 'fixed') {
+    if (!form.matchDate) { ElMessage.warning('请选择延期日期'); return }
+    if (!form.matchTime) { ElMessage.warning('请选择开赛时间'); return }
+    if (!String(form.venue || '').trim()) { ElMessage.warning('请选择延期场地'); return }
+  }
+  postponing.value = true
+  try {
+    const payload = {
+      action: 'postponeMatch',
+      matchId,
+      mode: form.mode
+    }
+    if (form.mode === 'fixed') {
+      payload.matchDate = form.matchDate
+      payload.matchTime = form.matchTime
+      payload.venue = String(form.venue).trim()
+    }
+    const result = await callFunction('updateMatch', payload)
+    if (!result?.success) throw new Error(result?.message || result?.error || '延期未保存，请重试')
+    const target = result.data || {}
+    match.value.status = 'scheduled'
+    match.value.matchDate = target.matchDate || match.value.matchDate
+    match.value.matchTime = target.matchTime || match.value.matchTime
+    match.value.venue = target.venue || match.value.venue
+    if (target.postponedFrom) match.value.postponedFrom = target.postponedFrom
+    match.value.postponedAt = new Date().toISOString()
+    if (target.postponeCount) match.value.postponeCount = target.postponeCount
+    postponeDialogVisible.value = false
+    ElMessage.success({
+      message: postponeResultText(target),
+      duration: 6000
+    })
+  } catch (err) {
+    ElMessage.error('延期失败: ' + (err?.message || '请重试'))
+  } finally {
+    postponing.value = false
+  }
+}
+
 // 更新比赛状态
 async function updateStatus(status) {
   if (!ensureEvidenceEditable()) return
@@ -2260,7 +2374,7 @@ async function saveMatchEdit() {
       ? (allTeams.value.find(t => t.teamId === f.awayTeamId)?.teamName || match.value.awayTeamName || '')
       : (match.value.awayTeamName || '')
 
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId: f._id,
       data: {
         matchDate: f.matchDate,
@@ -2278,6 +2392,7 @@ async function saveMatchEdit() {
         updateTime: new Date()
       }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛信息未保存，请重试')
     ElMessage.success('保存成功')
     editDialogVisible.value = false
     loadMatch()
@@ -2884,10 +2999,11 @@ async function handleVisualLineupSave(data) {
       updateData.updateTime = new Date()
     }
 
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: updateData
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '阵容未保存，请重试')
 
     // 更新本地数据
     if (!match.value.lineups) match.value.lineups = {}
@@ -3422,6 +3538,7 @@ onMounted(() => {
 .event-form { min-height: 310px; padding: 2px 4px 0; }
 .event-form-grid { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 14px; }
 .event-on-field-tip { margin-bottom: 14px; }
+.postpone-hint { margin: 0 0 6px; padding: 12px 14px; border-radius: 10px; background: #fff7e6; color: #8a5a00; font-size: 13px; line-height: 1.6; }
 .event-form :deep(.el-form-item) { margin-bottom: 18px; }
 .event-form :deep(.el-form-item__label) { height: auto; margin-bottom: 7px; color: #34443b; font-weight: 600; line-height: 1.4; }
 .event-team-item { padding: 12px 14px; border: 1px solid #e3e9e5; border-radius: 7px; background: #f8faf9; }
