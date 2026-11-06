@@ -319,13 +319,11 @@ const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap 
 // 轻量模式唯一判定：赛事级字段 lightweightMode，读取走共享判定函数，页面不再各自猜测。
 const lightweightMode = computed(() => isLightweightTournament(tournament.value))
 const view = ref(['settings','imports','map','workbench','referees'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
-// 待排比赛侧栏：PAD 上默认收起；用户手动展开/收起后按账号记住，下次进页面沿用。
-// 键名含 userId，避免同一浏览器多账号互相污染；一个键只存一个终态，不用按赛事叠加。
-const pendingDrawerStorageKey=`sxfSchedulePendingPool:v1:${localStorage.getItem('userId') || 'anonymous'}`
-function readPendingDrawerPref(){ try{ const stored=localStorage.getItem(pendingDrawerStorageKey); if(stored==='open')return true; if(stored==='closed')return false }catch{} return null }
-const pendingDrawerOpen=ref(readPendingDrawerPref() ?? !isPadClient(navigator.userAgent)),hoveredDropSlot=ref(''),dropSaving=ref(false)
-// persist=false 用于程序化打开（如刚建好赛事日历），不覆盖用户自己的选择。
-function setPendingDrawer(open,persist=true){ pendingDrawerOpen.value=Boolean(open); if(!persist)return; try{ localStorage.setItem(pendingDrawerStorageKey,open?'open':'closed') }catch{} }
+// 待排比赛侧栏：PAD 上每次刷新/重新进入页面一律默认收起。
+// 手动展开只在本次页面生命周期内有效，不写 localStorage/sessionStorage，避免刷新后沿用上次展开状态。
+// PC 与手机竖屏仍保持默认展开。
+const pendingDrawerOpen=ref(!isPadClient(navigator.userAgent)),hoveredDropSlot=ref(''),dropSaving=ref(false)
+function setPendingDrawer(open){ pendingDrawerOpen.value=Boolean(open) }
 const workbenchDivision = ref(String(route.query.divisionId || 'all')), workbenchStatus = ref('all'), workbenchSearch = ref('')
 const workbenchRoot = ref(null), nextMatchId = ref('')
 const sequenceVisible = ref(false), sequenceMatch = ref(null), sequenceNumber = ref(1), savingSequence = ref(false)
@@ -1210,7 +1208,7 @@ function payloadConfig() { const times=selectedKickoffTimes.value.length?selecte
 function validateSettings() { if(!selectedKickoffTimes.value.length)return '请至少输入一个开赛时间';if(!config.startDate||!config.endDate||config.startDate>config.endDate)return '请设置有效的比赛周期';if(!config.matchDates.length)return '请在比赛周期内勾选至少一个比赛日';if(!enabledSessions.value.length)return '请至少开放一个时段';if(!config.venueResources.length)return '请至少添加一块场地';if(config.venueResources.some(item=>!item.name.trim()||!item.fieldFormat))return '请填写完整的场地名称和制式';if(new Set(config.venueResources.map(item=>item.name.trim())).size!==config.venueResources.length)return '场地名称不能重复';const overlapError=validateKickoffOverlap();if(overlapError)return overlapError;return '' }
 // 开赛点间隔校验：手工写的开赛时间间隔必须 ≥ 比赛时长 + 转场时间，否则前一场还没结束
 function validateKickoffOverlap(){ const times=[...selectedKickoffTimes.value].sort(); if(times.length<2)return ''; const minGap=Math.max(...divisions.value.map(d=>matchMinutes(d)||50),0)+Number(config.defaultTurnaroundMinutes||0); for(let i=1;i<times.length;i+=1){ const gap=minutes(times[i])-minutes(times[i-1]); if(gap<minGap)return `开赛点 ${times[i-1]} 与 ${times[i]} 间隔仅 ${gap} 分钟，小于最小间隔 ${minGap} 分钟（比赛时长 ${Math.max(...divisions.value.map(d=>matchMinutes(d)||50),0)} + 转场 ${config.defaultTurnaroundMinutes}），前一场还没结束` } return '' }
-async function saveSettings() { const error=validateSettings();if(error)return ElMessage.warning(error);savingSettings.value=true;try{const result=await callFunction('generateSchedule',{action:'saveDraft',tournamentId,scheduleConfig:payloadConfig()});if(!result?.success)throw new Error(result?.message || '保存失败');tournament.value={...tournament.value,scheduleDraft:payloadConfig()};selectedDate.value=calendarDays.value[0]?.date || selectedDate.value;setPendingDrawer(true,false);ElMessage.success('赛事日历已创建');setView('map')}catch(error){ElMessage.error(error.message || '赛程设置保存失败')}finally{savingSettings.value=false} }
+async function saveSettings() { const error=validateSettings();if(error)return ElMessage.warning(error);savingSettings.value=true;try{const result=await callFunction('generateSchedule',{action:'saveDraft',tournamentId,scheduleConfig:payloadConfig()});if(!result?.success)throw new Error(result?.message || '保存失败');tournament.value={...tournament.value,scheduleDraft:payloadConfig()};selectedDate.value=calendarDays.value[0]?.date || selectedDate.value;setPendingDrawer(true);ElMessage.success('赛事日历已创建');setView('map')}catch(error){ElMessage.error(error.message || '赛程设置保存失败')}finally{savingSettings.value=false} }
 // 手动加赛（＋场次）：从组别已审核球队中选双方，直接写入 matches，与旧版赛程页同一链路。
 const manualAddVisible=ref(false),savingManualMatch=ref(false),manualTeams=ref([])
 const manualForm=reactive({divisionId:'',homeTeamId:'',awayTeamId:'',matchDate:'',matchTime:'09:00',venue:'',roundName:''})
