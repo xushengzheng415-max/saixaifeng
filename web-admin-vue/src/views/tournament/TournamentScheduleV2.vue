@@ -1818,17 +1818,20 @@ onBeforeUnmount(() => { mapResizeObserver?.disconnect(); endMapPan() })
 @media(max-width:900px){.calendar-workspace.pending-open{grid-template-columns:230px minmax(0,1fr)}}
 .upload-replace{display:flex;justify-content:flex-end;margin-top:16px}.import-empty small{color:#718078;font-size:13px}
 .calendar-match header{font-size:12px;gap:12px}.calendar-match header>span{min-width:0;overflow-wrap:anywhere}.calendar-match header>b{flex-shrink:0}
-.calendar-match.is-postponed{opacity:.78}
-.calendar-match.is-postponed:hover{opacity:.95}
+.calendar-match.is-postponed{position:relative}
 .calendar-match.is-postponed .match-sides,
 .calendar-match.is-postponed footer,
 .calendar-match.is-postponed header>span,
-.calendar-match.is-postponed header>b{filter:grayscale(1)}
-.calendar-match>.postpone-badge{flex-shrink:0;margin-left:auto;display:block;height:18px;width:auto}
+.calendar-match.is-postponed header>b{filter:grayscale(1);opacity:.72}
+.calendar-match.is-postponed:hover .match-sides,
+.calendar-match.is-postponed:hover footer,
+.calendar-match.is-postponed:hover header>span{opacity:.9}
+.calendar-match.is-postponed header{padding-right:62px}
+.calendar-match>.postpone-badge{position:absolute;top:6px;right:8px;display:block;height:18px;width:auto;opacity:.75;pointer-events:none;z-index:2}
 .calendar-match.is-postponed-placeholder{border-style:dashed;background:#f7f7f5}
 .postpone-lines{display:grid;gap:2px;margin:4px 0 0;font-style:normal}
 .postpone-lines>div{display:flex;align-items:baseline;gap:4px;min-width:0;font-size:11px;line-height:15px}
 .postpone-lines dt{flex:0 0 auto;color:#cf1322;font-weight:600}
 .postpone-lines dd{flex:1 1 auto;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#595959}
-@media(max-width:1000px){.calendar-match header{gap:6px;flex-wrap:wrap}.calendar-match>.postpone-badge{height:16px}.postpone-lines>div{font-size:10px;line-height:14px;gap:3px}}
+@media(max-width:1000px){.calendar-match header{gap:6px;flex-wrap:wrap}.calendar-match>.postpone-badge{height:16px;top:4px;right:6px}.calendar-match.is-postponed header{padding-right:54px}.postpone-lines>div{font-size:10px;line-height:14px;gap:3px}}
 </style>
