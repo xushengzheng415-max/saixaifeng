@@ -1,0 +1,163 @@
+/* pages/tournament/valuation/valuation.wxss */
+.val-page {
+  min-height: 100vh;
+  padding: 24rpx 24rpx 48rpx;
+  box-sizing: border-box;
+  background: #f4f6f4;
+}
+
+.val-hero {
+  padding: 32rpx 28rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+  box-shadow: 0 8rpx 24rpx rgba(27, 94, 32, 0.18);
+}
+
+.val-hero-title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.val-hero-desc {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.val-summary {
+  display: flex;
+  flex-direction: column;
+  margin-top: 20rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 16rpx;
+  background: #ffffff;
+}
+
+.val-summary-total {
+  font-size: 26rpx;
+  color: #37474f;
+}
+
+.val-summary-note {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #f57c00;
+}
+
+.val-list {
+  margin-top: 20rpx;
+  border-radius: 16rpx;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.val-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx;
+  border-bottom: 1rpx solid #eef1ee;
+}
+
+.val-row:last-child {
+  border-bottom: none;
+}
+
+.val-row-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.val-row-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1f2a1f;
+}
+
+.val-row-meta {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: #5f6b5f;
+}
+
+.val-row-time {
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  color: #9aa49a;
+}
+
+.val-row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: 20rpx;
+}
+
+.val-value {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.val-value-ready {
+  color: #2e7d32;
+}
+
+.val-value-pending {
+  color: #f57c00;
+}
+
+.val-value-hidden {
+  color: #9aa49a;
+}
+
+.val-row-tier {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #7a877a;
+}
+
+.val-loading,
+.val-empty,
+.val-error,
+.val-more,
+.val-end {
+  margin-top: 20rpx;
+  padding: 40rpx 24rpx;
+  border-radius: 16rpx;
+  background: #ffffff;
+  text-align: center;
+}
+
+.val-loading-text,
+.val-empty-text,
+.val-more-text,
+.val-end-text {
+  font-size: 26rpx;
+  color: #7a877a;
+}
+
+.val-error-text {
+  font-size: 26rpx;
+  color: #c62828;
+}
+
+.val-error-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 20rpx;
+  padding: 12rpx 40rpx;
+  border-radius: 999rpx;
+  background: #2e7d32;
+}
+
+.val-error-btn-text {
+  font-size: 26rpx;
+  color: #ffffff;
+}

@@ -1,4 +1,5 @@
 var workspace = require('../../utils/workspace')
+var logoCutout = require('../../utils/logo-cutout')
 
 function isDevtools() {
   try { return wx.getSystemInfoSync().platform === 'devtools' } catch (error) { return false }
@@ -17,10 +18,10 @@ Page({
     isTrainingSuccessStep: false,
     isTrainingDemoStep: false,
     showSteps: true,
-    selectedScene: 'training',
+    selectedScene: 'team',
     sceneEventClass: '',
-    sceneTeamClass: '',
-    sceneTrainingClass: 'is-selected',
+    sceneTeamClass: 'is-selected',
+    sceneTrainingClass: '',
     stepOneClass: 'is-current',
     stepTwoClass: '',
     stepThreeClass: '',
@@ -51,6 +52,10 @@ Page({
     teamCity: '',
     isTeamDraftConfirmation: false,
     teamSuccessForTournament: false,
+    selfJoinText: '把我的球员档案加入本队',
+    selfJoinClass: '',
+    selfJoinDisabled: false,
+    selfJoinPlayerId: '',
     isTournamentSignupFlow: false,
     teamOnboardingReturnUrl: '',
     teamProfileSubtitle: '只需两项，其他资料以后再补充。',
@@ -105,8 +110,12 @@ Page({
       })
     }
     if (tournamentInviteId) this.setData({ tournamentInviteId: String(tournamentInviteId) })
+    // 登记页可选择把本人或某名孩子档案入队，建队成功后按所选档案明确入队。
+    if (options && options.joinPlayerId) this.setData({ selfJoinPlayerId: decodeURIComponent(String(options.joinPlayerId)) })
     if (['event', 'team', 'training'].indexOf(requestedScene) >= 0) {
       this.selectScene({ currentTarget: { dataset: { scene: requestedScene } } })
+      // 服务号卡片/分享进入：球队与赛事场景跳过场景选择，直接落到创建表单；失败时停留本页可手动下一步
+      if (requestedScene === 'team' || requestedScene === 'event') this.saveSceneAndContinue()
     }
     if (requestedStep === 'team') this.showTeamProfile()
     if (options && options.fromTeamDraft === '1') {
@@ -392,7 +401,7 @@ Page({
     var that = this
     this.setData({ isSubmitting: true, primaryText: '正在进入…' })
     workspace.switchWorkspace(training.workspaceId).then(function() {
-      wx.switchTab({ url: '/pages/training/index' })
+      wx.navigateTo({ url: '/pages/training/index' })
     }).catch(function() {
       that.showError('机构已创建，但工作空间加载失败，请在“我的”中重试')
     }).finally(function() {
@@ -484,68 +493,28 @@ Page({
     var that = this
     var source = this.data.tempCrestPath
     if (!source) return
-    this.setData({ crestBusy: true, cropVisible: false, crestStateText: '正在裁剪并上传…' })
-    wx.getImageInfo({
-      src: source,
-      success: function(info) {
-        var scale = Math.max(1, Number(that.data.cropScale || 1))
-        var side = Math.max(1, Math.floor(Math.min(info.width, info.height) / scale))
-        // 预览窗口为约 250px，换算到原图后按拖拽位移裁剪，并收敛在原图范围内。
-        var sourceShiftX = Math.floor((that.data.cropOffsetX || 0) * side / 250)
-        var sourceShiftY = Math.floor((that.data.cropOffsetY || 0) * side / 250)
-        var sx = Math.max(0, Math.min(info.width - side, Math.floor((info.width - side) / 2) - sourceShiftX))
-        var sy = Math.max(0, Math.min(info.height - side, Math.floor((info.height - side) / 2) - sourceShiftY))
-        var context = wx.createCanvasContext('crestCropCanvas', that)
-        context.clearRect(0, 0, 600, 600)
-        context.drawImage(source, sx, sy, side, side, 0, 0, 600, 600)
-        context.draw(false, function() {
-          wx.canvasToTempFilePath({
-            canvasId: 'crestCropCanvas',
-            width: 600,
-            height: 600,
-            destWidth: 600,
-            destHeight: 600,
-            fileType: 'png',
-            quality: 1,
-            success: function(cropped) { that.uploadAndProcessCrest(cropped.tempFilePath) },
-            fail: function() { that.uploadAndProcessCrest(source) }
-          }, that)
-        })
-      },
-      fail: function() { that.uploadAndProcessCrest(source) }
+    this.setData({ crestBusy: true, cropVisible: false, crestStateText: '正在裁剪并去背景…' })
+    // 裁剪与去背景由 utils/logo-cutout 统一完成，和 PC 端、其他小程序入口同一套规则
+    logoCutout.process({ owner: this, canvasId: 'crestCropCanvas', filePath: source, crop: { scale: this.data.cropScale, offsetX: this.data.cropOffsetX, offsetY: this.data.cropOffsetY } }).catch(function() {
+      // 旧基础库没有 Canvas 2D 或取像素失败时退回原图直传，至少保证能提交队徽
+      return { path: source, cutoutPath: '', cutout: false }
+    }).then(function(crest) {
+      return logoCutout.uploadCrest({ path: crest.path, cutoutPath: crest.cutoutPath, requestId: String(Date.now()) }).then(function(uploaded) {
+        return { crest: crest, uploaded: uploaded }
+      })
+    }).then(function(result) {
+      var hasCutout = Boolean(result.uploaded.transparentLogo)
+      that.setData({
+        crestPreview: result.crest.cutoutPath || result.crest.path,
+        originalLogo: result.uploaded.originalLogo,
+        transparentLogo: result.uploaded.transparentLogo,
+        crestBusy: false,
+        crestStateText: hasCutout ? '已完成裁剪与去背景' : '裁剪完成；未识别出背景，将保留原图'
+      })
+    }).catch(function(error) {
+      that.setData({ crestBusy: false, crestStateText: error.message || '队徽处理失败，请重新选择' })
     })
   },
-
-  uploadAndProcessCrest: function(path) {
-    var that = this
-    var cloudPath = 'team-logos/original/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.png'
-    wx.cloud.uploadFile({
-      cloudPath: cloudPath,
-      filePath: path,
-      success: function(uploaded) {
-        var originalLogo = uploaded.fileID || ''
-        that.setData({ originalLogo: originalLogo, crestPreview: path, crestStateText: '正在生成透明队徽…' })
-        wx.cloud.callFunction({
-          name: 'imageProcess',
-          data: { action: 'removeBackground', imageUrl: originalLogo },
-          success: function(response) {
-            var result = response.result || {}
-            var transparent = result.success && result.processedUrl && result.processedUrl !== originalLogo ? result.processedUrl : ''
-            that.setData({
-              transparentLogo: transparent,
-              crestStateText: transparent ? '已完成裁剪与透明抠图' : '裁剪完成；透明抠图暂不可用，将保留原图'
-            })
-          },
-          fail: function() { that.setData({ crestStateText: '裁剪完成；透明抠图失败，将保留原图' }) },
-          complete: function() { that.setData({ crestBusy: false }) }
-        })
-      },
-      fail: function() {
-        that.setData({ crestBusy: false, crestStateText: '队徽上传失败，请重新选择' })
-      }
-    })
-  },
-
   createTeam: function() {
     var that = this
     var name = String(this.data.teamName || '').trim()
@@ -603,8 +572,43 @@ Page({
       createdTeamLogo: team.logo || '',
       hasCreatedTeamLogo: Boolean(team.logo),
       teamSuccessForTournament: Boolean(registration),
+      selfJoinText: '把我的球员档案加入本队',
+      selfJoinClass: '',
+      selfJoinDisabled: false,
       successSubtitle: this.data.isTournamentSignupFlow ? '球队资料已保存，请继续选择组别并确认报名' : (registration ? '球队已创建，并已建立本届赛事参赛关系' : '你的球队工作空间已准备好'),
       primaryText: this.data.isTournamentSignupFlow ? '继续完成报名' : '进入球队首页'
+    })
+  },
+
+  inviteTeamPlayers: function() {
+    var team = this.data.createdTeam || {}
+    if (!team.id) return this.showError('球队信息缺失，请返回后重试')
+    if (this.data.isSubmitting) return
+    this.cacheCreatedTeam(team)
+    wx.navigateTo({
+      url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(team.id),
+      fail: () => this.showError('邀请页面暂时无法打开，请重试')
+    })
+  },
+
+  joinSelfTeam: function() {
+    var that = this
+    var team = this.data.createdTeam || {}
+    if (!team.id) return this.showError('球队信息缺失，请返回后重试')
+    if (this.data.selfJoinDisabled) return
+    this.cacheCreatedTeam(team)
+    this.setData({ selfJoinDisabled: true, selfJoinText: '正在加入…' })
+    var payload = { action: 'selfPlayerJoinTeam', teamId: team.id, workspaceId: 'team:' + team.id }
+    if (this.data.selfJoinPlayerId) payload.playerId = this.data.selfJoinPlayerId
+    wx.cloud.callFunction({ name: 'getMiniWorkspace', data: payload }).then(function(response) {
+      var result = (response && response.result) || {}
+      if (!result.success) {
+        that.setData({ selfJoinDisabled: false, selfJoinText: result.message || '暂未加入，可在球员库中重试' })
+        return
+      }
+      that.setData({ selfJoinDisabled: true, selfJoinClass: 'is-joined', selfJoinText: result.alreadyJoined ? '你已在本队球员库中' : '已加入本队球员库' })
+    }).catch(function() {
+      that.setData({ selfJoinDisabled: false, selfJoinText: '网络异常，请重试' })
     })
   },
 
@@ -645,6 +649,17 @@ Page({
     this.setData({ pageTitle: '创建完成', isSceneStep: false, isTeamProfileStep: false, isTeamSuccessStep: false, isEventProfileStep: false, isEventSuccessStep: true, stepOneClass: 'is-complete', stepTwoClass: 'is-complete', stepThreeClass: 'is-current', createdEvent: tournament, createdEventName: tournament.name, createdEventLogo: tournament.logo || '', hasCreatedEventLogo: Boolean(tournament.logo), successSubtitle: '你的赛事工作空间已准备好', primaryText: '进入赛事空间' })
   },
   enterEventSpace: function() { var tournament = this.data.createdEvent || {}; if (!tournament.id) return this.showError('赛事信息缺失，请返回后重试'); wx.navigateTo({ url: '/pages/tournament/detail/detail?tournamentId=' + tournament.id }) },
+
+  copyEventPcLink: function() {
+    wx.setClipboardData({
+      data: 'https://www.sxffootball.cn/admin/',
+      success: function() { wx.showToast({ title: '网址已复制', icon: 'success' }) }
+    })
+  },
+
+  openTutorial: function() {
+    wx.navigateTo({ url: '/pages/common/official-webview?url=' + encodeURIComponent('https://www.sxffootball.cn/admin/tutorials') })
+  },
 
   enterTeamHome: function() {
     var team = this.data.createdTeam || {}

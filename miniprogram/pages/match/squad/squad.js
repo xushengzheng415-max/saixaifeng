@@ -1,35 +1,40 @@
 var workspace = require('../../../utils/workspace')
 var cardService = require('../../../utils/player-card')
+var lineupLayout = require('../../../utils/lineup-layout')
 
-var FORMATIONS = {
-  5: [{ id: '2-1-1', label: '2-1-1', slots: ['GK', 'DF', 'DF', 'MF', 'FW'] }],
-  7: [{ id: '2-3-1', label: '2-3-1', slots: ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'] }],
-  8: [{ id: '2-3-2', label: '2-3-2', slots: ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'] }, { id: '3-3-1', label: '3-3-1', slots: ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'] }, { id: '2-4-1', label: '2-4-1', slots: ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW'] }],
-  9: [{ id: '3-3-2', label: '3-3-2', slots: ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'] }],
-  11: [{ id: '4-3-3', label: '4-3-3', slots: ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW', 'FW'] }, { id: '4-4-2', label: '4-4-2', slots: ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW', 'FW'] }]
+var POSITION_TEXT = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }
+
+function positionText(code) {
+  var value = String(code || '').trim()
+  return POSITION_TEXT[value.toUpperCase()] || (/[\u4e00-\u9fa5]/.test(value) ? value : '')
 }
 
+// 本页可选阵型：与 PC 端 web-admin-vue/src/data/formation-data.json 同一套、同顺序。
+// 站位坐标不手写，统一由 lineupLayout 按「阵型 id = 每排人数」计算。
+var SQUAD_FORMATIONS = {
+  5: ['2-2', '3-1', '1-2-1', '2-1-1'],
+  7: ['3-2-1', '2-3-1', '2-1-2-1', '1-4-1'],
+  8: ['3-3-1', '3-2-2', '2-2-3', '4-2-1', '1-3-2-1'],
+  9: ['3-3-2', '3-4-1', '3-2-3'],
+  11: ['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2', '5-4-1']
+}
+
+var FORMATIONS = {}
+Object.keys(SQUAD_FORMATIONS).forEach(function (key) {
+  var rows = lineupLayout.FORMATIONS[key] || []
+  FORMATIONS[key] = SQUAD_FORMATIONS[key].map(function (id) {
+    var row = rows.filter(function (item) { return item.id === id })[0]
+    return row ? { id: row.id, label: row.id } : null
+  }).filter(Boolean)
+})
+
 function slotsFor(minPlayers, formation) {
-  var rows = FORMATIONS[minPlayers] || FORMATIONS[11]
+  var rows = FORMATIONS[minPlayers]
+  if (!rows || !rows.length) return []
   var current = rows.filter(function (item) { return item.id === formation })[0] || rows[0]
-  var layout = { GK: 87, DF: 66, MF: 45, FW: 21 }
-  var grouped = { GK: [], DF: [], MF: [], FW: [] }
-  current.slots.forEach(function (position, index) { grouped[position].push(index) })
-  return current.slots.map(function (position, index) {
-    var siblings = grouped[position]
-    var siblingIndex = siblings.indexOf(index)
-    var left = (100 / (siblings.length + 1)) * (siblingIndex + 1)
-    return {
-      id: 'slot-' + index,
-      position: position,
-      title: position === 'GK' ? '守门员' : position === 'DF' ? '后卫' : position === 'MF' ? '中场' : '前锋',
-      empty: true,
-      playerName: '选择球员',
-      jerseyText: '+',
-      avatar: '',
-      playerId: '',
-      slotStyle: 'left:' + left.toFixed(2) + '%;top:' + layout[position] + '%;'
-    }
+  // slotId 保持 slot-<序号>：提交接口按序号换算位置，历史阵容也按同一规则回填。
+  return lineupLayout.slotsFor(minPlayers, current.id).map(function (slot, index) {
+    return Object.assign({}, slot, { id: 'slot-' + index })
   })
 }
 
@@ -45,7 +50,7 @@ function decorateSlots(slots, selectedSlotId) {
 
 Page({
   data: {
-    matchId: '', teamId: '', loading: true, saving: false, confirmingArrival:false, canManage: false, match: {}, minPlayers: 0, teamArrived:false, allArrived:false, arrivalStatusText:'待报到', arrivalButtonText:'确认本队到场', arrivalButtonDisabled:true, canConfirmArrival:false,
+    matchId: '', teamId: '', loading: true, saving: false, confirmingArrival:false, canManage: false, match: {}, minPlayers: 0, sizeText: '', sizeUnsupported: false, teamArrived:false, allArrived:false, arrivalStatusText:'待报到', arrivalButtonText:'确认本队到场', arrivalButtonDisabled:true, canConfirmArrival:false,
     formation: '', formationOptions: [], slots: [], selectedSlotId: '', substitutes: [], benchLimit: 5,
     headCoach: null, headCoachState: 'missing',
     starterCount: 0, substituteCount: 0, selectedCount: 0, submitDisabled: true, locked: false, preSubmitted: false, allowPreSubmit: false, finalWindowOpen: false, submitButtonText: '确认并提交本场阵容', submissionWindowText: '', returned: false, returnReason: '', emptyPlayers: false,
@@ -99,10 +104,11 @@ Page({
       .then(function (res) {
         var result = res.result || {}
         if (!result.success) throw new Error(result.message || '阵容加载失败')
-        var min = Number((result.match || {}).minPlayers || 11)
-        var options = (FORMATIONS[min] || FORMATIONS[11]).map(function (item, index) { return { id: item.id, label: item.label, selected: index === 0, tabClass: index === 0 ? 'selected' : '' } })
+        var min = Number((result.match || {}).minPlayers || 0)
+        var sizeUnsupported = !FORMATIONS[min]
+        var options = (FORMATIONS[min] || []).map(function (item, index) { return { id: item.id, label: item.label, selected: index === 0, tabClass: index === 0 ? 'selected' : '' } })
         var lineup = result.lineup || {}
-        var formation = options.some(function (item) { return item.id === lineup.formation }) ? lineup.formation : options[0].id
+        var formation = options.some(function (item) { return item.id === lineup.formation }) ? lineup.formation : (options[0] ? options[0].id : '')
         options = options.map(function (item) { return Object.assign({}, item, { selected: item.id === formation, tabClass: item.id === formation ? 'selected' : '' }) })
         var slots = slotsFor(min, formation)
         var playerMap = {}
@@ -112,10 +118,10 @@ Page({
           var player = playerMap[starter.playerId]
           if (index >= 0 && player) slots[index] = self.toSlot(slots[index], player)
         })
-        var subs = (lineup.substitutes || []).map(function (item) { return playerMap[item.playerId] }).filter(Boolean)
+        var subs = (lineup.substitutes || []).map(function (item) { return playerMap[item.playerId] }).filter(Boolean).map(function (player) { return Object.assign({}, player, { positionText: positionText(player.position) }) })
         var match=result.match || {}
         var canConfirmArrival=result.canManage && !match.teamArrived
-        self.setData({ loading: false, headCoach: result.headCoach || null, headCoachState: result.headCoachState || 'missing', headCoachStateText:({ambiguous:'待确认',unavailable:'暂不可用'}[result.headCoachState]||'待设置'), canManage: result.canManage, match: match, minPlayers: min, formationOptions: options, formation: formation, slots: decorateSlots(slots, ''), substitutes: subs, benchLimit: Number(match.benchLimit || 5), cardAssetsError: result.cardAssetsError === true, locked: result.locked === true || lineup.status === 'submitted' || lineup.status === 'locked', preSubmitted: result.preSubmitted === true || lineup.status === 'pre_submitted', allowPreSubmit: result.allowPreSubmit === true || result.preSubmitAllowed === true, finalWindowOpen: result.finalWindowOpen === true, submitButtonText: result.submitButtonText || '确认并提交本场阵容', submissionWindowText: result.submissionWindowText || '', returned: lineup.status === 'returned', returnReason: lineup.returnReason || '', emptyPlayers: !(result.players || []).length, teamArrived:Boolean(match.teamArrived), allArrived:Boolean(match.allArrived), arrivalStatusText:match.allArrived ? '三方已报到' : (match.teamArrived ? '本队已报到，等待其他方' : '等待本队负责人确认'), arrivalButtonText:match.teamArrived ? '本队已报到' : '确认本队到场', arrivalButtonDisabled:!canConfirmArrival, canConfirmArrival:canConfirmArrival })
+        self.setData({ loading: false, headCoach: result.headCoach || null, headCoachState: result.headCoachState || 'missing', headCoachStateText:({ambiguous:'待确认',unavailable:'暂不可用'}[result.headCoachState]||'待设置'), canManage: result.canManage, match: match, minPlayers: min, sizeText: min ? min + '人制' : '人数待确认', sizeUnsupported: sizeUnsupported, formationOptions: options, formation: formation, slots: decorateSlots(slots, ''), substitutes: subs, benchLimit: Number(match.benchLimit || 5), cardAssetsError: result.cardAssetsError === true, locked: result.locked === true || lineup.status === 'submitted' || lineup.status === 'locked', preSubmitted: result.preSubmitted === true || lineup.status === 'pre_submitted', allowPreSubmit: result.allowPreSubmit === true || result.preSubmitAllowed === true, finalWindowOpen: result.finalWindowOpen === true, submitButtonText: result.submitButtonText || '确认并提交本场阵容', submissionWindowText: result.submissionWindowText || '', returned: lineup.status === 'returned', returnReason: lineup.returnReason || '', emptyPlayers: !(result.players || []).length, teamArrived:Boolean(match.teamArrived), allArrived:Boolean(match.allArrived), arrivalStatusText:match.allArrived ? '三方已报到' : (match.teamArrived ? '本队已报到，等待其他方' : '等待本队负责人确认'), arrivalButtonText:match.teamArrived ? '本队已报到' : '确认本队到场', arrivalButtonDisabled:!canConfirmArrival, canConfirmArrival:canConfirmArrival })
         self.refreshSelection(result.players || [])
       })
       .catch(function (error) { self.setData({ loading: false }); wx.showToast({ title: error.message || '阵容加载失败', icon: 'none' }) })
@@ -127,7 +133,7 @@ Page({
     var ids = selectedIds(this.data.slots, this.data.substitutes)
     this._rosterPlayers = (rawPlayers || this._rosterPlayers || []).map(function (player) { var used = ids.indexOf(player.id) >= 0; return Object.assign({}, player, { selected: used, disabled: used }) })
     var starters = this.data.slots.filter(function (slot) { return !slot.empty }).length
-    this.setData({ showSubmit:this.data.canManage&&!this.data.locked&&starters===this.data.minPlayers,showBenchAdd:this.data.substitutes.length<this.data.benchLimit,benchAddClass:(!this.data.canManage||this.data.locked)?'disabled':'',starterCount: starters, substituteCount: this.data.substitutes.length, selectedCount: ids.length, submitDisabled: starters !== this.data.minPlayers || this.data.locked || !this.data.canManage || !(this.data.allowPreSubmit || (this.data.finalWindowOpen && this.data.allArrived)) })
+    this.setData({ showSubmit:this.data.canManage&&!this.data.locked&&!this.data.sizeUnsupported&&starters===this.data.minPlayers,showBenchAdd:this.data.substitutes.length<this.data.benchLimit,benchAddClass:(!this.data.canManage||this.data.locked)?'disabled':'',starterCount: starters, substituteCount: this.data.substitutes.length, selectedCount: ids.length, submitDisabled: this.data.sizeUnsupported || starters !== this.data.minPlayers || this.data.locked || !this.data.canManage || !(this.data.allowPreSubmit || (this.data.finalWindowOpen && this.data.allArrived)) })
   },
   confirmArrival:function() {
     var self=this
@@ -265,7 +271,7 @@ Page({
     var player = (this._rosterPlayers || []).filter(function (item) { return item.id === id })[0]
     if (!player || player.disabled) return
     if (this.data.substitutes.length >= this.data.benchLimit) { wx.showToast({ title: '替补席已满', icon: 'none' }); return }
-    this.setData({ substitutes: this.data.substitutes.concat([player]) })
+    this.setData({ substitutes: this.data.substitutes.concat([Object.assign({}, player, { positionText: positionText(player.position) })]) })
     this.refreshSelection()
   },
   removeSubstitute: function (event) {
@@ -277,9 +283,16 @@ Page({
   submit: function () {
     var self = this
     if (this.data.submitDisabled || this.data.saving) return
+    if (this.data.sizeUnsupported) { wx.showModal({ title: '无法提交阵容', content: '当前竞赛组别未设置几人制（仅支持 5/7/8/9/11 人制），请联系主办方补充竞赛规则。', showCancel: false }); return }
+    var missingNames = this.data.slots.filter(function (slot) { return !slot.empty && (!slot.jerseyText || slot.jerseyText === '—') }).map(function (slot) { return slot.playerName })
+    this.data.substitutes.forEach(function (player) { if (!String(player.jerseyNumber || '').trim()) missingNames.push(player.name) })
+    if (missingNames.length) {
+      wx.showModal({ title: '缺少球衣号码', content: '请先在球员资料中补全球衣号码：' + missingNames.join('、'), showCancel: false })
+      return
+    }
     var context = workspace.readContext() || {}
-    var starters = this.data.slots.map(function (slot) { return { playerId: slot.playerId, slotId: slot.id } })
-    var substitutes = this.data.substitutes.map(function (player) { return { playerId: player.id } })
+    var starters = this.data.slots.map(function (slot) { return { playerId: slot.playerId, slotId: slot.id, position: slot.position, positionText: positionText(slot.position) } })
+    var substitutes = this.data.substitutes.map(function (player) { return { playerId: player.id, position: String(player.position || '').toUpperCase(), positionText: positionText(player.position) } })
     this.setData({ saving: true })
     wx.cloud.callFunction({ name: 'getMiniWorkspace', data: { action: 'submitMatchLineup', workspaceId: (context.currentWorkspace || {}).id, matchId: this.data.matchId, teamId: this.data.teamId, formation: this.data.formation, starters: starters, substitutes: substitutes } })
       .then(function (res) { var result = res.result || {}; if (!result.success) throw new Error(result.message || '提交失败'); wx.redirectTo({ url: '/pages/match/lineup-result/lineup-result?matchId=' + encodeURIComponent(self.data.matchId) + '&teamId=' + encodeURIComponent(self.data.teamId) }) })

@@ -67,7 +67,8 @@ Page({
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().syncFromPage(3)
     }
-    if (this.data.guestMode) return
+    if (this.data.guestMode && !workspace.hasAuthenticatedUser()) return
+    if (this.data.guestMode) this.setData({ guestMode: false })
     if (!this.data.visualQa) {
       if (!workspace.hasAuthenticatedUser()) {
         this.loadGuestDemo()

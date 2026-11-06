@@ -1,0 +1,40 @@
+<view class="page">
+  <view class="heading"><text class="eyebrow">赛小蜂足球 · 球员档案</text><text class="title">把比赛留在自己的名字下</text><text class="subtitle">先登记或认领球员档案，再加入或创建球队。</text></view>
+  <view wx:if="{{loading}}" class="state">正在核对你的球员档案…</view>
+  <view wx:elif="{{errorText}}" class="state error"><text>{{errorText}}</text><button bindtap="loadProfile">重新读取</button></view>
+  <view wx:elif="{{showSaved}}" class="content">
+    <view class="saved"><text class="saved-title">{{savedTitle}}</text><text class="saved-name">{{playerName}}</text><text class="saved-note">比赛记录经核实后会进入生涯档案。球员卡尚缺照片或赛事实据时，先显示待完善。</text></view>
+    <view wx:if="{{joinOptionCount}}" class="claim-box">
+      <text class="claim-title">选择要加入本队的球员档案</text>
+      <text class="claim-tip">创建球队后，只把你选中的一份档案加入球队球员库。</text>
+      <view wx:for="{{joinOptions}}" wx:key="id" class="claim-row {{item.rowClass}}" bindtap="selectChild" data-id="{{item.id}}">
+        <view class="claim-main"><text class="claim-name">{{item.name}}</text><text class="claim-facts">{{item.roleText}} · {{item.facts}}</text></view>
+        <text class="claim-check">{{item.checkText}}</text>
+      </view>
+    </view>
+    <button class="primary" bindtap="createTeam">没有球队，创建球队</button>
+    <button class="secondary" bindtap="joinTeam">已有球队，找负责人邀请</button>
+    <text wx:if="{{formError}}" class="form-error">{{formError}}</text>
+    <text class="form-switch" bindtap="showRegisterForm">{{registerSwitchText}}</text>
+    <text class="footnote">创建球队的人管理自己创建的队；加入已有球队需要负责人确认。</text>
+  </view>
+  <view wx:else class="content">
+    <view wx:if="{{claimableCount}}" class="claim-box">
+      <text class="claim-title">找到 {{claimableCount}} 份可能属于你的历史档案</text>
+      <text class="claim-tip">这些档案由球队或教练建立，登记手机号与你当前验证的手机号一致。认领后保留原有球队和比赛记录，不会新建重复球员。</text>
+      <view wx:for="{{claimable}}" wx:key="id" class="claim-row">
+        <view class="claim-main"><text class="claim-name">{{item.name}}</text><text class="claim-facts">{{item.roleText}} · {{item.facts}}</text></view>
+        <text class="claim-action" bindtap="claimPlayer" data-id="{{item.id}}">{{item.actionText}}</text>
+      </view>
+    </view>
+    <view class="form-row"><text>球员姓名</text><input value="{{name}}" data-field="name" bindinput="onInput" maxlength="30" placeholder="填写真实姓名" /></view>
+    <view class="form-row"><text>出生日期</text><picker mode="date" value="{{birthDate}}" end="{{today}}" bindchange="onBirthday"><view class="picker-value">{{birthDate || '请选择出生日期'}}</view></picker></view>
+    <view class="form-row"><text>主要位置</text><picker range="{{positions}}" value="{{positionIndex}}" bindchange="onPosition"><view class="picker-value">{{positionText}}</view></picker></view>
+    <view class="physical"><view class="form-row"><text>身高 cm</text><input value="{{height}}" data-field="height" bindinput="onInput" type="digit" placeholder="例如 175" /></view><view class="form-row"><text>体重 kg</text><input value="{{weight}}" data-field="weight" bindinput="onInput" type="digit" placeholder="例如 70" /></view></view>
+    <view wx:if="{{isMinor}}" class="form-row"><text>监护关系</text><picker range="{{guardianOptions}}" value="{{guardianIndex}}" bindchange="onGuardian"><view class="picker-value">{{guardianText}}</view></picker></view>
+    <view class="consent" bindtap="toggleConsent"><text class="check">{{consentMark}}</text><text>我确认由本人或监护人登记，资料仅用于球员档案和后续核验</text></view>
+    <button class="primary" bindtap="register" loading="{{submitting}}" disabled="{{submitting}}">{{registerButtonText}}</button>
+    <text wx:if="{{formError}}" class="form-error">{{formError}}</text>
+    <text class="footnote">没有你的历史档案时再新建；已有档案请先认领，避免出现重复球员。</text>
+  </view>
+</view>

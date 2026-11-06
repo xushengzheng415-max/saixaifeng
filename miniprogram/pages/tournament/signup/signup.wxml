@@ -63,6 +63,7 @@
       <view class="section-header">
         <view class="section-bar"></view>
         <text class="section-title">报名球队</text>
+        <text wx:if="{{canSwitchTeam}}" class="team-switch-link" bindtap="switchTeam">更换球队</text>
       </view>
       <view class="team-info">
         <view class="team-logo" wx:if="{{teamLogoUrl}}">
@@ -76,6 +77,56 @@
           <text class="team-meta">{{teamCity || '未知城市'}} · {{teamPlayerCount || 0}} 名球员</text>
         </view>
       </view>
+      <view class="team-switch-bar">
+        <text class="team-switch-tip">同一支球队可分别报名不同组别，球员库共用一份</text>
+        <text class="team-switch-btn" bindtap="createTeamForSignup">新建球队</text>
+      </view>
+    </view>
+
+    <!-- 报名联系人 -->
+    <view class="section-card">
+      <view class="section-header">
+        <view class="section-bar"></view>
+        <text class="section-title">报名联系人</text>
+        <text class="required-tag">必填</text>
+      </view>
+      <view class="contact-row">
+        <text class="contact-label">负责人</text>
+        <input class="contact-input" value="{{contactName}}" placeholder="领队或教练姓名" maxlength="20" bindinput="onContactNameInput" />
+      </view>
+      <view class="contact-row">
+        <text class="contact-label">联系电话</text>
+        <input class="contact-input" type="number" value="{{contactPhone}}" placeholder="11 位手机号" maxlength="11" bindinput="onContactPhoneInput" />
+      </view>
+      <text class="contact-tip">用于主办方赛事通知与紧急联系，会显示在球队赛事资料中</text>
+    </view>
+
+    <!-- 比赛服颜色 -->
+    <view class="section-card">
+      <view class="section-header">
+        <view class="section-bar"></view>
+        <text class="section-title">比赛服颜色</text>
+        <text class="required-tag">必填</text>
+      </view>
+      <view class="contact-row">
+        <text class="contact-label">主比赛服</text>
+        <picker class="kit-picker" range="{{kitColorLabels}}" value="{{kitPrimaryIndex}}" data-set="primary" bindchange="onKitColorChange">
+          <view class="kit-picker-inner">
+            <view class="kit-swatch" style="background-color:{{kitPrimaryColor}}"></view>
+            <text class="kit-picker-text">{{kitPrimaryLabel || '请选择上衣颜色'}}</text>
+          </view>
+        </picker>
+      </view>
+      <view class="contact-row">
+        <text class="contact-label">备用比赛服</text>
+        <picker class="kit-picker" range="{{kitColorLabels}}" value="{{kitSecondaryIndex}}" data-set="secondary" bindchange="onKitColorChange">
+          <view class="kit-picker-inner">
+            <view class="kit-swatch" style="background-color:{{kitSecondaryColor}}"></view>
+            <text class="kit-picker-text">{{kitSecondaryLabel || '请选择上衣颜色'}}</text>
+          </view>
+        </picker>
+      </view>
+      <text class="contact-tip">填写主、备用比赛服上衣颜色，用于赛前撞色提醒；短裤与球袜可在球队详情中补充</text>
     </view>
 
     <view class="section-card" wx:if="{{tournament}}">

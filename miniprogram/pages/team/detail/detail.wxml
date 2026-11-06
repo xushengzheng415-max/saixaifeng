@@ -56,7 +56,7 @@
     <!-- 快捷操作 -->
     <view class="action-section">
       <button class="action-btn primary" bindtap="onAddPlayer">
-        <text class="btn-icon">➕</text> 添加球员
+        <text class="btn-icon">➕</text> 球员认领
       </button>
       <button class="action-btn" bindtap="onSubmitSquad">
         <text class="btn-icon">🏆</text> 提交名单
@@ -64,6 +64,68 @@
       <button class="action-btn" bindtap="onEditTeam">
         <text class="btn-icon">✏️</text> 编辑球队
       </button>
+    </view>
+
+    <!-- 我的主场 -->
+    <view class="venues-section">
+      <view class="section-header">
+        <text class="section-title">我的主场</text>
+        <text class="section-add" bindtap="openAddVenue">+ 添加</text>
+      </view>
+
+      <view wx:if="{{hasHomeVenues}}" class="venue-list">
+        <view class="venue-card" wx:for="{{homeVenues}}" wx:key="id">
+          <view class="venue-card-head">
+            <view class="venue-card-title-row">
+              <text class="venue-card-name">{{item.name}}</text>
+              <text wx:if="{{item.isDefault}}" class="venue-default-badge">默认</text>
+            </view>
+            <text wx:if="{{item.address}}" class="venue-card-addr">{{item.address}}</text>
+          </view>
+          <view class="venue-card-btns">
+            <text class="venue-btn" catchtap="openVenueMap" data-index="{{index}}" wx:if="{{item.hasLocation}}">导航</text>
+            <text class="venue-btn" catchtap="editVenue" data-index="{{index}}">编辑</text>
+            <text class="venue-btn" catchtap="setDefaultVenue" data-index="{{index}}" wx:if="{{!item.isDefault}}">设默认</text>
+            <text class="venue-btn danger" catchtap="deleteVenue" data-index="{{index}}">删除</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:else class="venue-empty" bindtap="openAddVenue">
+        <text class="venue-empty-icon">📍</text>
+        <text class="venue-empty-text">还没保存主场，点这里添加</text>
+      </view>
+    </view>
+
+    <!-- 主场编辑弹窗 -->
+    <view class="venue-editor-mask" wx:if="{{venueEditorVisible}}" bindtap="closeVenueEditor">
+      <view class="venue-editor" catchtap="">
+        <text class="venue-editor-title">{{editingVenueId ? '编辑主场' : '添加主场'}}</text>
+
+        <view class="venue-editor-row">
+          <text class="venue-editor-label">场地名称</text>
+          <input class="venue-editor-input" placeholder="如：开封立洋小学足球场" placeholder-class="venue-editor-ph" value="{{editorVenueName}}" bindinput="onEditorNameInput" maxlength="30" />
+        </view>
+
+        <view class="venue-editor-row">
+          <text class="venue-editor-label">定位</text>
+          <view class="venue-editor-loc-row">
+            <view class="venue-editor-map-btn" bindtap="onPickEditorLocation">
+              <text>📍 地图选点</text>
+            </view>
+            <view wx:if="{{editorVenueHasLoc}}" class="venue-editor-loc-info">
+              <text class="venue-editor-loc-addr">{{editorVenueAddress}}</text>
+              <text class="venue-editor-loc-clear" bindtap="clearEditorLocation">清除</text>
+            </view>
+            <text wx:else class="venue-editor-loc-hint">选过点后发起邀约能直接导航</text>
+          </view>
+        </view>
+
+        <view class="venue-editor-btns">
+          <button class="venue-editor-btn cancel" bindtap="closeVenueEditor">取消</button>
+          <button class="venue-editor-btn save" bindtap="saveVenue">保存</button>
+        </view>
+      </view>
     </view>
 
     <!-- 球员列表 -->
@@ -92,8 +154,8 @@
 
       <view class="empty-state" wx:else>
         <text class="empty-icon">⚽</text>
-        <text class="empty-text">暂无球员，快去添加吧</text>
-        <button class="btn-add" bindtap="onAddPlayer">添加球员</button>
+        <text class="empty-text">暂无球员，发起认领邀请家长认领</text>
+        <button class="btn-add" bindtap="onAddPlayer">球员认领</button>
       </view>
     </view>
   </block>

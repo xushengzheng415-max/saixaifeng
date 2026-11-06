@@ -41,20 +41,19 @@
 .pitch-box{position:absolute;left:29%;width:42%;height:57rpx;border:2rpx solid rgba(229,255,234,.46)}
 .pitch-box-top{top:12rpx;border-top:0}
 .pitch-box-bottom{bottom:12rpx;border-bottom:0}
-.slot{position:absolute;z-index:2;width:116rpx;height:132rpx;display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-50%);text-align:center}
-.slot:not(.empty){width:120rpx;height:172rpx}
-.player-card{position:relative;width:86rpx;height:94rpx;overflow:hidden;background:#1b4934;clip-path:polygon(12% 0,88% 0,100% 12%,100% 88%,88% 100%,12% 100%,0 88%,0 12%);box-shadow:0 3rpx 8rpx rgba(0,0,0,.25)}
+.slot{position:absolute;z-index:2;width:96rpx;height:100rpx;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;transform:translate(-50%,-50%);text-align:center}
+.player-card{position:relative;width:96rpx;height:100rpx;overflow:hidden;background:#1b4934;clip-path:polygon(12% 0,88% 0,100% 12%,100% 88%,88% 100%,12% 100%,0 88%,0 12%);box-shadow:0 3rpx 8rpx rgba(0,0,0,.25)}
 .player-card.has-card{width:72rpx;height:105rpx;overflow:visible;background:none;clip-path:none;box-shadow:none}
 .system-card{width:100%;height:100%}
 .player-avatar{position:absolute;left:4rpx;right:4rpx;bottom:0;width:78rpx;height:83rpx}
 .card-number{position:absolute;z-index:2;top:5rpx;left:7rpx;color:#f1f7eb;font-size:18rpx;font-weight:800}
 .card-add{position:absolute;top:23rpx;left:0;right:0;color:#36553b;font-size:42rpx;line-height:1}
 .card-fallback{position:absolute;top:28rpx;left:0;right:0;color:#e3f0e4;font-size:34rpx;font-weight:700;line-height:1}
-.slot.empty .player-card{width:72rpx;height:72rpx;display:flex;align-items:center;justify-content:center;background:rgba(7,47,30,.74);border:2rpx dashed #c8bd81;box-sizing:border-box;clip-path:none;border-radius:50%;box-shadow:none}
+.slot.empty .player-card{width:68rpx;height:68rpx;display:flex;align-items:center;justify-content:center;background:rgba(7,47,30,.74);border:2rpx dashed #c8bd81;box-sizing:border-box;clip-path:none;border-radius:50%;box-shadow:none}
 .slot.empty .card-number{display:none}
 .slot.empty .card-add{position:static;color:#e5dfb4;font-size:43rpx;line-height:1}
 .slot.active .player-card{box-shadow:0 0 0 5rpx #fff0a3}
-.slot-name{max-width:116rpx;margin-top:2rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:20rpx;font-weight:700;text-shadow:0 2rpx 4rpx #123224}
+.slot-name{max-width:96rpx;margin-top:2rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:18rpx;line-height:22rpx;font-weight:700;text-shadow:0 2rpx 4rpx #123224}
 .slot-position{color:#d5ead8;font-size:16rpx;line-height:1}
 .bench-card{margin-top:10rpx;padding:6rpx 8rpx 2rpx;background:#10271e}
 .bench-head{display:flex;justify-content:space-between;color:#ebf6eb;font-size:22rpx;font-weight:700}
@@ -69,6 +68,7 @@
 .bench-photo{width:68rpx;height:75rpx;display:flex;align-items:center;justify-content:center;background:#1b4934;color:#eef7ea;font-size:23rpx;font-weight:700}
 .bench-photo image{width:68rpx;height:75rpx}
 .bench-name{max-width:82rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18rpx}
+.bench-position{max-width:82rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18rpx;color:#cfd9c8}
 .bench-empty{align-self:center;color:#97b19e;font-size:21rpx}
 .roster-card{margin:0 24rpx 18rpx;padding:0 14rpx;background:#0e3023;border-radius:8rpx}
 .roster-head{height:62rpx;display:flex;align-items:center;justify-content:space-between;font-size:25rpx;font-weight:700}
@@ -126,17 +126,16 @@
   .coach-empty{width:53rpx;height:76rpx;gap:2rpx;font-size:10rpx}
   .coach-mark{font-size:17rpx}
   .coach-state{font-size:8rpx}
-  .slot{width:80rpx;height:77rpx}
-  .slot:not(.empty){width:64rpx;height:92rpx}
+  .slot{width:96rpx;height:54rpx}
   .player-card{width:51rpx;height:56rpx}
   .player-card.has-card{width:35rpx;height:52rpx}
   .player-avatar{width:47rpx;height:50rpx;left:2rpx}
   .card-number{font-size:11rpx;top:2rpx;left:4rpx}
   .card-add{top:10rpx;font-size:29rpx}
-  .slot.empty .player-card{width:43rpx;height:43rpx}
-  .slot.empty .card-add{font-size:28rpx}
+  .slot.empty .player-card{width:36rpx;height:36rpx}
+  .slot.empty .card-add{font-size:24rpx}
   .card-fallback{top:16rpx;font-size:21rpx}
-  .slot-name{max-width:80rpx;font-size:13rpx;margin-top:1rpx}
+  .slot-name{max-width:96rpx;font-size:13rpx;line-height:15rpx;margin-top:1rpx}
   .slot-position{font-size:11rpx}
   .pitch-box{height:31rpx}
   .pitch-center{width:70rpx;height:70rpx}
@@ -147,6 +146,7 @@
   .bench-player{width:49rpx}
   .bench-photo,.bench-photo image{width:38rpx;height:42rpx}
   .bench-name{max-width:49rpx;font-size:12rpx}
+  .bench-position{max-width:49rpx;font-size:12rpx}
   .bench-add-tile{width:53rpx;min-height:58rpx;gap:2rpx;font-size:11rpx}
   .bench-add-tile text:first-child{width:37rpx;height:41rpx;font-size:27rpx}
   .bench-empty{font-size:15rpx}

@@ -1,12 +1,21 @@
 var workspace = require('../../../utils/workspace')
 
+function memberHasKind(item, kind) {
+  var roles = (item.roles || []).join(' ') + ' ' + String(item.roleText || '')
+  return item.kind === kind || ({coach:/coach|教练/i,leader:/leader|领队/i,doctor:/doctor|medic|队医/i,manager:/owner|team_manager|manager|admin|负责人|管理员/i}[kind] || /$^/).test(roles)
+}
+
 function buildFilterTabs(mode, members) {
   var all = members.length
-  var coaches = members.filter(function (item) { return item.kind === 'coach' }).length
-  var managers = members.filter(function (item) { return item.kind === 'manager' }).length
+  var coaches = members.filter(function (item) { return memberHasKind(item,'coach') }).length
+  var managers = members.filter(function (item) { return memberHasKind(item,'manager') }).length
+  var leaders = members.filter(function (item) { return memberHasKind(item,'leader') }).length
+  var doctors = members.filter(function (item) { return memberHasKind(item,'doctor') }).length
   return [
     { id: 'all', label: '全部 ' + all, className: mode === 'all' ? 'member-filter member-filter-active' : 'member-filter' },
     { id: 'coach', label: '教练 ' + coaches, className: mode === 'coach' ? 'member-filter member-filter-active' : 'member-filter' },
+    { id: 'leader', label: '领队 ' + leaders, className: mode === 'leader' ? 'member-filter member-filter-active' : 'member-filter' },
+    { id: 'doctor', label: '队医 ' + doctors, className: mode === 'doctor' ? 'member-filter member-filter-active' : 'member-filter' },
     { id: 'manager', label: '管理员 ' + managers, className: mode === 'manager' ? 'member-filter member-filter-active' : 'member-filter' }
   ]
 }
@@ -24,6 +33,10 @@ function prepareMembers(members) {
   return members.map(function (item) {
     var row = Object.assign({}, item)
     row.phoneMasked = row.phoneMasked || ''
+    if (!row.kind) {
+      var roleText = String(row.roleText || '')
+      row.kind = /教练|coach/i.test(roleText) ? 'coach' : (/队医|doctor/i.test(roleText) ? 'doctor' : /领队|leader/i.test(roleText) ? 'leader' : /负责人|管理员|manager|owner/i.test(roleText) ? 'manager' : 'other')
+    }
     row.avatarText = row.avatarText || String(row.name || '球').slice(0, 1)
     row.statusClass = row.pending ? 'member-status member-status-pending' : 'member-status member-status-active'
     return row
@@ -232,7 +245,7 @@ Page({
       var phone = item.phoneMasked || ''
       var name = item.name || ''
       var hit = !key || name.indexOf(key) >= 0 || phone.indexOf(key) >= 0
-      return hit && (mode === 'all' || item.kind === mode)
+      return hit && (mode === 'all' || memberHasKind(item,mode))
     })
     this.setData({ visible: rows, filterTabs: buildFilterTabs(mode, members) })
   },

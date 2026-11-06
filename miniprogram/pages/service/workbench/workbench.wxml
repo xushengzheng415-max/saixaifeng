@@ -33,6 +33,14 @@
       <text class="identity-phone">{{phoneMasked}}</text>
     </view>
 
+    <view class="notify-card" wx:if="{{phoneMasked}}">
+      <view class="notify-text">
+        <text class="notify-title">执裁提醒</text>
+        <text class="notify-desc">开启后，主办方指派比赛会立即通知你；剩余 {{notifyQuota}} 次</text>
+      </view>
+      <button class="notify-btn" bindtap="onEnableNotify">开启提醒</button>
+    </view>
+
     <view class="section" wx:if="{{hasRefereeTasks}}">
       <view class="section-heading">
         <text class="section-title">我的比赛</text>

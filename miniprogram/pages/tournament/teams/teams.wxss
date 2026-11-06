@@ -7,8 +7,32 @@
 .division-tabs-inner { display:inline-flex; gap:14rpx; padding:18rpx 24rpx; }
 .division-tab { padding:12rpx 28rpx; color:#606266; background:#f4f6f8; border-radius:30rpx; font-size:26rpx; }
 .division-tab.active { color:#fff; background:#1B5E20; font-weight:600; }
+.rank-card { margin:20rpx 24rpx 0; padding:22rpx 24rpx 16rpx; background:#fff; border-radius:12rpx; border-top:4rpx solid #1B5E20; }
+.cc-title { display:block; font-size:28rpx; font-weight:700; color:#1B5E20; }
+.cc-modes { display:flex; gap:8rpx; padding:14rpx 0; }
+.cc-mode { flex:1; text-align:center; padding:12rpx 0; border-radius:10rpx; color:#606266; background:#f4f6f8; font-size:26rpx; }
+.cc-mode.active { color:#fff; background:#1B5E20; font-weight:600; }
+.cc-sub-modes { padding:0 0 12rpx; }
+.cc-sub-modes .cc-mode { background:#eef4ef; font-size:24rpx; }
+.cc-division-tabs { width:100%; white-space:nowrap; }
+.cc-division-tabs-inner { display:inline-flex; gap:10rpx; padding:0 0 14rpx; }
+.cc-scope-item { padding:8rpx 20rpx; border-radius:24rpx; color:#606266; background:#f4f6f8; font-size:22rpx; }
+.cc-scope-item.active { color:#fff; background:#1B5E20; font-weight:600; }
+.cc-block { padding-top:14rpx; }
+.cc-block-title { display:block; padding-bottom:6rpx; color:#1B5E20; font-size:26rpx; font-weight:700; }
+.cc-div { width:120rpx; color:#8a9a90; font-size:22rpx; text-align:center; }
+.cc-sub { display:block; color:#9aa7a0; font-size:20rpx; }
+.cc-row { display:flex; align-items:center; min-height:56rpx; border-bottom:1rpx solid #f4f4f4; font-size:26rpx; color:#333; }
+.cc-head-row { color:#8a9a90; font-size:22rpx; }
+.cc-rank { width:70rpx; color:#8a9a90; }
+.cc-head-row .cc-rank { color:#8a9a90; }
+.cc-team { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cc-num { width:80rpx; text-align:center; }
+.cc-goals { color:#1B5E20; font-size:30rpx; font-weight:700; }
+.cc-note { display:block; padding-top:12rpx; color:#9aa7a0; font-size:20rpx; }
 .organizer-actions { display:flex; gap:20rpx; padding:20rpx 24rpx 0; }
 .action-btn { flex:1; height:76rpx; line-height:76rpx; border-radius:12rpx; font-size:28rpx; padding:0; }
+.scorebook-btn { background:#0f3d22; color:#fff; }
 .action-btn::after, .add-player-btn::after, .cancel-btn::after, .submit-btn::after { border:none; }
 .invite-btn { color:#1B5E20; background:#fff; border:2rpx solid #1B5E20; }
 .add-team-btn { color:#fff; background:#1B5E20; }

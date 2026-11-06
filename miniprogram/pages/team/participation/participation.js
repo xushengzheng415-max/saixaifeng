@@ -1,4 +1,5 @@
 var workspace = require('../../../utils/workspace')
+var participation = require('../../../utils/team-participation-view')
 
 function fixture() {
   return {
@@ -11,8 +12,7 @@ function fixture() {
 }
 
 function buildFilters(mode, rows) {
-  var counts = { not_started: 0, ongoing: 0, completed: 0 }
-  rows.forEach(function (item) { counts[item.competitionStatus || 'not_started'] = Number(counts[item.competitionStatus || 'not_started'] || 0) + 1 })
+  var counts = participation.matchCounts(rows)
   return [
     { id: 'not_started', label: '待开始 ' + counts.not_started, className: mode === 'not_started' ? 'event-filter active' : 'event-filter' },
     { id: 'ongoing', label: '进行中 ' + counts.ongoing, className: mode === 'ongoing' ? 'event-filter active' : 'event-filter' },
@@ -21,7 +21,7 @@ function buildFilters(mode, rows) {
 }
 
 Page({
-  data: { teamId: '', loading: true, team: {}, items: [], eventCount: 0, visible: [], filters: [], activeFilter: 'not_started', isDevtools: false },
+  data: { teamId: '', loading: true, errorText: '', team: {}, items: [], eventCount: 0, visible: [], filters: [], activeFilter: 'not_started', isDevtools: false, showEmpty:false, emptyText:'' },
   onLoad: function (options) {
     var query = options || {}
     var isDevtools = workspace.isVisualQaEnabled(query)
@@ -40,19 +40,20 @@ Page({
     wx.cloud.callFunction({ name: 'getMiniWorkspace', data: { action: 'teamParticipation', workspaceId: (context.currentWorkspace || {}).id, teamId: this.data.teamId } }).then(function (response) {
       var result = response.result || {}
       if (!result.success) throw new Error(result.message || '参赛记录加载失败')
-      var rows = result.items || []
-      self.setData({ loading: false, team: result.team || {}, items: rows, eventCount: rows.length })
+      var rows = participation.rowsForTeam(result.items, context, self.data.teamId)
+      var counts=participation.matchCounts(rows)
+      var mode=counts.ongoing ? 'ongoing' : counts.not_started ? 'not_started' : counts.completed ? 'completed' : 'not_started'
+      self.setData({ loading: false, errorText:'', team: result.team || {}, items: rows, eventCount: participation.tournamentCount(rows), activeFilter:mode })
       self.filter()
     }).catch(function (error) {
-      self.setData({ loading: false })
-      wx.showToast({ title: error.message || '参赛记录加载失败', icon: 'none' })
+      self.setData({ loading: false, errorText:error.message || '参赛记录加载失败，请重试' })
     })
   },
   filter: function () {
     var all = this.data.items || []
     var mode = this.data.activeFilter
-    var visible = all.filter(function (item) { return String(item.competitionStatus || 'not_started') === mode })
-    this.setData({ visible: visible, filters: buildFilters(mode, all) })
+    var visible = participation.filterMatches(all,mode)
+    this.setData({ visible: visible, filters: buildFilters(mode, all), showEmpty:visible.length === 0, emptyText:all.length ? ({not_started:'暂无待开始比赛',ongoing:'暂无进行中比赛',completed:'暂无已完赛比赛'}[mode] || '暂无比赛') : '暂无参赛记录' })
   },
   choose: function (event) {
     this.setData({ activeFilter: event.currentTarget.dataset.id })
@@ -62,13 +63,14 @@ Page({
     var tournamentId = String(event.currentTarget.dataset.tournament || '')
     var divisionId = String(event.currentTarget.dataset.division || '')
     if (!tournamentId) return
-    var url = '/pages/tournament/detail/detail?id=' + encodeURIComponent(tournamentId) + '&teamId=' + encodeURIComponent(this.data.teamId)
+    var context = workspace.readContext() || {}
+    var url = '/pages/tournament/detail/detail?id=' + encodeURIComponent(tournamentId) + '&view=team&workspaceId=' + encodeURIComponent((context.currentWorkspace || {}).id || '') + '&teamId=' + encodeURIComponent(this.data.teamId)
     if (divisionId) url += '&divisionId=' + encodeURIComponent(divisionId)
     wx.navigateTo({ url: url })
   },
   openMatchDetail: function (event) {
     var matchId = String(event.currentTarget.dataset.id || '')
-    if (matchId) wx.navigateTo({ url: '/pages/match/detail/detail?matchId=' + encodeURIComponent(matchId) })
+    if (matchId) wx.navigateTo({ url: '/pages/match/detail/detail?matchId=' + encodeURIComponent(matchId) + '&teamId=' + encodeURIComponent(this.data.teamId) })
   },
   openMatch: function (event) {
     var matchId = event.currentTarget.dataset.id
