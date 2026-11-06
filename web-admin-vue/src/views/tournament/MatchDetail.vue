@@ -56,7 +56,7 @@
         :loading="saving"
       >开始比赛</el-button>
       <el-button
-        v-if="['scheduled', 'ongoing', 'finished', 'completed', 'ended'].includes(String(match.status || '').toLowerCase()) && match.resultType !== 'forfeit'"
+        v-if="['scheduled', 'postponed', 'ongoing', 'finished', 'completed', 'ended'].includes(String(match.status || '').toLowerCase()) && match.resultType !== 'forfeit'"
         type="danger"
         size="small"
         @click="openForfeitDialog"
@@ -468,7 +468,7 @@
           </el-form-item>
         </template>
         <div v-else class="postpone-hint">
-          将本场排到本赛事所有已排期比赛之后：日期取最后比赛日，时间取该日最晚时段再加 30 分钟，场地沿用本场当前场地。确认后由服务端计算并回显具体时间。
+          按本场原定星期几排到本赛事最晚比赛日之后：例如原定周六，就落到最后一个比赛日之后的第一个周六；开赛时间与场地沿用本场原定值。如果该日期同一时段同一场地已被占用，自动顺延到下一个同星期几（最多 8 周），具体落点由服务端计算并回显。
         </div>
       </el-form>
       <template #footer>
@@ -2048,6 +2048,20 @@ function openPostponeDialog() {
   postponeDialogVisible.value = true
 }
 
+function postponeDateLabel(dateText) {
+  const matched = String(dateText || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matched) return String(dateText || '')
+  return `${Number(matched[2])} 月 ${Number(matched[3])} 日`
+}
+function postponeResultText(target = {}) {
+  const weekday = target.weekdayText ? `（${target.weekdayText}）` : ''
+  const venue = target.venue ? ` · ${target.venue}` : ''
+  let text = `已延期至 ${postponeDateLabel(target.matchDate)}${weekday} ${target.matchTime || ''}${venue}`
+  if (Number(target.shiftWeeks) > 0) text += `，原定场地已被占用，顺延 ${Number(target.shiftWeeks)} 周`
+  if (target.fallbackReason) text += `。${target.fallbackReason}`
+  return text
+}
+
 async function confirmPostpone() {
   if (postponing.value) return
   const form = postponeForm.value
@@ -2075,8 +2089,14 @@ async function confirmPostpone() {
     match.value.matchDate = target.matchDate || match.value.matchDate
     match.value.matchTime = target.matchTime || match.value.matchTime
     match.value.venue = target.venue || match.value.venue
+    if (target.postponedFrom) match.value.postponedFrom = target.postponedFrom
+    match.value.postponedAt = new Date().toISOString()
+    if (target.postponeCount) match.value.postponeCount = target.postponeCount
     postponeDialogVisible.value = false
-    ElMessage.success(`已延期至 ${match.value.matchDate || '-'} ${match.value.matchTime || '-'}${match.value.venue ? ' · ' + match.value.venue : ''}`)
+    ElMessage.success({
+      message: postponeResultText(target),
+      duration: 6000
+    })
   } catch (err) {
     ElMessage.error('延期失败: ' + (err?.message || '请重试'))
   } finally {
