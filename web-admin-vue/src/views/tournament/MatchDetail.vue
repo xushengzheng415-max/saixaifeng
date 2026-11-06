@@ -84,11 +84,11 @@
         :loading="saving"
       >重置为未开始</el-button>
       <el-button
-        v-if="match.status === 'scheduled'"
+        v-if="canPostpone"
         type="warning"
         size="small"
-        @click="updateStatus('postponed')"
-        :loading="saving"
+        @click="openPostponeDialog"
+        :loading="postponing"
       >延期</el-button>
     </div>
 
@@ -442,6 +442,38 @@
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="saveMatchEdit" :loading="saving">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 延期弹窗 -->
+    <el-dialog v-model="postponeDialogVisible" title="比赛延期" width="520px" class="postpone-dialog">
+      <el-form :model="postponeForm" label-width="96px">
+        <el-form-item label="延期方式">
+          <el-radio-group v-model="postponeForm.mode">
+            <el-radio label="fixed">固定延期时间</el-radio>
+            <el-radio label="end">排到所有比赛最后</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <template v-if="postponeForm.mode === 'fixed'">
+          <el-form-item label="比赛日期" required>
+            <el-date-picker v-model="postponeForm.matchDate" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" placeholder="选择延期日期" style="width:100%;" />
+          </el-form-item>
+          <el-form-item label="开赛时间" required>
+            <el-time-select v-model="postponeForm.matchTime" start="06:00" step="00:15" end="23:00" format="HH:mm" placeholder="选择开赛时间" style="width:100%;" />
+          </el-form-item>
+          <el-form-item label="场地" required>
+            <el-select v-model="postponeForm.venue" filterable allow-create default-first-option placeholder="选择或填写场地" style="width:100%;">
+              <el-option v-for="item in venueOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+        </template>
+        <div v-else class="postpone-hint">
+          将本场排到本赛事所有已排期比赛之后：日期取最后比赛日，时间取该日最晚时段再加 30 分钟，场地沿用本场当前场地。确认后由服务端计算并回显具体时间。
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="postponeDialogVisible = false">取消</el-button>
+        <el-button type="warning" @click="confirmPostpone" :loading="postponing">确认延期</el-button>
       </template>
     </el-dialog>
 
@@ -1990,6 +2022,68 @@ async function loadTeamLogos(homeId, awayId) {
   }
 }
 
+// 延期：改期能力复用 updateMatch 的 postponeMatch 动作，不改动其他字段。
+const postponeDialogVisible = ref(false)
+const postponing = ref(false)
+const postponeForm = ref({ mode:'fixed', matchDate:'', matchTime:'', venue:'' })
+const canPostpone = computed(() => {
+  const status = String(match.value.status || '')
+  return ['scheduled','postponed','pending','not_started','upcoming'].includes(status) &&
+    !isRefereeEvidenceLocked.value &&
+    !(Array.isArray(match.value.events) ? match.value.events.length : 0)
+})
+
+function openPostponeDialog() {
+  if (!ensureEvidenceEditable()) return
+  if (Array.isArray(match.value.events) && match.value.events.length) {
+    ElMessage.warning('本场已录入比赛事件，不能延期')
+    return
+  }
+  postponeForm.value = {
+    mode: 'fixed',
+    matchDate: match.value.matchDate || '',
+    matchTime: match.value.matchTime || '',
+    venue: match.value.venue || ''
+  }
+  postponeDialogVisible.value = true
+}
+
+async function confirmPostpone() {
+  if (postponing.value) return
+  const form = postponeForm.value
+  if (form.mode === 'fixed') {
+    if (!form.matchDate) { ElMessage.warning('请选择延期日期'); return }
+    if (!form.matchTime) { ElMessage.warning('请选择开赛时间'); return }
+    if (!String(form.venue || '').trim()) { ElMessage.warning('请选择延期场地'); return }
+  }
+  postponing.value = true
+  try {
+    const payload = {
+      action: 'postponeMatch',
+      matchId,
+      mode: form.mode
+    }
+    if (form.mode === 'fixed') {
+      payload.matchDate = form.matchDate
+      payload.matchTime = form.matchTime
+      payload.venue = String(form.venue).trim()
+    }
+    const result = await callFunction('updateMatch', payload)
+    if (!result?.success) throw new Error(result?.message || result?.error || '延期未保存，请重试')
+    const target = result.data || {}
+    match.value.status = 'scheduled'
+    match.value.matchDate = target.matchDate || match.value.matchDate
+    match.value.matchTime = target.matchTime || match.value.matchTime
+    match.value.venue = target.venue || match.value.venue
+    postponeDialogVisible.value = false
+    ElMessage.success(`已延期至 ${match.value.matchDate || '-'} ${match.value.matchTime || '-'}${match.value.venue ? ' · ' + match.value.venue : ''}`)
+  } catch (err) {
+    ElMessage.error('延期失败: ' + (err?.message || '请重试'))
+  } finally {
+    postponing.value = false
+  }
+}
+
 // 更新比赛状态
 async function updateStatus(status) {
   if (!ensureEvidenceEditable()) return
@@ -2240,7 +2334,7 @@ async function saveMatchEdit() {
       ? (allTeams.value.find(t => t.teamId === f.awayTeamId)?.teamName || match.value.awayTeamName || '')
       : (match.value.awayTeamName || '')
 
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId: f._id,
       data: {
         matchDate: f.matchDate,
@@ -2258,6 +2352,7 @@ async function saveMatchEdit() {
         updateTime: new Date()
       }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛信息未保存，请重试')
     ElMessage.success('保存成功')
     editDialogVisible.value = false
     loadMatch()
@@ -2864,10 +2959,11 @@ async function handleVisualLineupSave(data) {
       updateData.updateTime = new Date()
     }
 
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: updateData
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '阵容未保存，请重试')
 
     // 更新本地数据
     if (!match.value.lineups) match.value.lineups = {}
@@ -3402,6 +3498,7 @@ onMounted(() => {
 .event-form { min-height: 310px; padding: 2px 4px 0; }
 .event-form-grid { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 14px; }
 .event-on-field-tip { margin-bottom: 14px; }
+.postpone-hint { margin: 0 0 6px; padding: 12px 14px; border-radius: 10px; background: #fff7e6; color: #8a5a00; font-size: 13px; line-height: 1.6; }
 .event-form :deep(.el-form-item) { margin-bottom: 18px; }
 .event-form :deep(.el-form-item__label) { height: auto; margin-bottom: 7px; color: #34443b; font-weight: 600; line-height: 1.4; }
 .event-team-item { padding: 12px 14px; border: 1px solid #e3e9e5; border-radius: 7px; background: #f8faf9; }
