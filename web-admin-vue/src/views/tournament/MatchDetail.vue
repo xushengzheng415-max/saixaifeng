@@ -680,12 +680,12 @@
             :description="eventOnFieldTip.description"
           />
           <el-form-item :label="eventPlayerFieldLabel" required>
-            <el-select v-model="eventForm.playerName" filterable clearable :placeholder="eventPlayerPlaceholder" style="width:100%">
+            <el-select v-model="eventForm.playerName" filterable clearable :disabled="!eventMinuteSelected" :placeholder="eventPlayerPlaceholder" style="width:100%">
               <el-option v-for="player in eventPlayerOptions" :key="player.value" :label="player.label" :value="player.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="助攻球员" v-if="eventForm.type === 'goal'">
-            <el-select v-model="eventForm.assistName" filterable clearable placeholder="选择助攻球员（可选）" style="width:100%">
+            <el-select v-model="eventForm.assistName" filterable clearable :disabled="!eventMinuteSelected" placeholder="选择助攻球员（可选）" style="width:100%">
               <el-option v-for="player in eventAssistOptions" :key="player.value" :label="player.label" :value="player.value" />
             </el-select>
           </el-form-item>
@@ -1282,22 +1282,30 @@ const eventPlayersLoading = ref(false)
 const emptySubstitution = () => ({ outId:'',inId:'' })
 const newEventForm = () => ({ type:'goal',minute:'',teamSide:'home',playerName:'',assistName:'',substitutionPeriod:'first_half',substitutions:[emptySubstitution()] })
 const eventForm = ref(newEventForm())
+const eventMinuteSelected = computed(() => eventForm.value.minute !== '' && eventForm.value.minute != null)
 const eventMinuteOptions = Array.from({ length:131 }, (_,minute) => ({ value:minute,label:`${minute}′` }))
 const substitutionPeriodOptions = [{ label:'上半场',value:'first_half' },{ label:'中场休息',value:'halftime' },{ label:'下半场',value:'second_half' }]
 const eventPlayerFieldLabel = computed(() => ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type) ? '领牌球员' : eventForm.value.type === 'assist' ? '助攻球员' : '球员')
-const eventPlayerPlaceholder = computed(() => ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员')
+const eventPlayerPlaceholder = computed(() => {
+  if (!eventMinuteSelected.value) return '请先选择比赛时间'
+  return ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员'
+})
 const isPlayerRecord = player => Boolean(player && typeof player === 'object' && !Array.isArray(player))
 const getPlayerId = player => isPlayerRecord(player) ? String(player.playerId || player.id || player._id || '') : ''
-const eventMinuteSelected = computed(() => eventForm.value.minute !== '' && eventForm.value.minute != null)
 // 在场球员按所填时间点从首发 + 已记录的换人/罚下事件推导，复用数据中心统一换人状态。
 // 口径：换人当分钟即时生效（事件 minute <= 所选分钟都会计入），第 45 分钟换人时选 45 分钟看到的就是换上的人；
 // 该分钟及之后的事件应记在换上球员名下。现有事件只有分钟、没有补时/加时阶段字段，
 // 补时与加时场景的在场推导可能不精确，不额外造阶段数据。
 const eventOnFieldState = computed(() => {
-  if (!eventMinuteSelected.value) return { known: false, players: [] }
+  if (!eventMinuteSelected.value) return { known: false, players: [], issues: [] }
   const state = substitutionState(match.value, effectiveSubstitutionRules.value, match.value.events || [], Number(eventForm.value.minute))
   const side = state?.sides?.[eventForm.value.teamSide] || {}
-  return { known: Boolean(side.known), players: Array.isArray(side.outgoing) ? side.outgoing.filter(isPlayerRecord) : [] }
+  return {
+    known: Boolean(side.known),
+    players: Array.isArray(side.outgoing) ? side.outgoing.filter(isPlayerRecord) : [],
+    // 未生效的换人/罚下记录会导致在场名单停留在首发，必须让操作者看到原因。
+    issues: Array.isArray(side.issues) ? side.issues : []
+  }
 })
 // 阵容或时间点无法判定时返回 null，候选回退为全队名单并在弹窗内提示。
 const eventOnFieldFilter = computed(() => {
@@ -1349,7 +1357,14 @@ const eventOnFieldTip = computed(() => {
       ? { type:'info', title:'领牌可选全队名单（含替补席）', description:`第 ${eventForm.value.minute}′ 在场 ${eventOnFieldPlayerCount.value} 人；替补席领牌不改动在场名单，替补席红牌后该球员不能换入。` }
       : { type:'info', title:'领牌可选全队名单（含替补席）', description:'本场阵容缺失或名单未关联球员库，暂显示全队；替补席领牌不改动在场名单。' }
   }
-  if (eventOnFieldApplied.value) return { type:'info', title:`第 ${eventForm.value.minute}′ 在场 ${eventOnFieldPlayerCount.value} 人`, description:'已按首发及已记录的换人、罚下事件筛选。' }
+  if (eventOnFieldApplied.value) {
+    const issues = eventOnFieldState.value.issues
+    const title = `第 ${eventForm.value.minute}′ 在场 ${eventOnFieldPlayerCount.value} 人`
+    if (issues.length) {
+      return { type:'warning', title, description:`另有 ${issues.length} 条换人/罚下记录未生效（${issues[0].message}），在场名单按首发与已生效记录计算，换上球员可能暂不出现。` }
+    }
+    return { type:'info', title, description:'已按首发及已记录的换人、罚下事件筛选。' }
+  }
   return { type:'warning', title:'暂无法判定该时间点在场球员，候选显示全队名单', description:'需本场首发与替补名单已录入且球员已关联球员库；补齐后候选会自动按时间点筛选。' }
 })
 const eventAssistOptions = computed(() => eventPlayerOptions.value.filter(player => player.value !== eventForm.value.playerName))
@@ -2280,6 +2295,15 @@ async function openAddEventDialog() {
   eventDialogVisible.value = true
   eventPlayersLoading.value = true
   try {
+    // 阵容与已有事件可能由其他端刚提交，打开弹窗前重新拉取，避免在场推导用到过期数据。
+    const latest = await queryById('matches', matchId).catch(() => null)
+    if (latest) {
+      match.value = {
+        ...match.value,
+        lineups: latest.lineups || match.value.lineups,
+        events: Array.isArray(latest.events) ? latest.events : match.value.events
+      }
+    }
     const [home, away] = await Promise.all([
       homePlayers.value.length ? Promise.resolve(homePlayers.value) : loadTeamPlayers(match.value.homeTeamId),
       awayPlayers.value.length ? Promise.resolve(awayPlayers.value) : loadTeamPlayers(match.value.awayTeamId)
