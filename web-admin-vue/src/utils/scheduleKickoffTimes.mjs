@@ -4,7 +4,11 @@ export function parseKickoffTimes(value) {
   return {times:[...new Set(times)].sort(),errors}
 }
 export function configuredKickoffTimes(config={}) {
-  if(Array.isArray(config.kickoffTimes))return parseKickoffTimes(config.kickoffTimes).times
+  const manual=Array.isArray(config.kickoffTimes)?parseKickoffTimes(config.kickoffTimes).times:[]
+  if(manual.length)return manual
+  // 后端 saveDraft 的 sanitizeScheduleDraft 会剥离顶层 kickoffTimes，用户设的点位只留在各场地的 kickoffTimes 里，这里回退读取。
+  const venueTimes=[...new Set((Array.isArray(config.venueResources)?config.venueResources:[]).flatMap(venue=>parseKickoffTimes(venue && venue.kickoffTimes).times))].sort()
+  if(venueTimes.length)return venueTimes
   return parseKickoffTimes((config.sessionWindows || []).filter(s=>s.enabled).map(s=>s.start)).times
 }
 export function kickoffWindows(times,duration=60) {
