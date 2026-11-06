@@ -4,5 +4,3 @@
 .member-poster-entry{margin:0 0 24rpx;padding:0 24rpx;line-height:2.6;color:#087b43;background:#edf5ef;border:1rpx solid #b9d3c5;border-radius:8rpx;font-size:28rpx}.member-poster-entry::after{border:0}
 .member-unclaimed{display:inline-block;margin-top:10rpx;padding:4rpx 14rpx;border-radius:20rpx;background:#fdf3d7;border:1rpx solid #e3c878;color:#7a5c12;font-size:20rpx}
 .roster-unclaimed{display:block;margin-top:3rpx;font-size:16rpx;color:#8a6a1f}
-
-.roster-avatar-image,.roster-avatar-empty{flex:none;width:56rpx;height:80rpx;border-radius:0;background:transparent}.roster-avatar-empty{display:flex;align-items:center;justify-content:center;color:#7c8881}.roster-state{width:156rpx}.roster-state-ok,.roster-state-problem{font-size:20rpx;white-space:normal;overflow:visible;text-overflow:clip;line-height:28rpx}.roster-select-all{margin:0 0 12rpx auto;padding:8rpx 16rpx;background:#f0f8f2;color:#087c43;font-size:23rpx;line-height:1.5;border-radius:8rpx}.roster-select-all::after{border:0}.roster-row{padding-bottom:48rpx}

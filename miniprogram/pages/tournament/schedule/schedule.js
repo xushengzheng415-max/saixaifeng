@@ -2,6 +2,7 @@
 // 赛程安排 - 全新简约Tab布局 - 单行卡片
 const db = wx.cloud.database()
 const workspace = require('../../../utils/workspace')
+const teamView = require('./team-schedule-view')
 
 Page({
   data: {
@@ -28,13 +29,18 @@ Page({
     hasNoMatches: false,
     hasResults: false,
     visualQa: false,
-    lightweightMode: false
+    teamOnly:false,requestedTeamId:'',requestedDivisionId:'',requestedWorkspaceId:'',scopeText:'',scopeCountText:'',
+    teamStandingsGroups:[],showTeamStandings:false,teamStandingsFailed:false
   },
 
   onLoad(options) {
     if (workspace.isVisualQaEnabled(options)) { this.loadVisualFixture(); return }
     if (options && options.id) {
-      this.setData({ tournamentId: options.id })
+      var context=workspace.readContext() || {}
+      var teamOnly=options.view==='team' || workspace.getPortalRole && workspace.getPortalRole(context)==='team_coach'
+      var candidates=(context.participatingEntries || []).filter(function(row) {return String(row.id || row.tournamentId)===String(options.id) && (!options.divisionId || row.divisionId===options.divisionId)})
+      var candidate=candidates.length===1?candidates[0]:{}
+      this.setData({ tournamentId: options.id,teamOnly:Boolean(teamOnly),requestedTeamId:options.teamId || candidate.teamId || '',requestedDivisionId:options.divisionId || candidate.divisionId || '',requestedWorkspaceId:options.workspaceId || candidate.workspaceId || (context.currentWorkspace || {}).id || '' })
       this.loadData()
     }
   },
@@ -57,6 +63,7 @@ Page({
   loadData() {
     var that = this
     that.setData({ loading: true, errorMsg: '', showError: false, showContent: false })
+    if (that.data.teamOnly) return that.loadTeamData()
     try { wx.cloud.init({ env: 'cloud1-7g8ckb3c7815a011', traceUser: false }) } catch(e) {}
 
     // 1. 加载赛事信息
@@ -69,8 +76,7 @@ Page({
           tournamentName: t.name || '',
           tournamentType: t.type || '',
           typeText: typeNames[t.type] || t.type || '',
-          formatText: formatNames[t.matchFormat] || t.matchFormat || '',
-          lightweightMode: t.lightweightMode === true
+          formatText: formatNames[t.matchFormat] || t.matchFormat || ''
         })
       }
     })
@@ -167,15 +173,23 @@ Page({
       })
   },
 
+  loadTeamData() {
+    var that=this,epoch=(this._loadEpoch || 0)+1,userId=(wx.getStorageSync('userInfo') || {})._id
+    this._loadEpoch=epoch
+    if (!this.data.requestedTeamId) {this.setData({loading:false,showError:true,errorMsg:'请从当前球队的赛事入口重新进入'});return Promise.resolve()}
+    return wx.cloud.callFunction({name:'getMiniWorkspace',data:{action:'teamTournamentDetail',workspaceId:this.data.requestedWorkspaceId,tournamentId:this.data.tournamentId,teamId:this.data.requestedTeamId,divisionId:this.data.requestedDivisionId}}).then(function(response) {
+      if(epoch!==that._loadEpoch || (wx.getStorageSync('userInfo') || {})._id!==userId)return
+      var result=response.result || {},view=teamView.present(result,that.data.requestedTeamId)
+      that.setData(Object.assign({},view,{loading:false,showError:false,showContent:true,errorMsg:''}))
+    }).catch(function(error){if(epoch===that._loadEpoch)that.setData({loading:false,showError:true,showContent:false,errorMsg:error.message || '本队赛程读取失败，请重试'})})
+  },
+  onUnload() {this._loadEpoch=(this._loadEpoch || 0)+1},
+  back() {wx.navigateBack()},
   onMatchTap(e) {
     var id = e.currentTarget.dataset.id
     var isFinished = !!e.currentTarget.dataset.finished
-    // 轻量模式没有比赛详情/裁判流程，直接提示到 PC 后台录入比分，避免进入空详情页
-    if (id && this.data.lightweightMode) {
-      wx.showModal({ title: '轻量模式', content: '轻量模式只记比分：请主办方在电脑后台「比赛管理」点击比赛卡片录入比分。', showCancel: false, confirmText: '知道了', confirmColor: '#197451' })
-      return
-    }
     if (id) {
+      if(this.data.teamOnly){if(!(this.data.matches || []).some(function(row){return row._id===id}))return;wx.navigateTo({url:'/pages/match/detail/detail?matchId='+encodeURIComponent(id)+'&teamId='+encodeURIComponent(this.data.requestedTeamId)});return}
       var context = workspace.readContext() || {}
       if (workspace.hasPermission('event.manage', context)) {
         if (isFinished) {

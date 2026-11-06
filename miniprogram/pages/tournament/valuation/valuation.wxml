@@ -1,0 +1,52 @@
+<!-- pages/tournament/valuation/valuation.wxml -->
+<!-- 发现页身价展示：只读，条件与状态全部在 js 预计算 -->
+<view class="val-page">
+
+  <view class="val-hero">
+    <text class="val-hero-title">{{tournamentName || '赛事球员身价'}}</text>
+    <text class="val-hero-desc">只展示本赛事已审核名单的球员身价，青少年不公开金额与段位。</text>
+  </view>
+
+  <view class="val-summary" wx:if="{{totalText || hasRosterNote}}">
+    <text class="val-summary-total" wx:if="{{totalText}}">{{totalText}}</text>
+    <text class="val-summary-note" wx:if="{{hasRosterNote}}">{{rosterNote}}</text>
+  </view>
+
+  <view class="val-loading" wx:if="{{loading}}">
+    <text class="val-loading-text">正在读取身价…</text>
+  </view>
+
+  <view class="val-error" wx:if="{{errorText}}">
+    <text class="val-error-text">{{errorText}}</text>
+    <view class="val-error-btn" bindtap="onRetry">
+      <text class="val-error-btn-text">重试</text>
+    </view>
+  </view>
+
+  <view class="val-empty" wx:if="{{showEmpty}}">
+    <text class="val-empty-text">{{emptyText}}</text>
+  </view>
+
+  <view class="val-list" wx:if="{{hasItems}}">
+    <view class="val-row" wx:for="{{items}}" wx:key="key">
+      <view class="val-row-main">
+        <text class="val-row-name">{{item.name}}</text>
+        <text class="val-row-meta" wx:if="{{item.metaText}}">{{item.metaText}}</text>
+        <text class="val-row-time" wx:if="{{item.computedText}}">{{item.computedText}}</text>
+      </view>
+      <view class="val-row-side">
+        <text class="{{item.valueClass}}">{{item.valueText}}</text>
+        <text class="val-row-tier" wx:if="{{item.hasTier}}">{{item.tierText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="val-more" wx:if="{{loadingMore}}">
+    <text class="val-more-text">加载更多…</text>
+  </view>
+
+  <view class="val-end" wx:if="{{hasEnd}}">
+    <text class="val-end-text">{{endText}}</text>
+  </view>
+
+</view>

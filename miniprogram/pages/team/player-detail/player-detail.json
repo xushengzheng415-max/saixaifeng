@@ -4,5 +4,6 @@
   "navigationBarTextStyle": "white",
   "backgroundColor": "#2E7D32",
   "backgroundTextStyle": "light",
-  "enablePullDownRefresh": false
+  "enablePullDownRefresh": false,
+  "usingComponents": { "dynamic-player-card": "/components/dynamic-player-card/index" }
 }

@@ -1,0 +1,13 @@
+<view class="first-use-page">
+  <image class="first-bg" src="/images/runtime/home-roles-emerald-stadium-v1.jpg" mode="aspectFill"/>
+  <view class="first-shade"></view>
+  <view class="first-nav" style="{{headerStyle}}">开始使用</view>
+  <view class="first-content">
+    <text class="first-heading">你想先做什么？</text>
+    <view class="role-option {{eventClass}}" data-role="organizer" bindtap="selectRole"><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"/><view><text>我是赛事组织者</text><text>创建赛事，管理报名与赛程</text></view><view class="radio"></view></view>
+    <view class="role-option {{teamClass}}" data-role="team_coach" bindtap="selectRole"><image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"/><view><text>我是球队管理者</text><text>建立球队，维护球员与参赛</text></view><view class="radio"></view></view>
+    <button class="first-primary" style="width:100%;max-width:none;margin-left:0;margin-right:0;" bindtap="continueSetup" disabled="{{continueDisabled}}">继续</button>
+    <text class="first-note">以后可在“我的”中切换身份</text>
+  </view>
+  <quick-create-sheet id="quick-create" visible="{{createVisible}}" kind="{{createKind}}" bindclose="onCreateClose" bindcreated="onCreated" bindcomplete="onCreateComplete"/>
+</view>

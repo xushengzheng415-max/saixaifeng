@@ -1,0 +1,68 @@
+<!-- pages/tournament/transfer/player/player.wxml -->
+<!-- 赛事转会中心·球员资料：只读，条件与状态全部在 js 预计算 -->
+<view class="tp-page">
+
+  <view class="tp-loading" wx:if="{{loading}}">
+    <text class="tp-loading-text">正在读取球员资料…</text>
+  </view>
+
+  <view class="tp-error" wx:if="{{errorText}}">
+    <text class="tp-error-text">{{errorText}}</text>
+    <view class="tp-error-btn" bindtap="onRetry">
+      <text class="tp-error-btn-text">重试</text>
+    </view>
+  </view>
+
+  <block wx:if="{{hasPlayer}}">
+    <view class="tp-hero">
+      <view class="tp-hero-avatar">
+        <image class="tp-hero-avatar-icon" src="/images/icons/players.svg" mode="aspectFit"></image>
+      </view>
+      <view class="tp-hero-main">
+        <view class="tp-hero-name-line">
+          <text class="tp-hero-name">{{name}}</text>
+          <text class="tp-hero-badge" wx:if="{{hasBadge}}">{{badgeText}}</text>
+        </view>
+        <text class="tp-hero-meta">{{metaText}}</text>
+        <text class="tp-hero-team">{{teamName}} · {{effectiveText}}</text>
+      </view>
+    </view>
+
+    <view class="tp-card">
+      <view class="tp-row">
+        <text class="tp-row-label">身价</text>
+        <view class="tp-row-side">
+          <text class="{{valueClass}}">{{valueText}}</text>
+          <text class="tp-row-tier" wx:if="{{hasTier}}">{{tierText}}</text>
+        </view>
+      </view>
+      <view class="tp-row tp-row-sub" wx:if="{{hasComputed}}">
+        <text class="tp-row-note">{{computedText}}</text>
+      </view>
+      <view class="tp-row">
+        <text class="tp-row-label">合同</text>
+        <text class="tp-row-value">{{contractText}}</text>
+      </view>
+      <view class="tp-row tp-row-sub" wx:if="{{hasContractNote}}">
+        <text class="tp-row-note">{{contractNote}}</text>
+      </view>
+      <view class="tp-row" wx:if="{{hasNegotiation}}">
+        <text class="tp-row-label">谈判</text>
+        <text class="tp-row-value">{{negotiationText}}</text>
+      </view>
+      <view class="tp-row tp-row-sub" wx:if="{{hasCooldown}}">
+        <text class="tp-row-note tp-row-note-warn">{{cooldownText}}</text>
+      </view>
+    </view>
+
+    <view class="tp-notes" wx:if="{{hasNotes}}">
+      <text class="tp-notes-title">说明</text>
+      <text class="tp-notes-item" wx:for="{{notes}}" wx:key="*this">· {{item}}</text>
+    </view>
+  </block>
+
+  <view class="tp-footer" wx:if="{{hasPlayer}}">
+    <text class="tp-footer-text">{{footerNote}}</text>
+  </view>
+
+</view>

@@ -1,8 +1,11 @@
 // pages/team/detail/detail.js
 // 青训版本 - 球队详情页
 
-Page({
+var location = require('../../../utils/location')
 
+function text(v){return v==null?'':String(v).trim()}
+
+Page({
 
   _updateLens: function() {
     var data = this.data;
@@ -22,7 +25,18 @@ Page({
       fw: 0
     },
     role: '',
-    loading: true
+    loading: true,
+
+    // 主场
+    homeVenues: [],
+    hasHomeVenues: false,
+    venueEditorVisible: false,
+    editingVenueId: '',
+    editorVenueName: '',
+    editorVenueAddress: '',
+    editorVenueLat: 0,
+    editorVenueLng: 0,
+    editorVenueHasLoc: false
   },
 
   onLoad(options) {
@@ -81,6 +95,7 @@ Page({
           role,
           loading: false
         })
+        this.loadHomeVenues()
       }
     } catch (err) {
       console.error('加载球队详情失败:', err)
@@ -89,10 +104,10 @@ Page({
     }
   },
 
-  // 添加球员
+  // 球员认领（转发家长匹配认领）
   onAddPlayer() {
     wx.navigateTo({
-      url: '/pages/team/player-add/player-add'
+      url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(this.data.teamId || '')
     })
   },
 
@@ -138,5 +153,170 @@ Page({
   // 返回
   onBack() {
     wx.navigateBack()
+  },
+
+  // ===== 主场管理 =====
+  loadHomeVenues: function () {
+    var that = this
+    if (!wx.cloud || !this.data.teamId) return
+    wx.cloud.callFunction({
+      name: 'friendlyMatchCenter',
+      data: { action: 'listTeamVenues', teamId: this.data.teamId }
+    }).then(function (res) {
+      var result = (res && res.result) || {}
+      var list = []
+      if (result.ok && result.data && result.data.venues) {
+        list = result.data.venues.filter(function (v) { return v.saved === true })
+      }
+      that.setData({ homeVenues: list, hasHomeVenues: list.length > 0 })
+    }).catch(function (error) {
+      console.warn('[team-detail] 主场加载失败', error && error.message)
+    })
+  },
+
+  openAddVenue: function () {
+    this.setData({
+      venueEditorVisible: true,
+      editingVenueId: '',
+      editorVenueName: '',
+      editorVenueAddress: '',
+      editorVenueLat: 0,
+      editorVenueLng: 0,
+      editorVenueHasLoc: false
+    })
+  },
+
+  editVenue: function (e) {
+    var idx = Number(e.currentTarget.dataset.index)
+    var item = this.data.homeVenues[idx]
+    if (!item) return
+    this.setData({
+      venueEditorVisible: true,
+      editingVenueId: item.id || '',
+      editorVenueName: text(item.name),
+      editorVenueAddress: text(item.address),
+      editorVenueLat: Number(item.latitude) || 0,
+      editorVenueLng: Number(item.longitude) || 0,
+      editorVenueHasLoc: Boolean(Number(item.latitude) && Number(item.longitude))
+    })
+  },
+
+  closeVenueEditor: function () {
+    this.setData({ venueEditorVisible: false })
+  },
+
+  onEditorNameInput: function (e) {
+    this.setData({ editorVenueName: text(e.detail.value) })
+  },
+
+  onPickEditorLocation: function () {
+    var that = this
+    location.pickLocation({
+      success: function (res) {
+        that.setData({
+          editorVenueName: that.data.editorVenueName || text(res.name) || text(res.address),
+          editorVenueAddress: text(res.address),
+          editorVenueLat: Number(res.latitude) || 0,
+          editorVenueLng: Number(res.longitude) || 0,
+          editorVenueHasLoc: Boolean(res.latitude && res.longitude)
+        })
+      }
+    })
+  },
+
+  clearEditorLocation: function () {
+    this.setData({
+      editorVenueAddress: '',
+      editorVenueLat: 0,
+      editorVenueLng: 0,
+      editorVenueHasLoc: false
+    })
+  },
+
+  saveVenue: function () {
+    var that = this
+    var d = this.data
+    var name = text(d.editorVenueName)
+    if (!name) { wx.showToast({ title: '请输入场地名称', icon: 'none' }); return }
+    var payload = {
+      action: 'upsertTeamVenue',
+      teamId: d.teamId,
+      name: name,
+      address: text(d.editorVenueAddress),
+      latitude: Number(d.editorVenueLat) || 0,
+      longitude: Number(d.editorVenueLng) || 0
+    }
+    if (d.editingVenueId) payload.venueId = d.editingVenueId
+    wx.showLoading({ title: '保存中' })
+    wx.cloud.callFunction({
+      name: 'friendlyMatchCenter',
+      data: payload
+    }).then(function (res) {
+      wx.hideLoading()
+      var r = (res && res.result) || {}
+      if (!r.ok) throw new Error(r.message || '保存失败')
+      that.setData({ venueEditorVisible: false })
+      that.loadHomeVenues()
+      wx.showToast({ title: '已保存', icon: 'success' })
+    }).catch(function (error) {
+      wx.hideLoading()
+      wx.showToast({ title: error.message || '保存失败', icon: 'none' })
+    })
+  },
+
+  deleteVenue: function (e) {
+    var that = this
+    var item = this.data.homeVenues[Number(e.currentTarget.dataset.index)]
+    if (!item || !item.id) return
+    wx.showModal({
+      title: '删除主场',
+      content: '确定删除「' + text(item.name) + '」？',
+      success: function (r) {
+        if (!r.confirm) return
+        wx.showLoading({ title: '删除中' })
+        wx.cloud.callFunction({
+          name: 'friendlyMatchCenter',
+          data: { action: 'deleteTeamVenue', teamId: that.data.teamId, venueId: item.id }
+        }).then(function (res) {
+          wx.hideLoading()
+          var rr = (res && res.result) || {}
+          if (!rr.ok) throw new Error(rr.message || '删除失败')
+          that.loadHomeVenues()
+          wx.showToast({ title: '已删除', icon: 'success' })
+        }).catch(function (err) {
+          wx.hideLoading()
+          wx.showToast({ title: err.message || '删除失败', icon: 'none' })
+        })
+      }
+    })
+  },
+
+  setDefaultVenue: function (e) {
+    var that = this
+    var item = this.data.homeVenues[Number(e.currentTarget.dataset.index)]
+    if (!item || !item.id) return
+    wx.cloud.callFunction({
+      name: 'friendlyMatchCenter',
+      data: { action: 'setDefaultTeamVenue', teamId: that.data.teamId, venueId: item.id }
+    }).then(function (res) {
+      var rr = (res && res.result) || {}
+      if (!rr.ok) throw new Error(rr.message || '设置失败')
+      that.loadHomeVenues()
+      wx.showToast({ title: '已设为默认', icon: 'success' })
+    }).catch(function (err) {
+      wx.showToast({ title: err.message || '设置失败', icon: 'none' })
+    })
+  },
+
+  openVenueMap: function (e) {
+    var item = this.data.homeVenues[Number(e.currentTarget.dataset.index)]
+    if (!item || !Number(item.latitude)) return
+    wx.openLocation({
+      latitude: Number(item.latitude),
+      longitude: Number(item.longitude),
+      name: text(item.name),
+      address: text(item.address),
+      scale: 16
+    })
   }
 })

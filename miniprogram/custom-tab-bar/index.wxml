@@ -1,5 +1,5 @@
-<view class="tab-bar" wx:if="{{ready}}">
-  <view wx:for="{{tabs}}" wx:key="id" class="tab-item {{item.activeClass}}" data-index="{{index}}" bindtap="switchTab">
+<view class="tab-bar" wx:if="{{visible}}">
+  <view wx:for="{{tabs}}" wx:key="id" class="tab-item {{item.activeClass}} {{item.disabledClass}}" role="button" aria-label="{{item.text}}" aria-disabled="{{item.disabled}}" data-index="{{index}}" bindtap="switchTab">
     <image class="tab-icon" src="{{item.icon}}" mode="aspectFit"></image>
     <text class="tab-text">{{item.text}}</text>
   </view>

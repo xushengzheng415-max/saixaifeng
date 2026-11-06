@@ -13,6 +13,29 @@ Page({
     teams: [],
     teamsLen: 0,
     hasTeamsLen: false,
+    rankMode: 'players',
+    rankModeOptions: [{ id:'players', name:'个人榜单', tabClass:'active' }, { id:'teams', name:'球队榜单', tabClass:'' }],
+    rankDivision: 'all',
+    rankDivisionOptions: [{ id:'all', name:'总榜', tabClass:'active' }],
+    showDivisionColumn: true,
+    showScorers: true,
+    showTeams: false,
+    teamMetric: 'goals',
+    teamMetricOptions: [{ id:'goals', name:'进球最多', tabClass:'active' }, { id:'conceded', name:'失球最少', tabClass:'' }],
+    showTeamScorer: true,
+    showTeamKeeper: false,
+    scorerRows: [],
+    hasScorerRows: false,
+    noScorerRows: true,
+    teamScorerRows: [],
+    hasTeamScorerRows: false,
+    noTeamScorerRows: true,
+    teamKeeperRows: [],
+    hasTeamKeeperRows: false,
+    noTeamKeeperRows: true,
+    hasRankData: false,
+    rankLoading: false,
+    rankError: '',
     loading: true,
     errorMsg: '',
     maxTeams: 0,
@@ -66,6 +89,8 @@ Page({
     }
   },
 
+  onShow() { if (this._rankingSource) this.loadRankings() },
+  onUnload() { this._rankRevision = (this._rankRevision || 0) + 1 },
   async loadData() {
     try { wx.cloud.init({ env: 'cloud1-7g8ckb3c7815a011', traceUser: false }) } catch(e) {}
     this.setData({ loading: true, errorMsg: '' })
@@ -89,6 +114,7 @@ Page({
         maxTeams: Number(active.maxTeams || tournament.maxTeams || 0)
       })
       await this.loadTeamsForDivision()
+      this.loadRankings()
     } catch (err) {
       console.error('加载赛事球队失败:', err)
       this.setData({ loading: false, errorMsg: '加载失败' })
@@ -131,6 +157,74 @@ Page({
     this.setData({ teams: teams, teamsLen: len, hasTeamsLen: len > 0, loading: false, errorMsg: '' })
   },
 
+  loadRankings() {
+    var that=this
+    if(this._rankingPromise)return this._rankingPromise
+    var revision=(this._rankRevision || 0)+1;this._rankRevision=revision
+    var context=workspace.readContext() || {}
+    this.setData({rankLoading:true,rankError:''})
+    this._rankingPromise=wx.cloud.callFunction({name:'getMiniWorkspace',data:{action:'tournamentData',tournamentId:this.data.tournamentId,workspaceId:(context.currentWorkspace || {}).id || ''}}).then(function(reply){
+      if(revision!==that._rankRevision || ((workspace.readContext() || {}).currentWorkspace || {}).id!==(context.currentWorkspace || {}).id)return
+      var result=reply.result || {}
+      if(!result.success)throw Error(result.message || '榜单读取失败，请重试')
+      if(!result.boards || result.boards.version!=='tournament-boards/1')throw Error('榜单接口待更新，请稍后重试')
+      that._rankingSource=result.boards;that.refreshRankings()
+    }).catch(function(error){if(revision===that._rankRevision)that.setData({rankError:error.message || '榜单读取失败，请重试',hasRankData:false})}).finally(function(){that._rankingPromise=null;if(revision===that._rankRevision)that.setData({rankLoading:false})})
+    return this._rankingPromise
+  },
+
+  refreshRankings() {
+    var source=this._rankingSource || {scopes:[]},selected=this.data.rankDivision==='all'?'':this.data.rankDivision
+    var scope=source.scopes.filter(function(row){return row.divisionId===selected})[0] || source.scopes[0]
+    if(!scope)return
+    var goals=(scope.goals || []).map(function(row){return Object.assign({},row,{playerKey:row.id,goals:row.value})})
+    var teams=function(rows){return (rows || []).map(function(row){return Object.assign({},row,{teamKey:row.key})})}
+    this.setData({rankDivision:scope.divisionId || 'all',rankDivisionOptions:source.scopes.map(function(row){return {id:row.divisionId || 'all',name:row.divisionName,tabClass:row.divisionId===scope.divisionId?'active':''}}),
+      showDivisionColumn:!scope.divisionId,scorerRows:goals,hasScorerRows:goals.length>0,noScorerRows:!goals.length,
+      teamScorerRows:teams(scope.attack),hasTeamScorerRows:scope.attack.length>0,noTeamScorerRows:!scope.attack.length,
+      teamKeeperRows:teams(scope.defense),hasTeamKeeperRows:scope.defense.length>0,noTeamKeeperRows:!scope.defense.length,hasRankData:true})
+  },
+
+  openScorebook() {
+    wx.navigateTo({
+      url: '/pages/tournament/scorebook/scorebook?id=' + this.data.tournamentId + '&name=' + encodeURIComponent(this.data.tournamentName || '')
+    })
+  },
+  openData() { wx.navigateTo({url:'/pages/tournament/data/data?id='+encodeURIComponent(this.data.tournamentId)}) },
+
+  onRankMode(e) {
+    var id = e.currentTarget.dataset.id
+    if (!id || id === this.data.rankMode) return
+    this.setData({
+      rankMode: id,
+      showScorers: id === 'players',
+      showTeams: id === 'teams',
+      rankModeOptions: this.data.rankModeOptions.map(function(item) {
+        return Object.assign({}, item, { tabClass: item.id === id ? 'active' : '' })
+      })
+    })
+  },
+
+  onRankDivision(e) {
+    var id = e.currentTarget.dataset.id
+    if (!id || id === this.data.rankDivision) return
+    this.setData({ rankDivision: id })
+    this.refreshRankings()
+  },
+
+  onTeamMetric(e) {
+    var id = e.currentTarget.dataset.id
+    if (!id || id === this.data.teamMetric) return
+    this.setData({
+      teamMetric: id,
+      showTeamScorer: id === 'goals',
+      showTeamKeeper: id === 'conceded',
+      teamMetricOptions: this.data.teamMetricOptions.map(function(item) {
+        return Object.assign({}, item, { tabClass: item.id === id ? 'active' : '' })
+      })
+    })
+  },
+
   onDivisionTap(e) {
     var id = e.currentTarget.dataset.id
     if (!id || id === this.data.activeDivisionId) return
@@ -149,6 +243,7 @@ Page({
       console.error('切换组别失败:', err)
       this.setData({ loading: false, errorMsg: '加载失败' })
     })
+    if (this._rankingSource) this.refreshRankings()
   },
 
   resetCreateTeamForm() {
@@ -352,13 +447,13 @@ Page({
       wx.hideLoading()
       wx.showModal({
         title: '创建成功',
-        content: '球队已加入赛事，是否现在添加球员？',
-        confirmText: '添加球员',
-        cancelText: '稍后添加',
+        content: '球队已加入赛事，是否现在发起球员认领？',
+        confirmText: '球员认领',
+        cancelText: '稍后',
         success: modal => {
           if (modal.confirm) {
             wx.navigateTo({
-              url: '/pages/team/player-add/player-add?teamId=' + encodeURIComponent(createdTeamId) + '&teamCode=' + encodeURIComponent(teamCode) + '&teamName=' + encodeURIComponent(teamData.name)
+              url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(createdTeamId)
             })
           }
         }
@@ -377,10 +472,8 @@ Page({
 
   onAddPlayer(e) {
     var teamId = e.currentTarget.dataset.id || ''
-    var teamCode = e.currentTarget.dataset.code || teamId
-    var teamName = e.currentTarget.dataset.name || ''
     wx.navigateTo({
-      url: '/pages/team/player-add/player-add?teamId=' + encodeURIComponent(teamId) + '&teamCode=' + encodeURIComponent(teamCode) + '&teamName=' + encodeURIComponent(teamName)
+      url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(teamId)
     })
   },
 

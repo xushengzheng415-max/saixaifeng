@@ -28,7 +28,11 @@ Page({
   onLoad: function (options) {
     var query = options || {}
     var raw = String(query.c || query.inviteKey || query.scene || '')
-    var inviteKey = decodeURIComponent(raw)
+    var inviteKey = ''
+    try { inviteKey = decodeURIComponent(raw) } catch (error) {
+      this.setData({ loading: false, errorText: '认领码无效，请重新扫码进入' })
+      return
+    }
     // 小程序码 scene 形如 c=<inviteKey>，直接扫链接时也用同一参数名。
     if (inviteKey.indexOf('c=') === 0) inviteKey = inviteKey.slice(2)
     if (!inviteKey) {
@@ -45,9 +49,11 @@ Page({
   },
 
   loadContext: function () {
+    if (this._loadingContext) return
+    this._loadingContext = true
     var self = this
-    this.setData({ loading: true, errorText: '' })
-    this.call('claimCodeContext', { inviteKey: this.data.inviteKey }).then(function (res) {
+    this.setData({ loading: true, errorText: '', teams: [], hasTeams: false, selectedInviteId: '', selectedTeamName: '', disclaimerAgreed: false }, this.refreshActionState)
+    return this.call('claimCodeContext', { inviteKey: this.data.inviteKey }).then(function (res) {
       var result = res.result || {}
       if (!result.success) {
         // 未完成手机号验证的账号会在服务端被统一拦截，这里据此切换到授权引导。
@@ -61,29 +67,34 @@ Page({
       var tournament = result.tournament || {}
       var code = result.code || {}
       self.setData({
-        loading: false,
         needsPhone: Boolean(result.needsPhone),
         tournamentName: tournament.name || '',
         organizerName: tournament.organizerName || '',
         deadlineText: tournament.registrationDeadlineText || '',
         expiresAtText: code.expiresAtText || ''
       })
-      self.loadTeams()
+      if (result.needsPhone) {
+        self.setData({ loading: false })
+        return
+      }
+      return self.loadTeams()
     }).catch(function (error) {
       self.setData({ loading: false, errorText: (error && error.message) || '网络异常，请重试' })
+    }).finally(function () {
+      self._loadingContext = false
     })
   },
 
   loadTeams: function () {
     var self = this
-    this.call('claimableTeams', { inviteKey: this.data.inviteKey }).then(function (res) {
+    return this.call('claimableTeams', { inviteKey: this.data.inviteKey }).then(function (res) {
       var result = res.result || {}
       if (!result.success) {
         if (result.code === 'PHONE_AUTH_REQUIRED') {
-          self.setData({ needsPhone: true })
+          self.setData({ loading: false, needsPhone: true })
           return
         }
-        self.setData({ errorText: result.message || '球队列表加载失败' })
+        self.setData({ loading: false, errorText: result.message || '球队列表加载失败' })
         return
       }
       var teams = (result.teams || []).map(function (item) {
@@ -92,13 +103,13 @@ Page({
         return row
       })
       var autoClaimed = teams.length === 1 && teams[0].alreadyClaimed === true
-      self.setData({ teams: teams, hasTeams: teams.length > 0, needsPhone: Boolean(result.needsPhone) }, function() {
+      self.setData({ loading: false, teams: teams, hasTeams: teams.length > 0, needsPhone: Boolean(result.needsPhone) }, function() {
         if (!autoClaimed || self.data.autoEnteringClaimed) return
         self.setData({ autoEnteringClaimed:true })
         self.enterClaimedTeam(teams[0])
       })
     }).catch(function (error) {
-      self.setData({ errorText: (error && error.message) || '网络异常，请重试' })
+      self.setData({ loading: false, errorText: (error && error.message) || '网络异常，请重试' })
     })
   },
 
@@ -111,20 +122,18 @@ Page({
     if (this.data.binding) return
     var self = this
     this.setData({ binding: true })
-    // 与 pages/login 相同：先取 openId，再用 checkUserByOpenId 解码微信手机号并写入账号。
-    wx.cloud.callFunction({ name: 'getOpenId', data: {} }).then(function (res) {
-      var result = res.result || {}
-      var openId = result.openId || result.OPENID || ''
-      if (!openId) throw new Error('无法识别当前微信账号，请重新进入小程序')
-      return wx.cloud.callFunction({
-        name: 'checkUserByOpenId',
-        data: { openId: openId, phoneCode: code, nickName: '用户', avatarUrl: '' }
-      })
+    // 服务端以当前微信上下文核验手机号并返回唯一自然人账号。
+    // 验证成功后必须立即写入本机会话：否则后续切换球队工作空间会因本地没有
+    // 账号而被判为会话失效，把认领人退回登录页，再进入与认领无关的身份选择和建队引导。
+    wx.cloud.callFunction({
+      name: 'checkUserByOpenId',
+      data: { phoneCode: code, nickName: '用户', avatarUrl: '' }
     }).then(function (res) {
       var result = res.result || {}
-      if (!result.success) throw new Error(result.message || '手机号验证失败')
+      if (!result.success || !result.user) throw new Error(result.message || '手机号验证失败')
+      if (!workspace.persistLoginSession(result.user)) throw new Error('账号资料不完整，请重新验证手机号')
       self.setData({ binding: false, needsPhone: false })
-      self.loadContext()
+      return self.loadContext()
     }).catch(function (error) {
       self.setData({ binding: false })
       wx.showModal({ title: '手机号验证失败', content: (error && error.message) || '请重试', showCancel: false })
@@ -186,6 +195,7 @@ Page({
         self.call('acceptTeamOwnerTransfer', { transferId:team.transferId || team.inviteId }).then(function(res) {
           var result = res.result || {}
           if (!result.success) throw new Error(result.message || '主账号接收失败')
+          workspace.rememberPortalRole('team_coach')
           wx.showToast({ title:'主账号已转移', icon:'success' })
           self.enterTeamWorkspace(result.teamId || team.teamId, team.teamName, result.workspaceId || '')
         }).catch(function(error) {
@@ -240,6 +250,9 @@ Page({
         self.openConflict(self.data.selectedInviteId)
         return
       }
+      // 认领本身已证明当前账号是球队负责人，直接按球队管理者视角进入，
+      // 不再要求先选择“赛事组织者/球队管理者”。该偏好只影响展示视角，不授予权限。
+      workspace.rememberPortalRole('team_coach')
       // 认领成功后进入目标球队实际可用的工作空间。账号原有机构关系不变，
       // 这里只切换本机当前上下文，不扩大目标机构权限。
       var switchPromise = result.workspaceId

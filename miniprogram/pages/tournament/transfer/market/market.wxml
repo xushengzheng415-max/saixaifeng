@@ -1,0 +1,78 @@
+<!-- pages/tournament/transfer/market/market.wxml -->
+<!-- 赛事转会中心·转会市场：只做查询与展示，条件与状态全部在 js 预计算 -->
+<view class="tc-page">
+
+  <view class="tc-hero">
+    <text class="tc-hero-title">转会中心</text>
+    <text class="tc-hero-event">{{tournamentName || '当前赛事'}}</text>
+    <view class="tc-window {{windowClass}}" wx:if="{{hasWindow}}">
+      <text class="tc-window-text">{{windowText}}</text>
+      <text class="tc-window-note" wx:if="{{windowNote}}">{{windowNote}}</text>
+    </view>
+  </view>
+
+  <view class="tc-search">
+    <image class="tc-search-icon" src="/images/icons/search.svg" mode="aspectFit"></image>
+    <input class="tc-search-input" value="{{keyword}}" placeholder="搜索球员姓名或编号" placeholder-class="tc-search-placeholder" confirm-type="search" bindinput="onSearchInput" bindconfirm="onSearchConfirm" />
+    <text class="tc-search-clear" wx:if="{{hasKeyword}}" bindtap="onClearKeyword">清空</text>
+  </view>
+
+  <view class="tc-chips">
+    <view class="{{item.chipClass}}" wx:for="{{chips}}" wx:key="key" data-state="{{item.key}}" bindtap="onStateTap">
+      <text class="tc-chip-text">{{item.label}}</text>
+    </view>
+  </view>
+
+  <view class="tc-list-head" wx:if="{{totalText}}">
+    <text class="tc-list-total">{{totalText}}</text>
+  </view>
+
+  <view class="tc-loading" wx:if="{{loading}}">
+    <text class="tc-loading-text">正在读取球员资料…</text>
+  </view>
+
+  <view class="tc-error" wx:if="{{errorText}}">
+    <text class="tc-error-text">{{errorText}}</text>
+    <view class="tc-error-btn" bindtap="onRetry">
+      <text class="tc-error-btn-text">重试</text>
+    </view>
+  </view>
+
+  <view class="tc-empty" wx:if="{{showEmpty}}">
+    <text class="tc-empty-text">{{emptyText}}</text>
+  </view>
+
+  <view class="tc-list" wx:if="{{hasItems}}">
+    <view class="tc-row" wx:for="{{items}}" wx:key="key" data-id="{{item.playerId}}" bindtap="onOpenPlayer">
+      <view class="tc-row-avatar">
+        <image class="tc-row-avatar-icon" src="/images/icons/players.svg" mode="aspectFit"></image>
+      </view>
+      <view class="tc-row-main">
+        <view class="tc-row-name-line">
+          <text class="tc-row-name">{{item.name}}</text>
+          <text class="tc-row-badge" wx:if="{{item.hasBadge}}">{{item.badgeText}}</text>
+        </view>
+        <text class="tc-row-meta">{{item.metaText}}</text>
+        <text class="tc-row-team">{{item.teamText}}</text>
+        <text class="tc-row-note" wx:if="{{item.hasNote}}">{{item.noteText}}</text>
+      </view>
+      <view class="tc-row-side">
+        <text class="{{item.valueClass}}">{{item.valueText}}</text>
+        <view class="tc-row-chevron"></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="tc-more" wx:if="{{loadingMore}}">
+    <text class="tc-more-text">加载更多…</text>
+  </view>
+
+  <view class="tc-end" wx:if="{{hasEnd}}">
+    <text class="tc-end-text">{{endText}}</text>
+  </view>
+
+  <view class="tc-note" wx:if="{{hasNote}}">
+    <text class="tc-note-text">{{noteText}}</text>
+  </view>
+
+</view>

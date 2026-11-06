@@ -5,9 +5,12 @@
     <view class="nav-holder"></view>
   </view>
 
-  <view wx:if="{{loading}}" class="state-box">正在加载认领码…</view>
+  <view wx:if="{{loading}}" class="state-box">正在核对球队…</view>
 
-  <view wx:elif="{{errorText}}" class="state-box state-error">{{errorText}}</view>
+  <view wx:elif="{{errorText}}" class="state-box state-error">
+    <view>{{errorText}}</view>
+    <button wx:if="{{inviteKey}}" bindtap="loadContext">重试</button>
+  </view>
 
   <view wx:else class="content">
     <view class="card">

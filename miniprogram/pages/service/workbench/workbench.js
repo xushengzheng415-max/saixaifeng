@@ -10,11 +10,16 @@ Page({
     bindingPhone: false,
     bindPhone: '',
     bindCode: '',
-    sendingCode: false
+    sendingCode: false,
+    notifyQuota: 0,
+    notifyQuotaCap: 5,
+    notifyTemplateId: '',
+    notifyQuotaFull: false
   },
 
   onLoad: function() {
     this.loadWorkbench()
+    this.loadNotifySetting()
   },
 
   onShow: function() {
@@ -28,6 +33,63 @@ Page({
       timeout: 20000,
       success: success,
       fail: fail
+    })
+  },
+
+  // 执裁提醒：模板 ID 与剩余额度都由服务端下发，小程序端不硬编码模板 ID。
+  loadNotifySetting: function() {
+    var that = this
+    that.callWorkflow({ action: 'getRefereeNotifySetting' }, function(res) {
+      var result = res.result || {}
+      if (!result.success || !result.data) return
+      var quota = Number(result.data.quota) || 0
+      var cap = Number(result.data.quotaCap) || 5
+      that.setData({
+        notifyQuota: quota,
+        notifyQuotaCap: cap,
+        notifyTemplateId: result.data.templateId || '',
+        notifyQuotaFull: quota >= cap
+      })
+    }, function() {})
+  },
+
+  onEnableNotify: function() {
+    var that = this
+    var templateId = this.data.notifyTemplateId
+    if (!templateId) {
+      wx.showModal({ title: '暂不可开启', content: '执裁提醒模板尚未配置，请联系主办方', showCancel: false })
+      return
+    }
+    if (this.data.notifyQuotaFull) {
+      wx.showToast({ title: '提醒次数已满', icon: 'none' })
+      return
+    }
+    // 必须在点击手势内调起订阅授权；一次授权可下发一条，可多次累积。
+    wx.requestSubscribeMessage({
+      tmplIds: [templateId],
+      success: function(res) {
+        if (res[templateId] !== 'accept') {
+          wx.showToast({ title: '未开启提醒', icon: 'none' })
+          return
+        }
+        that.callWorkflow({ action: 'refereeNotifySubscribe', accepted: true }, function(result) {
+          var payload = (result && result.result) || {}
+          if (!payload.success) {
+            wx.showToast({ title: payload.message || '尚未找到裁判档案', icon: 'none' })
+            return
+          }
+          var data = payload.data || {}
+          var quota = Number(data.quota) || that.data.notifyQuota
+          var cap = that.data.notifyQuotaCap
+          that.setData({ notifyQuota: quota, notifyQuotaFull: quota >= cap })
+          wx.showToast({ title: '已开启，剩余' + quota + '次', icon: 'none' })
+        }, function() {
+          wx.showToast({ title: '上报失败，请重试', icon: 'none' })
+        })
+      },
+      fail: function() {
+        wx.showToast({ title: '未开启提醒', icon: 'none' })
+      }
     })
   },
 

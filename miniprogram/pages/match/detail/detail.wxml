@@ -34,7 +34,7 @@
           ></image>
           <text class="team-name">{{displayMatch.homeTeamName}}</text>
           <view class="team-score">
-            <text class="score-num">{{displayMatch.homeScore}}</text>
+            <text class="score-num">{{displayMatch.homeScoreText}}</text>
           </view>
         </view>
 
@@ -51,7 +51,7 @@
           ></image>
           <text class="team-name">{{displayMatch.awayTeamName}}</text>
           <view class="team-score">
-            <text class="score-num">{{displayMatch.awayScore}}</text>
+            <text class="score-num">{{displayMatch.awayScoreText}}</text>
           </view>
         </view>
       </view>
@@ -73,7 +73,7 @@
       </view>
 
       <!-- 首发阵容提交状态 -->
-      <view class="lineup-status-bar">
+      <view wx:if="{{isHomeCoach || isAwayCoach}}" class="lineup-status-bar">
         <view class="lineup-tag ">
           <text></text>
         </view>
@@ -122,7 +122,7 @@
           bindtap="onSubmitLineup"
           disabled="{{homeLineupSubmitted}}"
         >
-          
+          提交阵容
         </button>
       </view>
 
@@ -140,7 +140,7 @@
           bindtap="onSubmitLineup"
           disabled="{{awayLineupSubmitted}}"
         >
-          
+          提交阵容
         </button>
       </view>
     </view>

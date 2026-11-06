@@ -1,1 +1,8 @@
-{"navigationBarTitleText":"赛事管理","enablePullDownRefresh":true}
+{
+  "navigationBarTitleText": "赛事管理",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "referee-report-import": "/components/referee-report-import/index",
+    "match-lineup-editor": "/components/match-lineup-editor/index"
+  }
+}

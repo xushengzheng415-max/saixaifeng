@@ -4,7 +4,7 @@
   <block wx:else>
     <view class="match-card">
       <image wx:if="{{match.homeLogo}}" class="crest" src="{{match.homeLogo}}" mode="aspectFit"/>
-      <view class="match-content"><text class="team-line">{{match.homeTeamName}} <text class="vs">VS</text> {{match.awayTeamName}}</text><text class="match-meta">{{match.matchDate}} · {{match.venue}} · {{minPlayers}}人制</text></view>
+      <view class="match-content"><text class="team-line">{{match.homeTeamName}} <text class="vs">VS</text> {{match.awayTeamName}}</text><text class="match-meta">{{match.matchDate}} · {{match.venue}} · {{sizeText}}</text></view>
       <image wx:if="{{match.awayLogo}}" class="crest" src="{{match.awayLogo}}" mode="aspectFit"/>
     </view>
     <view wx:if="{{returned}}" class="returned">退回修改：{{returnReason}}</view>
@@ -13,8 +13,9 @@
     <view wx:if="{{submissionWindowText}}" class="submission-window">{{submissionWindowText}}</view>
     <view wx:if="{{cardAssetsError}}" class="card-error" bindtap="load">球员卡暂未加载 · 重新加载</view>
     <view class="arrival-card"><view><text>赛前报到</text><text>{{arrivalStatusText}}</text></view><button bindtap="confirmArrival" disabled="{{arrivalButtonDisabled}}">{{arrivalButtonText}}</button></view>
-    <view class="formation-tabs"><view class="formation-label"><text>首发 {{starterCount}}/{{minPlayers}}</text><text class="rotate-hint">旋转手机切换横竖版</text></view><view class="tabs"><text wx:for="{{formationOptions}}" wx:key="id" data-id="{{item.id}}" bindtap="selectFormation" class="formation-tab {{item.tabClass}}">{{item.label}}</text></view></view>
-    <view class="pitch-card">
+    <view wx:if="{{sizeUnsupported}}" class="empty">当前竞赛组别未设置几人制（仅支持 5/7/8/9/11 人制），请先联系主办方在竞赛规则中确认人制后再编排阵容。</view>
+    <view wx:if="{{!sizeUnsupported}}" class="formation-tabs"><view class="formation-label"><text>首发 {{starterCount}}/{{minPlayers}}</text><text class="rotate-hint">旋转手机切换横竖版</text></view><view class="tabs"><text wx:for="{{formationOptions}}" wx:key="id" data-id="{{item.id}}" bindtap="selectFormation" class="formation-tab {{item.tabClass}}">{{item.label}}</text></view></view>
+    <view wx:if="{{!sizeUnsupported}}" class="pitch-card">
       <view class="pitch">
         <view class="pitch-outline"></view><view class="pitch-center"></view><view class="pitch-box pitch-box-top"></view><view class="pitch-box pitch-box-bottom"></view>
         <view class="coach-slot">
@@ -23,11 +24,11 @@
         </view>
         <view wx:for="{{slots}}" wx:key="id" class="slot {{item.slotClass}}" style="{{item.slotStyle}}" data-id="{{item.id}}" bindtap="chooseSlot" bindlongpress="removeSlotPlayer">
           <view wx:if="{{item.empty}}" class="player-card"><text class="card-add">+</text></view>
-          <lineup-player-card wx:else size="pitch" card-scene="{{item.cardScene}}" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.avatar}}" number="{{item.jerseyText}}" name="{{item.playerName}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/>
+          <lineup-player-card wx:else size="pitchCompact" card-scene="{{item.cardScene}}" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.avatar}}" number="{{item.jerseyText}}" name="{{item.playerName}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/>
           <text wx:if="{{item.empty}}" class="slot-name">{{item.title}}</text>
         </view>
       </view>
-    <view class="bench-card"><view class="bench-head"><text>替补 {{substituteCount}}/{{benchLimit}}</text></view><scroll-view scroll-x="true" class="bench-scroll"><view class="bench"><view wx:for="{{substitutes}}" wx:key="id" class="bench-player" data-id="{{item.id}}" bindtap="removeSubstitute"><lineup-player-card size="bench" card-scene="{{item.cardScene}}" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.photoUrl}}" number="{{item.jerseyNumber}}" name="{{item.name}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/></view><view wx:if="{{showBenchAdd}}" class="bench-add-tile {{benchAddClass}}" bindtap="openSubstitutePicker"><text>+</text><text>添加替补</text></view></view></scroll-view></view>
+    <view class="bench-card"><view class="bench-head"><text>替补 {{substituteCount}}/{{benchLimit}}</text></view><scroll-view scroll-x="true" class="bench-scroll"><view class="bench"><view wx:for="{{substitutes}}" wx:key="id" class="bench-player" data-id="{{item.id}}" bindtap="removeSubstitute"><lineup-player-card size="bench" card-scene="{{item.cardScene}}" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.photoUrl}}" number="{{item.jerseyNumber}}" name="{{item.name}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/><text wx:if="{{item.positionText}}" class="bench-position">{{item.positionText}}</text></view><view wx:if="{{showBenchAdd}}" class="bench-add-tile {{benchAddClass}}" bindtap="openSubstitutePicker"><text>+</text><text>添加替补</text></view></view></scroll-view></view>
     </view>
     <view wx:if="{{emptyPlayers}}" class="empty">没有可用的已审核正式名单球员</view>
     <view wx:if="{{showSubmit}}" class="bottom"><button bindtap="submit" disabled="{{submitDisabled || saving}}" class="submit">{{submitButtonText}}</button></view>
