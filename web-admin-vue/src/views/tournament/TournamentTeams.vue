@@ -29,6 +29,7 @@
 
         </div>
         <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button plain @click="registrationNotify.open()">通知催认领</el-button>
+          <el-button plain @click="openMaterialSettings"><el-icon><DocumentChecked /></el-icon>报名材料设置</el-button>
           <el-button plain :disabled="creatingTargetedRegistrationLink" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>邀请球队</el-button>
           <template v-if="lightweightMode">
             <el-button plain @click="openAddTeamEntry('manual')"><el-icon><Plus /></el-icon>快速添加</el-button>
@@ -602,6 +603,11 @@
       </div>
     </el-dialog>
 
+    <el-dialog v-model="materialSettingsVisible" title="报名材料设置" width="1220px" style="max-width:calc(100vw - 32px)" top="5vh" destroy-on-close append-to-body>
+      <RegistrationMaterialSettings v-if="materialForm" :form="materialForm" :division-name="activeDivision?.name || ''" :registration-deadline="materialDivisionDeadline" />
+      <template #footer><el-button @click="materialSettingsVisible = false">取消</el-button><el-button type="primary" :loading="savingMaterialSettings" @click="saveMaterialSettings">保存设置</el-button></template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -624,6 +630,8 @@ import TeamRegistrationWordImporter from '../../components/tournament/TeamRegist
 import TeamLogoAiGenerator from '../../components/tournament/TeamLogoAiGenerator.vue'
 import { isLightweightTournament } from '../../utils/lightweightMode'
 import { isDemoMode, demoRequest } from '../../utils/demoMode'
+import { buildMaterialPayload, normalizeIdDocParts, normalizeMaterialRequirements } from '../../utils/registrationMaterials'
+import RegistrationMaterialSettings from './RegistrationMaterialSettings.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -999,6 +1007,50 @@ function divisionCapacity(division) {
   return candidates.map(Number).find(value => Number.isFinite(value) && value > 0) || 0
 }
 const activeDivisionCapacity = computed(() => divisionCapacity(activeDivision.value))
+const materialSettingsVisible = ref(false)
+const materialForm = ref(null)
+const savingMaterialSettings = ref(false)
+const materialDivisionDeadline = computed(() => String((activeDivision.value || {}).registrationDeadline || tournament.value.registrationDeadline || ''))
+function openMaterialSettings() {
+  const division = activeDivision.value || {}
+  materialForm.value = {
+    materialRequirements: normalizeMaterialRequirements(division),
+    idDocParts: normalizeIdDocParts(division),
+    singleDivisionOnly: division.singleDivisionOnly !== false,
+    jerseyNumberMin: Number(division.regulationDetails?.jerseyNumberMin ?? 1),
+    jerseyNumberMax: Number(division.regulationDetails?.jerseyNumberMax ?? 99)
+  }
+  materialSettingsVisible.value = true
+}
+
+async function saveMaterialSettings() {
+  if (!materialForm.value) return
+  const division = activeDivision.value || {}
+  const divisionId = division.id
+  if (!divisionId || divisionId === 'default') { ElMessage.warning('请先选择正式竞赛组别'); return }
+  const min = Number(materialForm.value.jerseyNumberMin)
+  const max = Number(materialForm.value.jerseyNumberMax)
+  if (Number.isFinite(min) && Number.isFinite(max) && min > max) { ElMessage.warning('球衣号码下限不能大于上限'); return }
+  savingMaterialSettings.value = true
+  try {
+    const payload = {
+      ...buildMaterialPayload(materialForm.value.materialRequirements, materialForm.value.idDocParts),
+      singleDivisionOnly: materialForm.value.singleDivisionOnly,
+      regulationDetails: { ...(division.regulationDetails || {}), jerseyNumberMin: min, jerseyNumberMax: max },
+      materialSettingsUpdatedAt: new Date(),
+      updateTime: new Date()
+    }
+    // 演示赛事只在本页生效，避免把演示配置写进真实组别记录。
+    if (!isDemoModeActive) await updateRecord('divisions', divisionId, payload)
+    divisionRecords.value = divisionRecords.value.map(item => String(item.id || item._id || '') === divisionId ? { ...item, ...payload } : item)
+    materialSettingsVisible.value = false
+    ElMessage.success(isDemoModeActive ? '演示模式已应用，未写入数据库' : '报名材料设置已保存')
+  } catch (error) {
+    ElMessage.error(error?.message || '保存报名材料设置失败')
+  } finally {
+    savingMaterialSettings.value = false
+  }
+}
 const assignableDivisions = computed(() => divisionOptions.value.filter(item => item.id !== 'default'))
 const divisionTournamentTeams = computed(() => tournamentTeams.value.filter(item => (item.divisionId || 'default') === activeDivisionId.value))
 const inactiveRegistrationStatuses = new Set(['cancel_requested', 'invite_cancelled', 'withdrawn', 'removed', 'cancelled'])
