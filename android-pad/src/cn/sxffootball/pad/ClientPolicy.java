@@ -3,13 +3,18 @@ package cn.sxffootball.pad;
 import java.net.URI;
 
 public final class ClientPolicy {
-    public static final String HOME = "https://www.sxffootball.cn/preview/admin/#/login";
+    public static final String HOME_PRODUCTION = "https://www.sxffootball.cn/admin/#/login";
+    public static final String HOME_PREVIEW = "https://www.sxffootball.cn/preview/admin/#/login";
+    public static final String CHANNEL_PRODUCTION = "production";
+    public static final String CHANNEL_PREVIEW = "preview";
     public static final String UPDATE_FEED = "https://www.sxffootball.cn/desktop/android/latest.json";
     public static final String PACKAGE = "cn.sxffootball.pad.preview";
-    public static final int VERSION_CODE = 102;
-    public static final String VERSION = "0.1.2";
-    public static String freshPageUrl(String value, long stamp) {
-        URI uri = URI.create(firstParty(value) ? value : HOME);
+    public static final int VERSION_CODE = 103;
+    public static final String VERSION = "0.1.3";
+    public static String home(boolean preview) { return preview ? HOME_PREVIEW : HOME_PRODUCTION; }
+    public static boolean channelValid(String value) { return CHANNEL_PREVIEW.equals(value) || CHANNEL_PRODUCTION.equals(value); }
+    public static String freshPageUrl(String value, long stamp, String fallback) {
+        URI uri = URI.create(firstParty(value) ? value : (firstParty(fallback) ? fallback : HOME_PREVIEW));
         StringBuilder query = new StringBuilder();
         if (uri.getRawQuery() != null) for (String part : uri.getRawQuery().split("&")) {
             if (!part.isEmpty() && !part.equals("_sxf_reload") && !part.startsWith("_sxf_reload=")) query.append(part).append('&');
@@ -35,7 +40,7 @@ public final class ClientPolicy {
         } catch (Exception ignored) { return false; }
     }
     public static boolean webLink(String value) {
-        try { return "https".equalsIgnoreCase(new URI(value).getScheme()); }
+        try { return "https".equals(new URI(value).getScheme()); }
         catch (Exception ignored) { return false; }
     }
     public static String filename(String value) {
