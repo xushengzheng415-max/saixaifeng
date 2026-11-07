@@ -1,23 +1,33 @@
 <template>
   <div class="player-card-container" :class="{ 'on-pitch': appearance === 'pitch' }">
     <div v-if="card.status === 'ready' && card.cardUrl" class="player-card" :data-template-version="card.publishedVersion"><img :src="card.cardUrl" :alt="`${player.name || '球员'}的球员卡`" class="published-card" @error="imageFailed" /></div>
-    <div v-else class="player-card player-card-state" role="status" :aria-busy="isLoading"><img v-if="portraitUrl && !portraitFailed" :src="portraitUrl" :alt="`${player.name || '球员'}的照片`" class="player-portrait" @error="portraitFailed = true" /><i v-else-if="isLoading" class="card-loading-ring" aria-hidden="true" /><strong>{{ player.name || '球员' }}</strong><span v-if="stateText">{{ stateText }}</span><button v-if="card.status === 'failed' || portraitFailed" type="button" :aria-label="`重新加载${player.name || '球员'}的球员卡`" @click.stop="retry">重试</button></div>
+    <div v-else class="player-card player-card-state" role="status" :aria-busy="isLoading"><img v-if="shownPortrait" :src="shownPortrait" :alt="`${player.name || '球员'}的照片`" class="player-portrait" @error="onPortraitError" /><i v-else-if="isLoading" class="card-loading-ring" aria-hidden="true" /><strong>{{ player.name || '球员' }}</strong><span v-if="stateText">{{ stateText }}</span><button v-if="showRetry" type="button" :aria-label="`重新加载${player.name || '球员'}的球员卡`" @click.stop="retry">重试</button></div>
   </div>
 </template>
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { readPlayerCard, getCachedPlayerCard } from '@/utils/playerCard'
 import { useReadCacheRefresh } from '@/utils/useReadCacheRefresh.js'
+import { isDemoMode } from '@/utils/demoMode'
+import { demoPlayerPortrait } from '@/utils/demoPortrait.js'
 const props = defineProps({ player:{type:Object,required:true}, teamLogo:{type:String,default:''}, playerCard:{type:Object,default:()=>({})}, appearance:{type:String,default:'default'} })
 const card = ref({status:'pending',cardUrl:''})
 const portraitFailed=ref(false)
-const portraitUrl=computed(()=>card.value.status==='forbidden'?'':(card.value.portraitUrl || [props.player?.photoUrl,props.player?.avatarUrl].find(value=>/^https:\/\//.test(String(value||''))) || ''))
+const demoSafe=computed(()=>isDemoMode())
+const localPortrait=computed(()=>demoSafe.value ? demoPlayerPortrait(props.player) : '')
+const remotePortrait=computed(()=>card.value.status==='forbidden'?'':(card.value.portraitUrl || [props.player?.photoUrl,props.player?.avatarUrl,props.player?.photo].find(value=>/^(https:\/\/|data:|blob:|\/)/.test(String(value||''))) || ''))
+const shownPortrait=computed(()=>{
+  if(demoSafe.value && (portraitFailed.value || !remotePortrait.value || card.value.status==='failed')) return localPortrait.value
+  return portraitFailed.value ? '' : remotePortrait.value
+})
+const showRetry=computed(()=>!demoSafe.value && (card.value.status==='failed' || portraitFailed.value))
 let requestVersion = 0, timer = null, fetching = false
-const isLoading = computed(()=>['loading','pending'].includes(card.value.status) && !portraitFailed.value)
+const isLoading = computed(()=>!shownPortrait.value && ['loading','pending'].includes(card.value.status) && !portraitFailed.value)
 const stateText = computed(()=>{
   if(card.value.status==='forbidden')return '无权查看'
+  if(demoSafe.value && shownPortrait.value)return ''
   if(portraitFailed.value)return '图片加载异常，请重试'
-  if(portraitUrl.value)return card.value.status==='pending'?'成卡更新中':''
+  if(remotePortrait.value)return card.value.status==='pending'?'成卡更新中':''
   if(card.value.status==='failed')return '加载异常，请重试'
   return ['loading','pending'].includes(card.value.status)?'正在加载…':card.value.portraitStatus==='failed'?'图片加载异常，请重试':'资料待补充'
 })
@@ -31,7 +41,8 @@ async function load(forceRefresh = false) {
   catch { if(version === requestVersion)card.value={status:'failed',cardUrl:''} }
   finally { if(version === requestVersion)fetching=false }
 }
-function imageFailed(){card.value={...card.value,status:'failed',cardUrl:''}}
+function imageFailed(){if(demoSafe.value){portraitFailed.value=true;card.value={...card.value,cardUrl:''};return}card.value={...card.value,status:'failed',cardUrl:''}}
+function onPortraitError(){portraitFailed.value=true}
 function retry(){portraitFailed.value=false;void load(true)}
 function visible(){if(document.visibilityState==='visible' && !fetching)void load()}
 function versionChanged(event){if(event.key==='sxfPlayerCardTemplateUpdate' && document.visibilityState==='visible')void load(true)}

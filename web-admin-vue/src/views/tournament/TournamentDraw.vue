@@ -94,8 +94,9 @@
         </article>
       </div>
       <el-alert class="overview-footer" title="基础模式组别采用简化分组流程；专业模式组别开放球队池、大屏展示、现场抽签和高级约束。" type="success" :closable="false" show-icon />
+      <el-alert v-if="allDivisionDrawsConfirmed && !tournament.pairingGenerated" class="overview-footer" type="warning" :closable="false" show-icon title="全部分组已确认。下一步：生成对阵" description="确认分组只锁定签位，不会自动产生比赛。未生成对阵时，赛程里的待排场次会是 0。" />
       <div v-if="allDivisionDrawsConfirmed" class="overview-schedule-actions">
-        <el-button type="success" size="large" :loading="preparingEventPairings" @click="prepareEventPairings">生成对阵</el-button>
+        <el-button type="success" size="large" :loading="preparingEventPairings" @click="prepareEventPairings">{{ tournament.pairingGenerated ? '查看赛程' : '下一步：生成对阵' }}</el-button>
       </div>
     </main>
   </section>
@@ -698,6 +699,10 @@ const allDivisionDrawsConfirmed = computed(() => drawPrerequisitesReady.value &&
 const preparingEventPairings = ref(false)
 async function prepareEventPairings() {
   if (!allDivisionDrawsConfirmed.value || preparingEventPairings.value) return
+  if (tournament.value.pairingGenerated) {
+    router.push({ path: `/tournaments/${tournamentId}/matches`, query: { view: 'map' } })
+    return
+  }
   preparingEventPairings.value = true
   let added = 0
   try {

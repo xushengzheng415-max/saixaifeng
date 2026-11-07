@@ -696,6 +696,7 @@ function mapPlayerFields(player) {
     ...player,
     number: player.number ?? player.jerseyNumber ?? null,
     id: player.id || player._id || player.name,
+    photo: player.photo || player.photoUrl || player.avatarUrl || '',
   }
 }
 const teamPlayers = ref((props.players || []).map(mapPlayerFields))
