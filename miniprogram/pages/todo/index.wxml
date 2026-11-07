@@ -10,7 +10,7 @@
       <text class="tournament-name">{{tournamentName}}</text>
       <text class="tournament-meta">{{tournamentMeta}}</text>
       <view class="panel-rule"></view>
-      <text class="panel-summary">仅聚合当前赛事审批、赛前准备和赛后复核</text>
+      <text class="panel-summary">仅聚合当前赛事审批、赛前准备和赛后复核，长按待办可移除</text>
     </view>
     <view class="stage-row">
       <view wx:for="{{stageTabs}}" wx:key="id" class="stage-item {{item.itemClass}}" data-id="{{item.id}}" bindtap="onStageTap">{{item.text}}</view>
@@ -20,7 +20,7 @@
     <view class="loading" wx:if="{{loading}}">正在整理赛事待办…</view>
     <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
     <view class="task-list" wx:if="{{hasTasks}}">
-      <view class="task-card" wx:for="{{visibleTasks}}" wx:key="id" data-tournament="{{item.tournamentId}}" data-team="{{item.teamId}}" data-audience="{{item.audience}}" data-type="{{item.type}}" data-division="{{item.divisionId}}" data-invite="{{item.inviteKey}}" bindtap="onTaskTap">
+      <view class="task-card" wx:for="{{visibleTasks}}" wx:key="id" data-task-id="{{item.id}}" data-tournament="{{item.tournamentId}}" data-team="{{item.teamId}}" data-audience="{{item.audience}}" data-type="{{item.type}}" data-division="{{item.divisionId}}" data-invite="{{item.inviteKey}}" bindtap="onTaskTap" bindlongpress="onTaskLongPress">
         <view class="task-glyph {{item.statusClass}}"><image src="{{item.typeIcon}}" mode="aspectFit"/></view>
         <view class="task-content">
           <view class="task-title-row"><text class="task-title">{{item.title}}</text><text class="task-status {{item.statusClass}}">{{item.statusText}}</text></view>

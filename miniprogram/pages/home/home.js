@@ -1,6 +1,7 @@
 var workspace = require('../../utils/workspace')
 var entryCards = require('../../utils/workspace-entry-cards')
 var signupDraft = require('../../utils/signup-draft')
+var eventTaskRules = require('../../utils/event-tasks')
 var quickSetup = require('../../utils/quick-setup')
 
 function countPending(items) {
@@ -238,11 +239,13 @@ Page({
     var matches = (context.eventSchedule || context.schedule || []).slice(0, isOrganizer ? 2 : 1).map(formatMatch)
     var eventTasks = (context.eventTasks || []).slice()
     var localDraft = isShared ? null : signupDraft.resolveAgainstRegistrations(signupDraft.read(), context.registrations || [])
-    if (localDraft && !(context.tournaments || []).some(function(item) { return item.id === localDraft.tournamentId && !item.isShared })) localDraft = null
+    if (localDraft) localDraft = signupDraft.discardOutOfScope(localDraft, (context.tournaments || []).filter(function(item) { return !item.isShared }).map(function(item) { return item.id }))
     var localDraftTask = signupDraft.toTask(localDraft)
     if (localDraftTask && !eventTasks.some(function(item) {
-      return item.type === 'registration_draft' && item.tournamentId === localDraftTask.tournamentId && item.teamId === localDraftTask.teamId
+      return item.type === 'registration_draft' && item.tournamentId === localDraftTask.tournamentId
     })) eventTasks.unshift(localDraftTask)
+    // 与待办页共用同一套规则：已在本机移除的和重复的报名草稿不能在首页复活。
+    eventTasks = eventTaskRules.collapseDrafts(eventTaskRules.filterDismissed(eventTasks))
     var trainingTasks = context.trainingTasks || []
     var trainingCourses = (context.trainingSchedule || []).slice(0, 3).map(formatTrainingCourse)
     var stats = context.statistics || {}

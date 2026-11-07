@@ -69,6 +69,15 @@ function clear() {
   wx.removeStorageSync(STORAGE_KEY)
 }
 
+// 彻底丢弃草稿：连同会再次合成草稿的报名跳转地址一起清除。
+function discard() {
+  clear()
+  ;['teamOnboardingReturnUrl', 'loginRedirectUrl'].forEach(function(key) {
+    var value = String(wx.getStorageSync(key) || '')
+    if (value.indexOf('/pages/tournament/signup/signup') === 0) wx.removeStorageSync(key)
+  })
+}
+
 function resolveAgainstRegistrations(draft, registrations) {
   var item = normalize(draft)
   if (!item) return null
@@ -80,9 +89,18 @@ function resolveAgainstRegistrations(draft, registrations) {
     return sameTournament && sameTeam && sameDivision && ['pending', 'approved', 'confirmed', 'active', 'locked'].indexOf(status) >= 0
   })
   if (!completed) return item
-  clear()
-  wx.removeStorageSync('teamOnboardingReturnUrl')
-  wx.removeStorageSync('loginRedirectUrl')
+  discard()
+  return null
+}
+
+// 草稿所属赛事已不在当前可办理范围时，直接删除，避免它作为待办反复出现。
+function discardOutOfScope(draft, tournamentIds) {
+  var item = normalize(draft)
+  if (!item) return null
+  var ids = (tournamentIds || []).filter(Boolean).map(String)
+  if (!ids.length) return item
+  if (ids.indexOf(item.tournamentId) >= 0) return item
+  discard()
   return null
 }
 
@@ -107,4 +125,4 @@ function toTask(draft) {
   }
 }
 
-module.exports = { save: save, read: read, clear: clear, resolveAgainstRegistrations: resolveAgainstRegistrations, toTask: toTask, buildPath: buildPath }
+module.exports = { save: save, read: read, clear: clear, discard: discard, resolveAgainstRegistrations: resolveAgainstRegistrations, discardOutOfScope: discardOutOfScope, toTask: toTask, buildPath: buildPath }
