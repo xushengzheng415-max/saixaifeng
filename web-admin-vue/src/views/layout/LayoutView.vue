@@ -948,7 +948,7 @@ const adminNavItems = [
   { path: '/tournament-center-admin', label: '平台运营中心', icon: 'Picture' },
   { path: '/admin/tournaments', label: '赛事列表', icon: 'Trophy' },
   { path: '/admin/teams', label: '球队列表', icon: 'UserFilled' },
-  { path: `${import.meta.env.BASE_URL}formation-designer.html`, label: '阵型设计器', icon: 'Place', external: true },
+  { path: '/formation-templates', label: '阵型模板', icon: 'Place', platformOwnerOnly: true },
   { path: '/shop-admin', label: '商城管理', icon: 'ShoppingBag' },
   { path: '/insurance-admin', label: '保险业务', icon: 'FirstAidKit' },
   { path: '/tournament-center-admin?section=support', label: '问题与协助', icon: 'Setting' }
@@ -958,6 +958,7 @@ const adminNavItems = [
 const isAdminPage = computed(() => {
   return (route.path === '/data-center' && userInfo.value.isPlatformOwner === true) || route.path.startsWith('/tournament-center-admin') ||
          route.path.startsWith('/admin/') ||
+         route.path.startsWith('/formation-templates') ||
          (route.path === '/system' && userInfo.value.isPlatformOwner === true)
 })
 
@@ -973,7 +974,7 @@ const currentNavItems = computed(() => {
   if (demoModeActive.value) return visibleOrganizerNavItems.value.filter(item => !item.external && item.path !== '/system')
   const ownerOnly = (items) => userInfo.value.isPlatformOwner
     ? items
-    : items.filter(item => item.path !== '/system')
+    : items.filter(item => item.path !== '/system' && !item.platformOwnerOnly)
   // 赛事中心管理页面使用超级管理后台导航
   if (isAdminPage.value) {
     return ownerOnly(adminNavItems)
