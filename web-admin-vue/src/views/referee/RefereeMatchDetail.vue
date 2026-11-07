@@ -5,7 +5,7 @@
         <span class="header-match-name">
           {{ homeName }} vs {{ awayName }}
         </span>
-        <el-tag :type="statusTagType" size="small" style="margin-left: 8px;">{{ statusLabel }}</el-tag>
+        <el-tag :type="statusTagType" :class="statusToneClass(statusTagType)" size="small" style="margin-left: 8px;">{{ statusLabel }}</el-tag>
       </template>
     </el-page-header>
 
@@ -52,16 +52,18 @@
       <!-- 主队阵容 -->
       <div class="lineup-side">
         <h4>{{ homeName }}</h4>
-        <div v-for="(p, i) in match.lineups.home?.players || []" :key="'h-'+i" class="lineup-player">
-          <span class="player-number">{{ p.number }}</span>
+        <div v-for="(p, i) in homeLineup" :key="'h-'+i" class="lineup-player">
+          <span class="player-number">{{ p.number || '待补' }}</span>
+          <span v-if="p.positionText" class="player-position">{{ p.positionText }}</span>
           <span class="player-name">{{ p.name }}</span>
         </div>
       </div>
       <!-- 客队阵容 -->
       <div class="lineup-side">
         <h4>{{ awayName }}</h4>
-        <div v-for="(p, i) in match.lineups.away?.players || []" :key="'a-'+i" class="lineup-player">
-          <span class="player-number">{{ p.number }}</span>
+        <div v-for="(p, i) in awayLineup" :key="'a-'+i" class="lineup-player">
+          <span class="player-number">{{ p.number || '待补' }}</span>
+          <span v-if="p.positionText" class="player-position">{{ p.positionText }}</span>
           <span class="player-name">{{ p.name }}</span>
         </div>
       </div>
@@ -86,6 +88,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { queryById, queryList } from '../../utils/cloud'
+import { statusToneClass } from '../../utils/statusTone'
 
 const router = useRouter()
 const route = useRoute()
@@ -110,9 +113,27 @@ const statusLabel = computed(() => {
 })
 
 // 是否有阵容
-const hasLineups = computed(() => {
-  return match.value.lineups && (match.value.lineups.home || match.value.lineups.away)
-})
+const POSITION_TEXT = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }
+
+function lineupRows(side) {
+  const direct = side === 'home' ? match.value.homeLineup : match.value.awayLineup
+  const fallback = match.value.lineups && match.value.lineups[side]
+  const directStatus = String((direct && direct.status) || '').toLowerCase()
+  const directUsable = direct && ['returned', 'draft', 'rejected'].indexOf(directStatus) < 0 && (direct.submitted === true || Array.isArray(direct.starters) || directStatus)
+  const source = directUsable ? direct : fallback
+  if (!source) return []
+  const players = Array.isArray(source.starters) ? source.starters : (Array.isArray(source.players) ? source.players : [])
+  return players.map(p => ({
+    number: String(p.jerseyNumber || p.number || ''),
+    name: String(p.name || p.playerName || ''),
+    positionText: String(p.positionText || POSITION_TEXT[String(p.slotPosition || p.position || '').toUpperCase()] || '')
+  }))
+}
+
+const homeLineup = computed(() => lineupRows('home'))
+const awayLineup = computed(() => lineupRows('away'))
+
+const hasLineups = computed(() => homeLineup.value.length > 0 || awayLineup.value.length > 0)
 
 // 加载比赛详情
 async function loadMatch() {
@@ -274,6 +295,12 @@ onMounted(() => {
 .player-number {
   font-weight: 700;
   min-width: 30px;
+}
+
+.player-position {
+  color: #909399;
+  font-size: 12px;
+  min-width: 40px;
 }
 
 .match-events {

@@ -2,6 +2,7 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const staffPolicy = require('./staffPolicy.cjs')
+const refereeMode = require('./refereeMode.cjs')
 const { writeRights } = require('./staffDbRights.cjs')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -202,25 +203,25 @@ async function undoLastScheduleAdjustment(event) {
   return { success:true,message:'已撤销上次赛程调整',operationGroupId:latest.operationGroupId,restoredMatches:logs.length }
 }
 
-function refereeTemplate(format) {
-  return /^(5|6)/.test(String(format || ''))
-    ? [
-        { key: 'mainReferee', label: '主裁判' },
-        { key: 'secondReferee', label: '第二裁判' },
-        { key: 'thirdReferee', label: '第三裁判' },
-        { key: 'timekeeper', label: '计时员' }
-      ]
-    : [
-        { key: 'mainReferee', label: '主裁判' },
-        { key: 'assistant1', label: '第一助理裁判' },
-        { key: 'assistant2', label: '第二助理裁判' },
-        { key: 'fourthOfficial', label: '第四官员' }
-      ]
+function refereeTemplate(format, tournament) {
+  return refereeMode.crewTemplate(tournament, format)
+}
+
+async function loadTournamentDoc(tournamentId) {
+  if (!tournamentId) return null
+  try {
+    const result = await db.collection('tournaments').doc(String(tournamentId)).get()
+    return Array.isArray(result.data) ? result.data[0] : result.data
+  } catch (error) {
+    return null
+  }
 }
 
 async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, operationRefereeId, recordKeeperId, options) {
   const config = options || {}
-  const template = refereeTemplate(format)
+  const tournament = config.tournament || await loadTournamentDoc(tournamentId)
+  const lightweight = refereeMode.isLightweightRefereeMode(tournament)
+  const template = refereeTemplate(format, tournament)
   const crew = {}
   const ids = []
   for (const role of template) {
@@ -244,8 +245,8 @@ async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, op
   const defaultKeeper = crew.timekeeper?._id || crew.fourthOfficial?._id || ''
   const keeperId = recordKeeperId || defaultKeeper
   const operatorId = operationRefereeId || keeperId
-  if (!ids.includes(keeperId)) throw new Error('裁判记录员必须从本场4名裁判中选择')
-  if (!ids.includes(operatorId)) throw new Error('操作负责人必须从本场4名裁判中选择')
+  if (!ids.includes(keeperId)) throw new Error(lightweight ? '记录员必须从本场裁判组中选择' : '裁判记录员必须从本场4名裁判中选择')
+  if (!ids.includes(operatorId)) throw new Error(lightweight ? '操作负责人必须为本场记录员' : '操作负责人必须从本场4名裁判中选择')
   return { crew, template, keeperId, operatorId }
 }
 
@@ -290,7 +291,7 @@ async function assignByHeadReferee(event) {
   const tournament=Array.isArray(tournamentResult.data)?tournamentResult.data[0]:tournamentResult.data
   if(!tournament)return {success:false,code:'TOURNAMENT_NOT_FOUND',message:'赛事不存在'}
   const actor=await authenticateHeadRefereeSession(event,match,tournament)
-  const assignment=await normalizeRefereeCrew(event.data.refereeCrew,match.matchFormat||(tournament&&tournament.matchFormat)||'11side',actor,match.tournamentId,event.data.operationRefereeId,event.data.refereeRecordKeeperId,{allowSynthetic:false})
+  const assignment=await normalizeRefereeCrew(event.data.refereeCrew,match.matchFormat||(tournament&&tournament.matchFormat)||'11side',actor,match.tournamentId,event.data.operationRefereeId,event.data.refereeRecordKeeperId,{allowSynthetic:false,tournament})
   await ensureNoRefereeScheduleConflicts(matchId,match,assignment.crew)
   const planState=await getCompetitionPlanState(match,tournament)
   if(planState.readError)return {success:false,code:'COMPETITION_PLAN_STATE_UNAVAILABLE',message:'无法确认当前竞赛方案状态，请稍后重试'}
@@ -423,8 +424,229 @@ async function forfeitMatch(event) {
   return { success:true, message:'弃赛结果已保存', data:resultData }
 }
 
+// 延期：fixed=改到指定日期/时间/场地；end=排到本赛事所有比赛之后。
+// 两种方式都保持比赛可正常开赛（延期状态会让裁判端拒绝开赛），仅改写计划时间。
+// end 的落点规则：先取本赛事「原定」赛程的最后一日作为统一基准日（已延期场次取其延期前的原定日期，
+// 不把上一次的 +7 天再当作基准），再取基准日之后最近的、本场原定星期几作为基准周内的落点；
+// 时间与场地沿用原比赛；仅当该时段已被占用时才按周顺延，最多 8 周。
+const POSTPONE_ELIGIBLE_STATUSES = new Set(['scheduled','pending','not_started','upcoming','checked_in','postponed',''])
+const POSTPONE_WEEKDAY_TEXT = ['周日','周一','周二','周三','周四','周五','周六']
+const POSTPONE_MAX_SHIFT_WEEKS = 8
+
+function postponeDateValue(dateText) {
+  const matched = String(dateText || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matched) return null
+  const value = new Date(Date.UTC(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3])))
+  return Number.isNaN(value.getTime()) ? null : value
+}
+
+function postponeDateText(date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function postponeAddDays(dateText, days) {
+  const base = postponeDateValue(dateText)
+  if (!base) return ''
+  return postponeDateText(new Date(base.getTime() + days * 86400000))
+}
+
+// 严格晚于 afterDate 的、最近的指定星期几
+function postponeNextSameWeekday(afterDate, weekday) {
+  const base = postponeDateValue(afterDate)
+  if (!base) return ''
+  let offset = ((weekday - base.getUTCDay()) + 7) % 7
+  if (offset === 0) offset = 7
+  return postponeDateText(new Date(base.getTime() + offset * 86400000))
+}
+
+function postponeWeekdayText(dateText) {
+  const value = postponeDateValue(dateText)
+  return value ? POSTPONE_WEEKDAY_TEXT[value.getUTCDay()] : ''
+}
+
+// 场次的计划基准日期：未延期取当前日期，已延期取首次延期前的原定日期。
+// 这样同一轮多场延期共用同一基准周，不会因为前一场被排到下一周而再次后移一周。
+function postponePlannedDate(item) {
+  const postponedFromDate = item && item.postponedFrom && typeof item.postponedFrom === 'object'
+    ? String(item.postponedFrom.matchDate || '').trim()
+    : ''
+  if (postponeDateValue(postponedFromDate)) return postponedFromDate
+  const currentDate = String(item && item.matchDate || '').trim()
+  return postponeDateValue(currentDate) ? currentDate : ''
+}
+
+// 本场自身的基准不得早于当前计划日期，避免二次延期时被排回更早的日期
+function postponeSelfBaseDate(match) {
+  const dates = [postponePlannedDate(match), String(match && match.matchDate || '').trim()]
+    .filter(text => postponeDateValue(text))
+  return dates.sort().slice(-1)[0] || ''
+}
+
+// 同机构、同日期、同时段、同场地已有比赛即视为占用；跨赛事同样生效（同一机构共用场地）
+async function postponeVenueOccupied(matchId, target, orgId) {
+  const venue = String(target.venue || '').trim()
+  if (!venue) return false
+  const result = await db.collection('matches').where({
+    orgId:String(orgId || ''),
+    matchDate:target.matchDate,
+    matchTime:target.matchTime,
+    venue
+  }).limit(20).get()
+  return (result.data || []).some(item => String(item._id) !== matchId &&
+    !['cancelled', 'canceled'].includes(String(item.status || '').toLowerCase()))
+}
+
+async function postponeMatch(event) {
+  const matchId = String(event.matchId || '').trim()
+  const mode = String(event.mode || 'fixed').trim()
+  if (!matchId) return { success:false, code:'MATCH_ID_REQUIRED', message:'缺少比赛ID' }
+  if (!['fixed','end'].includes(mode)) return { success:false, code:'POSTPONE_MODE_INVALID', message:'请选择延期方式' }
+
+  const actor = await authenticateActor(event)
+  const matchResult = await db.collection('matches').doc(matchId).get()
+  const match = Array.isArray(matchResult.data) ? matchResult.data[0] : matchResult.data
+  if (!match) return { success:false, code:'MATCH_NOT_FOUND', message:'比赛不存在' }
+  const tournamentResult = match.tournamentId ? await db.collection('tournaments').doc(String(match.tournamentId)).get() : null
+  const tournament = tournamentResult && (Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data)
+  if (!recordBelongsToActor(match, actor) && !recordBelongsToActor(tournament, actor)) {
+    return { success:false, code:'MATCH_SCOPE_DENIED', message:'无权修改其他账号的比赛' }
+  }
+  if (await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId) &&
+      !await staffPolicy.hasRight(db, actor.user._id, actor.orgId, String(match.tournamentId || ''), 'event.matches')) {
+    return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', message:'当前赛事没有比赛管理权限' }
+  }
+  if (!POSTPONE_ELIGIBLE_STATUSES.has(String(match.status || '').toLowerCase())) {
+    return { success:false, code:'MATCH_POSTPONE_STATUS_INVALID', message:'比赛已开始或已结束，不能延期' }
+  }
+  if (refereeHasTakenOverOrLocked(match)) {
+    return { success:false, code:'MATCH_RECORD_LOCKED', message:'裁判已接管或记录已锁定，请通过裁判记录流程处理' }
+  }
+  if (Array.isArray(match.events) && match.events.length) {
+    return { success:false, code:'MATCH_HAS_EVENTS', message:'本场已录入比赛事件，不能延期' }
+  }
+  try {
+    const externalEvents = (await db.collection('match_events').where({ matchId }).limit(1).get()).data || []
+    if (externalEvents.length) return { success:false, code:'MATCH_HAS_EVENTS', message:'本场已有比赛事件，不能延期' }
+  } catch (error) {
+    const message = String(error && (error.message || error.errMsg) || '').toLowerCase()
+    if (!message.includes('not exist')) console.warn('检查比赛事件集失败:', message)
+  }
+
+  const original = {
+    matchDate: String(match.matchDate || '').trim(),
+    matchTime: String(match.matchTime || '').trim(),
+    venue: String(match.venue || '').trim()
+  }
+  let target = null
+  let shiftWeeks = 0
+  let fallbackReason = ''
+  if (mode === 'fixed') {
+    const matchDate = String(event.matchDate || '').trim()
+    const matchTime = String(event.matchTime || '').trim()
+    const venue = String(event.venue || '').trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(matchDate)) return { success:false, code:'POSTPONE_DATE_INVALID', message:'请选择延期日期' }
+    if (!/^\d{1,2}:\d{2}$/.test(matchTime)) return { success:false, code:'POSTPONE_TIME_INVALID', message:'请选择延期时间' }
+    if (!venue) return { success:false, code:'POSTPONE_VENUE_REQUIRED', message:'请选择延期场地' }
+    target = { matchDate, matchTime, venue }
+  } else {
+    const peersResult = await db.collection('matches').where({ tournamentId:String(match.tournamentId || '') }).limit(1000).get()
+    const allPeers = peersResult.data || []
+    if (allPeers.length >= 1000) return { success:false, code:'POSTPONE_SCOPE_TOO_LARGE', message:'本赛事场次过多，无法确认最后一场，请改用固定延期时间' }
+    const peers = allPeers.filter(item => String(item._id) !== matchId &&
+      !['cancelled','canceled'].includes(String(item.status || '').toLowerCase()))
+    const originalValue = postponeDateValue(original.matchDate)
+    if (!originalValue) return { success:false, code:'POSTPONE_ORIGINAL_DATE_MISSING', message:'本场还没有原定日期，请改用固定延期时间' }
+    // 统一基准周：本赛事原定赛程的最后一日（本场按原定日期计入，已延期场次取其延期前日期）
+    const anchorDate = peers.map(postponePlannedDate)
+      .concat(postponeSelfBaseDate(match))
+      .filter(Boolean)
+      .sort()
+      .slice(-1)[0] || ''
+    if (!anchorDate) return { success:false, code:'POSTPONE_DATE_INVALID', message:'无法计算延期日期，请改用固定延期时间' }
+    if (!peers.length) fallbackReason = '本赛事还没有其他已排期比赛，按本场原定日期后一周兜底'
+    let candidate = postponeNextSameWeekday(anchorDate, originalValue.getUTCDay())
+    if (!candidate) return { success:false, code:'POSTPONE_DATE_INVALID', message:'无法计算延期日期，请改用固定延期时间' }
+    const keepTime = original.matchTime || '18:00'
+    // 基准周内该时段空闲就直接使用；仅当被占用时才按周顺延，避免多场延期重复累加一周
+    while (await postponeVenueOccupied(matchId, { matchDate:candidate, matchTime:keepTime, venue:original.venue }, actor.orgId)) {
+      if (shiftWeeks >= POSTPONE_MAX_SHIFT_WEEKS) {
+        return { success:false, code:'POSTPONE_NO_AVAILABLE_SLOT', message:`原定场地的同星期几同时段已连续 ${POSTPONE_MAX_SHIFT_WEEKS} 周被占用，请改用固定延期时间` }
+      }
+      candidate = postponeAddDays(candidate, 7)
+      shiftWeeks += 1
+    }
+    target = { matchDate:candidate, matchTime:keepTime, venue:original.venue }
+  }
+
+  // 首次延期时记录原始计划时间，重复延期不再覆盖，保证「原定」始终是最初的安排
+  const previousFrom = match.postponedFrom && typeof match.postponedFrom === 'object' &&
+    String(match.postponedFrom.matchDate || '').trim()
+    ? {
+        matchDate: String(match.postponedFrom.matchDate || '').trim(),
+        matchTime: String(match.postponedFrom.matchTime || '').trim(),
+        venue: String(match.postponedFrom.venue || '').trim()
+      }
+    : null
+  const postponedFrom = previousFrom || { ...original }
+  const postponeCount = Number(match.postponeCount || 0) + 1
+
+  try {
+    await ensureScheduleAdjustmentLogs()
+    await db.collection('schedule_adjustment_logs').add({ data:{
+      tournamentId:String(match.tournamentId || ''),
+      divisionId:String(match.divisionId || 'default'),
+      matchId,
+      operationGroupId:String(event.adjustmentGroupId || ('postpone-' + Date.now())),
+      adjustmentType:'postpone',
+      before:{ ...original },
+      after:{ ...target, shiftWeeks, fallbackReason },
+      actorUserId:String(actor.user._id || ''),
+      actorOrgId:actor.orgId,
+      status:'applied',
+      undone:false,
+      createTime:db.serverDate(),
+      updateTime:db.serverDate()
+    } })
+  } catch (error) {
+    console.warn('延期调整日志写入失败:', error.message || error)
+  }
+
+  await db.collection('matches').doc(matchId).update({ data:{
+    status:'scheduled',
+    matchDate:target.matchDate,
+    matchTime:target.matchTime,
+    venue:target.venue,
+    postponedFrom,
+    postponedAt:db.serverDate(),
+    postponeCount,
+    orgId:actor.orgId,
+    updateTime:db.serverDate()
+  } })
+
+  return {
+    success:true,
+    message:shiftWeeks ? `比赛已延期（原定场地被占用，顺延 ${shiftWeeks} 周）` : '比赛已延期',
+    data:{
+      ...target,
+      weekdayText:postponeWeekdayText(target.matchDate),
+      shiftWeeks,
+      fallbackReason,
+      postponedFrom,
+      postponeCount
+    }
+  }
+}
+
 exports.main = async (event, context) => {
   const { matchId, data } = event
+
+  if(event.action==='postponeMatch') {
+    try { return await postponeMatch(event) }
+    catch (err) {
+      console.error('比赛延期失败:', err)
+      return { success:false, code:err.code || 'MATCH_POSTPONE_FAILED', message:err.message || '比赛延期失败' }
+    }
+  }
 
   if(event.action==='undoLastScheduleAdjustment') {
     try{return await undoLastScheduleAdjustment(event)}catch(err){console.error('撤销赛程调整失败:',err);return { success:false,message:'撤销失败: '+err.message }}
@@ -634,7 +856,8 @@ exports.main = async (event, context) => {
         actor,
         match.tournamentId,
         safeData.operationRefereeId,
-        safeData.refereeRecordKeeperId
+        safeData.refereeRecordKeeperId,
+        { tournament }
       )
       safeData.refereeCrew = assignment.crew
       safeData.refereeRecordKeeperId = assignment.keeperId
@@ -765,17 +988,23 @@ async function queueOperatorNotification(matchId, match, tournament, assignment,
   const data = {
     type: 'match_assignment',
     status: 'pending',
+    // 执裁安排只走小程序订阅消息（服务号模板消息「比赛执裁安排通知」已被微信驳回，不得回退）。
+    notifyChannel: 'mini_subscribe',
+    // 订阅消息点击后的跳转页，参数沿用现有执裁路由 pages/referee/match/match?matchId=
+    matchPage: 'pages/referee/match/match',
     orgId,
     matchId,
     tournamentId: match.tournamentId || '',
     refereeId,
     phone,
     refereeName: referee.name || '',
+    // 模板只有 5 个字段：赛事名称 / 对阵名称 / 比赛时间 / 台号 / 任务类型。
+    // 改派、改时间等差异不体现在卡片上，由点击后的执裁页承载，故这里不再存场景字段。
     roleLabel: role ? role.label : '本场操作负责人',
-    tournamentName: firstValue(match.tournamentName, tournament && tournament.name, '足球赛事'),
+    tournamentName: firstValue(match.tournamentName, tournament && tournament.name, ''),
     teamsText: (matchTeamName(match, 'home') || '主队') + ' vs ' + (matchTeamName(match, 'away') || '客队'),
     matchTimeText: matchTimeText(match),
-    venue: firstValue(match.venue, match.field, match.location, '场地待定'),
+    venue: firstValue(match.venue, match.field, match.location, ''),
     updateTime: db.serverDate()
   }
   if (same) {

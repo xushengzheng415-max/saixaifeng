@@ -1,4 +1,5 @@
 const matchScoreView = require('./data-center/match-score.cjs')
+const refereeMode = require('./refereeMode.cjs')
 const crypto = require('crypto')
 const https = require('https')
 const cloud = require('wx-server-sdk')
@@ -894,7 +895,7 @@ async function acceptRefereeInvitation(openId,event) {
     const targetResult=await db.collection('referees').doc(invitation.targetRefereeId).get();const temporaryTarget=docData(targetResult)
     if(!temporaryTarget||temporaryTarget.temporaryReferee!==true||String(temporaryTarget.tournamentId||'')!==String(invitation.tournamentId||''))return fail('临时裁判档案不存在或已失效','REFEREE_TARGET_INVALID')
     if(normalizePhone(temporaryTarget.phone||temporaryTarget.phoneNumber)!==expectedPhone)return fail('临时裁判手机号已变更，请联系组委会','REFEREE_CLAIM_PHONE_MISMATCH')
-    await db.collection('referees').doc(invitation.targetRefereeId).update({data:{name:temporaryTarget.name||name,realName:temporaryTarget.realName||name,phone:expectedPhone,status:'pending',auditStatus:'pending',availabilityStatus:'pending',temporaryClaimStatus:'claimed_pending_review',organizerTemporaryApproval:false,credentialStatus:'not_submitted',certificateRequired:false,eventScoped:true,wechatWorkflowOpenId:openId,wechatBound:true,avatarFileId:invitation.stagedAvatarFileId,avatarUrl:avatarPreviewImage.dataUrl,avatarBackgroundRemoved:true,avatarProcessingMethod:'baidu_body_seg',canLogin:true,canOperate:false,claimedAt:db.serverDate(),updateTime:db.serverDate()}})
+    await db.collection('referees').doc(invitation.targetRefereeId).update({data:{name:temporaryTarget.name||name,realName:temporaryTarget.realName||name,phone:expectedPhone,status:'pending',auditStatus:'pending',availabilityStatus:'pending',temporaryClaimStatus:'claimed_pending_review',organizerTemporaryApproval:false,credentialStatus:'not_submitted',certificateRequired:false,eventScoped:true,wechatWorkflowOpenId:openId,wechatBound:true,miniOpenId:openId,avatarFileId:invitation.stagedAvatarFileId,avatarUrl:avatarPreviewImage.dataUrl,avatarBackgroundRemoved:true,avatarProcessingMethod:'baidu_body_seg',canLogin:true,canOperate:false,claimedAt:db.serverDate(),updateTime:db.serverDate()}})
     await db.collection('referee_invitations').doc(invitation._id).update({data:{status:'accepted',refereeId:invitation.targetRefereeId,acceptedAt:db.serverDate(),updateTime:db.serverDate()}})
     await db.collection('registration_audit_logs').add({data:{sport:'football',action:'temporary_referee_claimed',tournamentId:String(invitation.tournamentId||''),inviteId:String(invitation._id||''),result:'success',detail:{refereeId:String(invitation.targetRefereeId),phoneMasked:maskPhone(expectedPhone)},createTime:db.serverDate()}})
     return ok({refereeId:invitation.targetRefereeId,temporaryReferee:true},'认领已提交，等待组委会确认')
@@ -910,14 +911,64 @@ async function acceptRefereeInvitation(openId,event) {
   const profileAssets={certificateNumber:qualification,certificateIssueDate,issuingAuthority,certificateFileId:invitation.stagedCertificateFileId,avatarFileId:invitation.stagedAvatarFileId,avatarUrl:avatarPreviewImage.dataUrl,avatarBackgroundRemoved:true,avatarProcessingMethod:'baidu_body_seg',certificateRecognized:true,certificateOcrEngine:'GeneralAccurateOCR+SealOCR',certificateRisks,certificateRiskReviewRequired:certificateRisks.length>0}
   let refereeId=''
   if(invitation.targetRefereeId) {
-    await db.collection('referees').doc(invitation.targetRefereeId).update({ data:Object.assign({ name,realName:name,phone,level,qualification,status:'pending',auditStatus:'pending',availabilityStatus:'pending',wechatWorkflowOpenId:openId,wechatBound:true,synthetic:false,wasSyntheticCandidate:true,canLogin:true,canOperate:false,notificationDisabled:false,source:'synthetic_profile_claim',inviteId:invitation._id,updateTime:db.serverDate() },profileAssets) })
+    await db.collection('referees').doc(invitation.targetRefereeId).update({ data:Object.assign({ name,realName:name,phone,level,qualification,status:'pending',auditStatus:'pending',availabilityStatus:'pending',wechatWorkflowOpenId:openId,wechatBound:true,miniOpenId:openId,synthetic:false,wasSyntheticCandidate:true,canLogin:true,canOperate:false,notificationDisabled:false,source:'synthetic_profile_claim',inviteId:invitation._id,updateTime:db.serverDate() },profileAssets) })
     refereeId=invitation.targetRefereeId
   } else {
-    const added=await db.collection('referees').add({ data:Object.assign({ tournamentId:invitation.tournamentId,orgId:invitation.orgId || tournament && (tournament.orgId || tournament.organizationId) || '',name,realName:name,phone,level,qualification,status:'pending',auditStatus:'pending',availabilityStatus:'pending',wechatWorkflowOpenId:openId,wechatBound:true,source:'referee_invite_qr',inviteId:invitation._id,canLogin:true,canOperate:false,createTime:db.serverDate(),updateTime:db.serverDate() },profileAssets) })
+    const added=await db.collection('referees').add({ data:Object.assign({ tournamentId:invitation.tournamentId,orgId:invitation.orgId || tournament && (tournament.orgId || tournament.organizationId) || '',name,realName:name,phone,level,qualification,status:'pending',auditStatus:'pending',availabilityStatus:'pending',wechatWorkflowOpenId:openId,wechatBound:true,source:'referee_invite_qr',inviteId:invitation._id,miniOpenId:openId,canLogin:true,canOperate:false,createTime:db.serverDate(),updateTime:db.serverDate() },profileAssets) })
     refereeId=added._id
   }
   await db.collection('referee_invitations').doc(invitation._id).update({ data:{ status:'accepted',refereeId,acceptedAt:db.serverDate(),updateTime:db.serverDate() } })
+  if (event.miniSubscriptionAccepted === true) await grantRefereeNotifyQuota(refereeId, openId)
   return ok({ refereeId },'裁判资料已提交，等待主办方审核')
+}
+
+// 执裁提醒订阅额度：按模板维度记账（同一模板重复授权可累积），最多累计 5 条。
+const REFEREE_NOTIFY_QUOTA_CAP = 5
+
+async function grantRefereeNotifyQuota(refereeId, openId) {
+  if (!refereeId) return 0
+  const current = docData(await db.collection('referees').doc(refereeId).get())
+  if (!current) return 0
+  const templateId = String(process.env.SXF_FOOTBALL_MINI_TEMPLATE_REFEREE_ASSIGN || '')
+  // 换模板时旧额度作废，避免不同模板互相串用。
+  const sameTemplate = !current.refereeNotifyTemplateId || current.refereeNotifyTemplateId === templateId
+  const base = sameTemplate ? Math.max(0, Number(current.refereeNotifyQuota) || 0) : 0
+  const quota = Math.min(REFEREE_NOTIFY_QUOTA_CAP, base + 1)
+  const patch = { refereeNotifyQuota: quota, refereeNotifyTemplateId: templateId, refereeNotifySubscribedAt: db.serverDate(), updateTime: db.serverDate() }
+  if (openId) patch.miniOpenId = openId
+  await db.collection('referees').doc(refereeId).update({ data: patch })
+  return quota
+}
+
+async function findRefereeByOpenId(openId, identity) {
+  if (openId) {
+    const bound = listData(await db.collection('referees').where({ wechatWorkflowOpenId: openId }).limit(1).get())
+    if (bound.length) return bound[0]
+  }
+  const phone = normalizePhone(identity && identity.phone)
+  if (!phone) return null
+  const byPhone = listData(await db.collection('referees').where(_.or([{ phone }, { phoneNumber: phone }])).limit(5).get())
+  return byPhone.find(function(item) { return item && item.status !== 'rejected' }) || byPhone[0] || null
+}
+
+// 裁判在小程序工作台点「开启执裁提醒」后回报额度；未授权时只返回当前额度，不做任何加计。
+async function refereeNotifySubscribe(openId, event) {
+  const referee = await findRefereeByOpenId(openId, await getIdentity(openId))
+  if (!referee) return fail('未找到裁判档案，请先完成裁判登记','REFEREE_NOT_FOUND')
+  if (event && event.accepted === true) {
+    const quota = await grantRefereeNotifyQuota(referee._id, openId)
+    return ok({ quota, templateId: String(process.env.SXF_FOOTBALL_MINI_TEMPLATE_REFEREE_ASSIGN || '') }, '执裁提醒已开启')
+  }
+  return ok({ quota: Math.max(0, Number(referee.refereeNotifyQuota) || 0), templateId: String(process.env.SXF_FOOTBALL_MINI_TEMPLATE_REFEREE_ASSIGN || '') })
+}
+
+async function getRefereeNotifySetting(openId) {
+  const referee = await findRefereeByOpenId(openId, await getIdentity(openId))
+  return ok({
+    quota: Math.max(0, Number(referee && referee.refereeNotifyQuota) || 0),
+    templateId: String(process.env.SXF_FOOTBALL_MINI_TEMPLATE_REFEREE_ASSIGN || ''),
+    quotaCap: REFEREE_NOTIFY_QUOTA_CAP
+  })
 }
 
 async function getRefereeRecords(identity) {
@@ -1010,6 +1061,27 @@ async function requireAssignedRole(openId, matchId, allowedRoles) {
   return { identity, match, assignment }
 }
 
+async function matchTournamentDoc(match) {
+  return match && match.tournamentId ? await getDoc('tournaments', match.tournamentId) : null
+}
+
+// 操作用途的岗位门禁：标准模式仅主裁判，轻量化模式仅记录员（第四官员）。
+async function requireRefereeOperatorRole(openId, matchId) {
+  const roleContext = await requireAssignedRole(openId, matchId, ['mainReferee','fourthOfficial'])
+  if (roleContext.error) return roleContext
+  const tournament = await matchTournamentDoc(roleContext.match)
+  const allowed = refereeMode.operatorRoles(tournament)
+  if (allowed.indexOf(String(roleContext.assignment.role || '')) < 0) return { error:fail('当前裁判岗位无权执行此操作', 'REFEREE_ROLE_FORBIDDEN') }
+  return {
+    identity: roleContext.identity,
+    match: roleContext.match,
+    assignment: roleContext.assignment,
+    tournament,
+    lightweight: refereeMode.isLightweightRefereeMode(tournament),
+    refereeModeValue: refereeMode.resolveRefereeMode(tournament)
+  }
+}
+
 async function getTeamName(teamId, fallback) {
   if (fallback) return fallback
   const team = await getDoc('teams', teamId)
@@ -1022,15 +1094,24 @@ async function getTournamentName(tournamentId, fallback) {
   return tournament ? firstNonEmpty(tournament.name, tournament.tournamentName, '赛事') : '赛事'
 }
 
+const LINEUP_POSITION_TEXT = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }
+
 function rosterPlayerView(player, index, role) {
   const item = player || {}
+  const slotPosition = String(firstNonEmpty(item.slotPosition, '')).toUpperCase()
+  const rawPosition = String(firstNonEmpty(item.position, '')).trim()
+  const positionCode = slotPosition || rawPosition.toUpperCase()
+  const positionText = LINEUP_POSITION_TEXT[positionCode] || rawPosition
   return {
     id: String(firstNonEmpty(item.id, item._id, item.playerId, 'match-player-' + index)),
     jerseyNumber: String(firstNonEmpty(item.jerseyNumber, item.number, '')).trim(),
     name: String(firstNonEmpty(item.name, item.playerName, '')).trim(),
     role: item.role === 'substitute' || role === 'substitute' ? 'substitute' : 'starter',
     portraitUrl: String(firstNonEmpty(item.portraitUrl, item.avatarUrl, item.photoUrl, '')).trim(),
-    identityStatus: String(firstNonEmpty(item.identityStatus, item.verificationStatus, '')).trim()
+    identityStatus: String(firstNonEmpty(item.identityStatus, item.verificationStatus, '')).trim(),
+    jerseyName: String(firstNonEmpty(item.jerseyName, '')).trim(),
+    position: positionCode,
+    positionText
   }
 }
 
@@ -1049,7 +1130,9 @@ function refereeRosterView(match, side) {
   const progress = lineupIdentityProgress(source)
   return {
     side,
-    source: source.source || (direct ? 'referee_ocr' : (players.length ? 'existing_lineup' : '')),
+    source: source.source || (source.submitted ? 'team_submission' : (direct ? 'referee_ocr' : (players.length ? 'existing_lineup' : ''))),
+    formation: String(firstNonEmpty(source.formation, '')),
+    formationText: String(firstNonEmpty(source.formationText, source.formation, '')),
     status: lineupStatus(match, side),
     players,
     starterCount: players.filter(function(item) { return item.role === 'starter' }).length,
@@ -1065,12 +1148,18 @@ async function decorateMatch(match, identity) {
   const awayTeamId = matchTeamId(match, 'away')
   const homeTeamName = await getTeamName(homeTeamId, matchTeamName(match, 'home'))
   const awayTeamName = await getTeamName(awayTeamId, matchTeamName(match, 'away'))
-  const tournamentName = await getTournamentName(match.tournamentId, match.tournamentName)
+  const tournamentDoc = match.tournamentId ? await getDoc('tournaments', match.tournamentId) : null
+  const tournamentName = tournamentDoc ? firstNonEmpty(tournamentDoc.name, tournamentDoc.tournamentName, match.tournamentName, '赛事') : await getTournamentName(match.tournamentId, match.tournamentName)
   const division = match.divisionId ? await getDoc('divisions', match.divisionId) : null
   const drawResolution = ['penalties', 'penalty_shootout', 'shootout'].indexOf(String(division && division.drawResolution || match.drawResolution || '').toLowerCase()) >= 0 ? 'penalties' : 'draw'
   const status = match.status || 'scheduled'
   let operatorAssignment = null
   if (match._id) operatorAssignment = identity ? await assignedRefereeRole(identity, match) : listData(await db.collection('match_referees').where({ matchId: match._id, canOperate: true }).limit(2).get())[0] || null
+  const refereeModeValue = refereeMode.resolveRefereeMode(tournamentDoc)
+  const lightweightReferee = refereeModeValue === refereeMode.REFEREE_MODE_LIGHTWEIGHT
+  const operatorRole = String(operatorAssignment && operatorAssignment.role || '')
+  const operatorRoleLabel = refereeMode.roleLabel(tournamentDoc, operatorRole, operatorAssignment && operatorAssignment.roleLabel)
+  const operatorCanStart = lightweightReferee ? operatorRole === refereeMode.RECORD_OFFICER_ROLE : operatorRole === 'mainReferee'
   const events = (Array.isArray(match.events) ? match.events : []).map(function(item, index) {
     return refereeEventView(item, index, homeTeamName, awayTeamName)
   }).sort(function(a, b) {
@@ -1079,6 +1168,11 @@ async function decorateMatch(match, identity) {
   const eventScore = Array.isArray(match.events) ? eventScoreFromEvents(match.events) : null
   const clock = refereeClockSnapshot(match)
   const preMatch = preMatchStateView(match)
+  const lineupManualConfirmedBy = match.lineupManualConfirmedBy && typeof match.lineupManualConfirmedBy === 'object' ? match.lineupManualConfirmedBy : null
+  const lineupManualReady = lightweightReferee && operatorRole === refereeMode.RECORD_OFFICER_ROLE && !match.refereeRecordLocked &&
+    !!preMatch.completed && ['scheduled', 'pending', 'checked_in'].indexOf(status) >= 0 &&
+    lineupPlayers(match[lineupField('home')] || {}, 'starter').length > 0 &&
+    lineupPlayers(match[lineupField('away')] || {}, 'starter').length > 0
   return {
     matchId: match._id,
     tournamentId: match.tournamentId || '',
@@ -1093,17 +1187,19 @@ async function decorateMatch(match, identity) {
     matchStatus: status,
     matchStatusText: matchStatusText(status),
     refereeActionText: refereeActionText(status),
-    refereeRoleLabel: operatorAssignment ? operatorAssignment.roleLabel || '' : '',
+    refereeMode: refereeModeValue,
+    isLightweightReferee: lightweightReferee,
+    refereeRoleLabel: operatorRoleLabel,
     isRecordKeeper: !!(operatorAssignment && operatorAssignment.isRecordKeeper),
-    refereeRole:String(operatorAssignment && operatorAssignment.role || ''),
-    isIdentityTask:['assistant1','assistant2','fourthOfficial'].indexOf(String(operatorAssignment && operatorAssignment.role || '')) >= 0,
-    canOpenMatch:Boolean(operatorAssignment && operatorAssignment.canOperate) || String(operatorAssignment && operatorAssignment.role || '') === 'mainReferee',
-    identityTaskSide:String(operatorAssignment && operatorAssignment.role || '') === 'assistant2' ? 'away' : (String(operatorAssignment && operatorAssignment.role || '') === 'assistant1' ? 'home' : ''),
-    canStart: String(operatorAssignment && operatorAssignment.role || '') === 'mainReferee' && !match.refereeRecordLocked && ['scheduled', 'pending', 'checked_in'].indexOf(status) >= 0,
-    canFinish: String(operatorAssignment && operatorAssignment.role || '') === 'mainReferee' && !match.refereeRecordLocked && ['ongoing', 'live'].indexOf(status) >= 0,
+    refereeRole:operatorRole,
+    isIdentityTask:!lightweightReferee && ['assistant1','assistant2','fourthOfficial'].indexOf(operatorRole) >= 0,
+    canOpenMatch:Boolean(operatorAssignment && operatorAssignment.canOperate) || operatorCanStart,
+    identityTaskSide:operatorRole === 'assistant2' ? 'away' : (operatorRole === 'assistant1' ? 'home' : ''),
+    canStart: operatorCanStart && !match.refereeRecordLocked && ['scheduled', 'pending', 'checked_in'].indexOf(status) >= 0,
+    canFinish: operatorCanStart && !match.refereeRecordLocked && ['ongoing', 'live'].indexOf(status) >= 0,
     canControlClock:!!(operatorAssignment && operatorAssignment.canOperate) && !match.refereeRecordLocked && ['ongoing', 'live'].indexOf(status) >= 0,
     canRecordEvents: !!(operatorAssignment && operatorAssignment.canOperate) && !match.refereeRecordLocked && ['ongoing', 'live', 'finished'].indexOf(status) >= 0,
-    canSubmitReport: String(operatorAssignment && operatorAssignment.role || '') === 'mainReferee' && !match.refereeRecordLocked && status === 'finished',
+    canSubmitReport: operatorCanStart && !match.refereeRecordLocked && status === 'finished',
     showFinalScore: ['finished', 'completed'].indexOf(status) >= 0,
     refereeRecordLocked: !!match.refereeRecordLocked,
     refereeReportStatus: match.refereeReportStatus || 'not_submitted',
@@ -1130,7 +1226,11 @@ async function decorateMatch(match, identity) {
     homeLineupStatus: lineupStatus(match, 'home'),
     awayLineupStatus: lineupStatus(match, 'away'),
     lineupsLocked: !!match.lineupsLocked,
-    canReviewLineups: ['mainReferee','fourthOfficial'].indexOf(String(operatorAssignment && operatorAssignment.role || '')) >= 0 && !!preMatch.completed && !match.refereeRecordLocked && ['scheduled', 'pending', 'checked_in'].indexOf(status) >= 0,
+    lineupVerificationMode: refereeMode.lineupVerificationMode(tournamentDoc),
+    lineupManualConfirmedAt: lineupManualConfirmedBy ? lineupManualConfirmedBy.confirmedAt || null : null,
+    lineupManualConfirmedByMasked: String(lineupManualConfirmedBy && lineupManualConfirmedBy.phoneMasked || ''),
+    canManualConfirmLineup: lineupManualReady,
+    canReviewLineups: ['mainReferee','fourthOfficial'].indexOf(operatorRole) >= 0 && !!preMatch.completed && !match.refereeRecordLocked && ['scheduled', 'pending', 'checked_in'].indexOf(status) >= 0,
     canEditRoster: !!(operatorAssignment && operatorAssignment.canOperate) && !match.refereeRecordLocked && status !== 'completed',
     preMatch,
     canManagePreMatch: !match.refereeRecordLocked && ['scheduled', 'pending', 'checked_in'].indexOf(status) >= 0,
@@ -1148,10 +1248,8 @@ async function getIdentityClaims(identity) {
   return listData(result).filter(function(item) { return item.status === ACTIVE_CLAIM_STATUS })
 }
 
-function refereeAssignmentTemplate(format) {
-  return /^(5|6)/.test(String(format||''))
-    ? [{key:'mainReferee',label:'主裁判'},{key:'secondReferee',label:'第二裁判'},{key:'thirdReferee',label:'第三裁判'},{key:'timekeeper',label:'计时员'}]
-    : [{key:'mainReferee',label:'主裁判'},{key:'assistant1',label:'第一助理裁判'},{key:'assistant2',label:'第二助理裁判'},{key:'fourthOfficial',label:'第四官员'}]
+function refereeAssignmentTemplate(format, tournament) {
+  return refereeMode.crewTemplate(tournament, format)
 }
 
 async function headRefereeTournamentScopes(identity) {
@@ -1192,7 +1290,7 @@ async function getHeadRefereeSchedule(openId,event) {
   const referees=refereeRows.filter(function(item){return schedulableReferee(item,tournamentId,orgId)}).map(function(item){return {id:String(item._id),name:String(item.name||item.realName||'裁判'),level:String(item.level||item.refereeLevel||''),temporaryReferee:item.temporaryReferee===true}})
   const matchRows=listData(await db.collection('matches').where({tournamentId}).limit(500).get())
   const matches=matchRows.filter(function(match){return ['scheduled','pending','checked_in'].indexOf(String(match.status||'scheduled'))>=0&&!match.refereeRecordLocked}).map(function(match){
-    const roles=refereeAssignmentTemplate(match.matchFormat||tournament.matchFormat||'11side')
+    const roles=refereeAssignmentTemplate(match.matchFormat||tournament.matchFormat||'11side', tournament)
     const crew=match.refereeCrew&&typeof match.refereeCrew==='object'?match.refereeCrew:{}
     const crewIds={}
     roles.forEach(function(role){const person=crew[role.key];crewIds[role.key]=String(person&&typeof person==='object'?(person._id||person.refereeId||''):(person||''))})
@@ -1687,7 +1785,8 @@ async function getRefereeMatch(openId, matchId) {
   match._id = match._id || matchId
   const operatorAllowed = await isAssignedReferee(identity, match)
   const mainAssignment = await assignedRefereeRole(identity, match, ['mainReferee'])
-  if (!operatorAllowed && !mainAssignment) return fail('当前岗位请进入专属裁判任务页', 'REFEREE_ROLE_FORBIDDEN')
+  const recordAssignment = refereeMode.isLightweightRefereeMode(await matchTournamentDoc(match)) ? await assignedRefereeRole(identity, match, [refereeMode.RECORD_OFFICER_ROLE]) : null
+  if (!operatorAllowed && !mainAssignment && !recordAssignment) return fail('当前岗位请进入专属裁判任务页', 'REFEREE_ROLE_FORBIDDEN')
   const display = await decorateMatch(match, identity)
   return ok({ match: display })
 }
@@ -1695,7 +1794,7 @@ async function getRefereeMatch(openId, matchId) {
 async function updatePreMatchState(openId, event) {
   const matchId = String(event.matchId || '')
   const operation = String(event.operation || '')
-  const roleContext = await requireAssignedRole(openId, matchId, ['mainReferee'])
+  const roleContext = await requireRefereeOperatorRole(openId, matchId)
   if (roleContext.error) return roleContext.error
   const context = { identity:roleContext.identity, match:roleContext.match }
   const match = context.match
@@ -1722,6 +1821,21 @@ async function updatePreMatchState(openId, event) {
     next.completedAt = now
     next.completedByPhoneMasked = actor
     next.issue = null
+  } else if (operation === 'submit_checklist') {
+    const items = event.items && typeof event.items === 'object' ? event.items : {}
+    if (!Object.keys(items).length) return fail('未提交赛前检查项', 'PRE_MATCH_CHECKLIST_EMPTY')
+    const invalidKey = Object.keys(items).filter(function(key) {
+      return !PRE_MATCH_CHECKLIST.some(function(item) { return item.key === key })
+    })[0] || ''
+    if (invalidKey) return fail('无效的赛前检查项', 'PRE_MATCH_ITEM_INVALID')
+    PRE_MATCH_CHECKLIST.forEach(function(item) {
+      const previous = next.checklist[item.key] && typeof next.checklist[item.key] === 'object' ? next.checklist[item.key] : {}
+      if (items[item.key] === true) {
+        next.checklist[item.key] = { checked: true, checkedAt: previous.checked && previous.checkedAt || now, checkedByPhoneMasked: previous.checked && previous.checkedByPhoneMasked || actor }
+      } else {
+        next.checklist[item.key] = { checked: false, checkedAt: null, checkedByPhoneMasked: '' }
+      }
+    })
   } else if (operation === 'report_pre_match_issue') {
     const reason = String(event.reason || '').trim().slice(0, 200)
     if (!reason) return fail('请填写无法开赛原因', 'PRE_MATCH_ISSUE_REASON_REQUIRED')
@@ -1733,12 +1847,14 @@ async function updatePreMatchState(openId, event) {
   }
   const updateData = {
     preMatchState: next,
-    refereeWorkflowLogs: workflowLogs(match, 'pre_match_' + operation, context.identity, { itemKey: String(event.itemKey || '') }),
+    refereeWorkflowLogs: workflowLogs(match, 'pre_match_' + operation, context.identity, operation === 'submit_checklist'
+      ? { itemKey: '', checkedKeys: PRE_MATCH_CHECKLIST.filter(function(item) { return !!(next.checklist[item.key] && next.checklist[item.key].checked) }).map(function(item) { return item.key }) }
+      : { itemKey: String(event.itemKey || '') }),
     updateTime: db.serverDate()
   }
   if (operation === 'complete_pre_match' && status !== 'checked_in') updateData.status = 'checked_in'
   await db.collection('matches').doc(matchId).update({ data: updateData })
-  return ok({ preMatch: preMatchStateView(Object.assign({}, match, { preMatchState: next })) }, operation === 'complete_pre_match' ? '赛前检查已确认，可进入阵容核验' : (operation === 'report_pre_match_issue' ? '无法开赛原因已上报' : '赛前状态已更新'))
+  return ok({ preMatch: preMatchStateView(Object.assign({}, match, { preMatchState: next })) }, operation === 'complete_pre_match' ? '赛前检查已确认，可进入阵容核验' : (operation === 'submit_checklist' ? '赛前检查结果已提交' : (operation === 'report_pre_match_issue' ? '无法开赛原因已上报' : '赛前状态已更新')))
 }
 
 async function getAssignedRefereeMatch(openId, matchId) {
@@ -1844,7 +1960,7 @@ async function saveRefereeRoster(openId, event) {
   return ok({ roster: refereeRosterView(Object.assign({}, match, { refereeRosters }), side) }, (side === 'home' ? '主队' : '客队') + '名单已保存')
 }
 async function startRefereeMatch(openId, matchId) {
-  const roleContext = await requireAssignedRole(openId, matchId, ['mainReferee'])
+  const roleContext = await requireRefereeOperatorRole(openId, matchId)
   if (roleContext.error) return roleContext.error
   const context = { identity:roleContext.identity, match:roleContext.match }
   const status = context.match.status || 'scheduled'
@@ -1861,6 +1977,7 @@ async function startRefereeMatch(openId, matchId) {
 
   const updateData = {
       status: 'ongoing',
+      refereeMode: roleContext.refereeModeValue,
       refereeStartedAt: db.serverDate(),
       refereeMatchPhase: 'first_half',
       refereeClockRunning: true,
@@ -1939,7 +2056,7 @@ async function controlRefereeClock(openId, event) {
 
 async function finishRefereeMatch(openId, event) {
   const matchId = event.matchId || ''
-  const roleContext = await requireAssignedRole(openId, matchId, ['mainReferee'])
+  const roleContext = await requireRefereeOperatorRole(openId, matchId)
   if (roleContext.error) return roleContext.error
   const context = { identity:roleContext.identity, match:roleContext.match }
   const status = context.match.status || 'scheduled'
@@ -2136,7 +2253,7 @@ async function submitRefereeReport(openId, matchId) {
 
 async function submitSignedRefereeRecord(openId, event) {
   const matchId = String(event.matchId || '')
-  const roleContext = await requireAssignedRole(openId, matchId, ['mainReferee'])
+  const roleContext = await requireRefereeOperatorRole(openId, matchId)
   if (roleContext.error) return roleContext.error
   const context = { identity:roleContext.identity, match:roleContext.match }
   const match = context.match
@@ -2158,6 +2275,7 @@ async function submitSignedRefereeRecord(openId, event) {
   const recordPayload = {
     matchId,
     tournamentId: match.tournamentId || '',
+    refereeMode: roleContext.refereeModeValue,
     division: match.division || match.groupName || '',
     homeTeamId: matchTeamId(match, 'home'),
     awayTeamId: matchTeamId(match, 'away'),
@@ -2179,6 +2297,7 @@ async function submitSignedRefereeRecord(openId, event) {
     recordNumber,
     matchId,
     tournamentId: match.tournamentId || '',
+    refereeMode: roleContext.refereeModeValue,
     homeTeamId: matchTeamId(match, 'home'),
     awayTeamId: matchTeamId(match, 'away'),
     homeScore,
@@ -2255,7 +2374,7 @@ async function saveReturnedRecordCorrection(openId, event) {
 
 async function resubmitReturnedRecord(openId, event) {
   const matchId = String(event.matchId || '')
-  const roleContext = await requireAssignedRole(openId, matchId, ['mainReferee'])
+  const roleContext = await requireRefereeOperatorRole(openId, matchId)
   if (roleContext.error) return roleContext.error
   const context = { identity:roleContext.identity, match:roleContext.match }
   const match = context.match
@@ -2309,7 +2428,7 @@ async function resubmitReturnedRecord(openId, event) {
 
 async function saveRefereeReportDraft(openId, event) {
   const matchId = String(event.matchId || '')
-  const roleContext = await requireAssignedRole(openId, matchId, ['mainReferee'])
+  const roleContext = await requireRefereeOperatorRole(openId, matchId)
   if (roleContext.error) return roleContext.error
   const context = { identity:roleContext.identity, match:roleContext.match }
   const match = context.match
@@ -2373,6 +2492,16 @@ function lineupPlayers(lineup, role) {
   return Array.isArray(lineup && lineup.starters) ? lineup.starters : (Array.isArray(lineup && lineup.players) ? lineup.players : [])
 }
 
+async function updateLineupSnapshotStatus(snapshotId, status, extra) {
+  const id = String(snapshotId || '')
+  if (!id) return
+  try {
+    await db.collection('match_lineup_snapshots').doc(id).update({ data: Object.assign({ status, updateTime:db.serverDate() }, extra || {}) })
+  } catch (error) {
+    console.warn('[lineup] snapshot status sync skipped:', id, error.message || error)
+  }
+}
+
 function identityReady(player) {
   return ['verified','approved','complete','manual_required'].indexOf(String(player && player.identityStatus || '').toLowerCase()) >= 0
 }
@@ -2417,6 +2546,8 @@ async function getIdentityVerificationTask(openId, event) {
   if (context.error) return context.error
   const match = context.match
   const role = String(context.assignment.role || '')
+  const tournamentDoc = await matchTournamentDoc(match)
+  const lightweight = refereeMode.isLightweightRefereeMode(tournamentDoc)
   const side = role === 'assistant1' ? 'home' : (role === 'assistant2' ? 'away' : (event.side === 'away' ? 'away' : 'home'))
   const lineup = match[lineupField(side)] || {}
   const confirmations = lineup.confirmations && typeof lineup.confirmations === 'object' ? lineup.confirmations : {}
@@ -2424,7 +2555,8 @@ async function getIdentityVerificationTask(openId, event) {
   return ok({
     matchId,
     role,
-    roleLabel:String(context.assignment.roleLabel || ''),
+    roleLabel:refereeMode.roleLabel(tournamentDoc, role, context.assignment.roleLabel),
+    refereeMode:refereeMode.resolveRefereeMode(tournamentDoc),
     canOpenMatch:Boolean(context.assignment.canOperate),
     side,
     participantType,
@@ -2437,10 +2569,12 @@ async function getIdentityVerificationTask(openId, event) {
     lineupStatus:lineupStatus(match, side),
     fourthConfirmed:Boolean(confirmations.fourthOfficial && confirmations.fourthOfficial.status === 'approved'),
     mainConfirmed:Boolean(confirmations.mainReferee && confirmations.mainReferee.status === 'approved'),
-    canFourthConfirm:role === 'fourthOfficial' && lineupStatus(match, side) === 'submitted',
-    canMainConfirm:role === 'mainReferee' && Boolean(confirmations.fourthOfficial && confirmations.fourthOfficial.status === 'approved') && !Boolean(confirmations.mainReferee && confirmations.mainReferee.status === 'approved'),
-    canVerifyStarters:(role === 'assistant1' && side === 'home') || (role === 'assistant2' && side === 'away'),
-    canVerifySubstitutes:role === 'fourthOfficial' && ['ongoing','live'].indexOf(String(match.status || '')) >= 0,
+    manuallyConfirmed:Boolean(confirmations.manualLightweight && confirmations.manualLightweight.status === 'approved'),
+    canManualConfirm:lightweight && role === refereeMode.RECORD_OFFICER_ROLE && !match.lineupsLocked && lineupStatus(match, side) === 'submitted',
+    canFourthConfirm:!lightweight && role === 'fourthOfficial' && lineupStatus(match, side) === 'submitted',
+    canMainConfirm:!lightweight && role === 'mainReferee' && Boolean(confirmations.fourthOfficial && confirmations.fourthOfficial.status === 'approved') && !Boolean(confirmations.mainReferee && confirmations.mainReferee.status === 'approved'),
+    canVerifyStarters:!lightweight && (role === 'assistant1' && side === 'home' || role === 'assistant2' && side === 'away'),
+    canVerifySubstitutes:!lightweight && role === 'fourthOfficial' && ['ongoing','live'].indexOf(String(match.status || '')) >= 0,
     progress:lineupIdentityProgress(lineup),
     starters:lineupPlayers(lineup, 'starter').map(function(player) { return identityTaskPlayerView(player, lineup, 'starter') }),
     substitutes:lineupPlayers(lineup, 'substitute').map(function(player) { return identityTaskPlayerView(player, lineup, 'substitute') })
@@ -2461,8 +2595,82 @@ async function previewAdultMatchPass(openId, event) {
   return ok({ matchId, side, passId:String(validated.pass._id || ''), player:Object.assign({}, sanitizePlayer(player), { id:rosterPlayerId(player), role:lineupPlayers(lineup, 'starter').some(item => rosterPlayerId(item) === rosterPlayerId(player)) ? 'starter' : 'substitute' }) }, '请当面核对照片与本人')
 }
 
+// 轻量化模式：记录员一键人工确认双方阵容，无视四岗顺序门禁与逐人核验。
+async function confirmLineupManualLightweight(openId, event, match, tournamentDoc) {
+  const matchId = String(match._id || event.matchId || '')
+  const context = await requireAssignedRole(openId, matchId, [refereeMode.RECORD_OFFICER_ROLE])
+  if (context.error) return context.error
+  if (!preMatchStateView(context.match).completed) return fail('请先完成三方报到和赛前检查', 'PRE_MATCH_INCOMPLETE')
+  if (['scheduled','pending','checked_in'].indexOf(String(context.match.status || 'scheduled')) < 0) return fail('当前比赛状态不能确认阵容', 'LINEUP_CONFIRMATION_NOT_AVAILABLE')
+  const decision = event.decision === 'returned' ? 'returned' : 'approved'
+  const reason = String(event.reason || '').trim().slice(0,200)
+  const requestedSide = event.side === 'away' || event.side === 'home' ? event.side : ''
+  if (decision === 'returned') {
+    if (!requestedSide) return fail('请选择退回的球队', 'LINEUP_SIDE_REQUIRED')
+    if (!reason) return fail('退回阵容时必须填写原因', 'LINEUP_RETURN_REASON_REQUIRED')
+  }
+  const sides = requestedSide ? [requestedSide] : ['home','away']
+  const now = new Date()
+  const refereeDoc = context.assignment.refereeId ? await getDoc('referees', String(context.assignment.refereeId)) : null
+  const confirmedBy = {
+    refereeId: String(context.assignment.refereeId || ''),
+    name: String(refereeDoc && (refereeDoc.name || refereeDoc.refereeName) || ''),
+    phoneMasked: maskPhone(context.identity.phone),
+    role: refereeMode.RECORD_OFFICER_ROLE,
+    confirmedAt: now
+  }
+  const lineupUpdates = {}
+  for (const side of sides) {
+    const lineup = Object.assign({}, context.match[lineupField(side)] || {})
+    if (decision === 'approved' && !lineupPlayers(lineup, 'starter').length) return fail(side === 'home' ? '主队尚未提交首发阵容' : '客队尚未提交首发阵容', 'LINEUP_NOT_SUBMITTED')
+    lineup.confirmations = Object.assign({}, lineup.confirmations || {})
+    lineup.confirmations.manualLightweight = {
+      status: decision,
+      reason: decision === 'returned' ? reason : '',
+      confirmedAt: now,
+      confirmedByRefereeId: confirmedBy.refereeId,
+      confirmedByPhoneMasked: confirmedBy.phoneMasked,
+      lineupVersion: Number(lineup.version || 1)
+    }
+    if (decision === 'returned') {
+      lineup.status = 'returned'; lineup.submitted = false; lineup.returnReason = reason; lineup.identityChecks = {}
+      await updateLineupSnapshotStatus(lineup.snapshotId, 'returned', { returnReason: reason })
+    } else {
+      lineup.status = 'locked'
+    }
+    lineupUpdates[lineupField(side)] = lineup
+    lineupUpdates[lineupStatusField(side)] = decision === 'returned' ? 'returned' : 'locked'
+  }
+  const sideConfirmed = function(side) {
+    const next = lineupUpdates[lineupField(side)]
+    const current = next || context.match[lineupField(side)] || {}
+    return !!(current.confirmations && current.confirmations.manualLightweight && current.confirmations.manualLightweight.status === 'approved')
+  }
+  const allConfirmed = decision === 'approved' && sideConfirmed('home') && sideConfirmed('away')
+  const updateData = Object.assign(lineupUpdates, {
+    lineupVerificationMode: refereeMode.LIGHTWEIGHT_VERIFICATION_MODE,
+    refereeMode: refereeMode.REFEREE_MODE_LIGHTWEIGHT,
+    updateTime: db.serverDate()
+  })
+  if (decision === 'approved') {
+    updateData.lineupManualConfirmedBy = confirmedBy
+    updateData.lineupManualConfirmedAt = now
+  }
+  updateData.lineupsLocked = allConfirmed ? true : (decision === 'returned' ? false : !!context.match.lineupsLocked)
+  if (allConfirmed) updateData.lineupsLockedAt = db.serverDate()
+  await ensureMatchIdentityCollections()
+  await db.collection('matches').doc(matchId).update({ data:updateData })
+  await db.collection('match_lineup_confirmation_audits').add({ data:{ matchId, tournamentId:String(context.match.tournamentId || ''), side:requestedSide || 'both', stage:'manual_lightweight', role:refereeMode.RECORD_OFFICER_ROLE, decision, reason, lineupVersion:Number((context.match[lineupField(requestedSide || 'home')] || {}).version || 1), refereeId:confirmedBy.refereeId, refereeMode:refereeMode.REFEREE_MODE_LIGHTWEIGHT, createTime:db.serverDate() } })
+  await writeAudit('confirm_lineup_manual_lightweight', { matchId, tournamentId:context.match.tournamentId || '', side:requestedSide || 'both', decision, reason, lineupsLocked:updateData.lineupsLocked, refereeMode:refereeMode.REFEREE_MODE_LIGHTWEIGHT }, context.identity)
+  return ok({ side:requestedSide || 'both', stage:'manual_lightweight', decision, lineupsLocked:updateData.lineupsLocked, lineupVerificationMode:refereeMode.LIGHTWEIGHT_VERIFICATION_MODE }, decision === 'returned' ? '阵容已退回球队修改' : (updateData.lineupsLocked ? '已人工确认双方阵容，阵容已锁定' : '已人工确认本方阵容，等待另一方提交'))
+}
+
 async function confirmLineupStage(openId, event) {
   const matchId = String(event.matchId || '')
+  const initialMatch = await getDoc('matches', matchId)
+  if (!initialMatch) return fail('比赛不存在', 'MATCH_NOT_FOUND')
+  const tournamentDoc = await matchTournamentDoc(initialMatch)
+  if (refereeMode.isLightweightRefereeMode(tournamentDoc)) return confirmLineupManualLightweight(openId, event, initialMatch, tournamentDoc)
   const side = event.side === 'away' ? 'away' : 'home'
   const stage = event.stage === 'main' ? 'main' : 'fourth'
   const requiredRole = stage === 'main' ? 'mainReferee' : 'fourthOfficial'
@@ -2483,6 +2691,7 @@ async function confirmLineupStage(openId, event) {
   if (decision === 'returned') {
     lineup.status = 'returned'; lineup.submitted = false; lineup.returnReason = reason; lineup.identityChecks = {}
     updateData[lineupStatusField(side)] = 'returned'
+    await updateLineupSnapshotStatus(lineup.snapshotId, 'returned', { returnReason: reason })
   } else if (stage === 'fourth') {
     lineup.status = 'fourth_approved'; updateData[lineupStatusField(side)] = 'fourth_approved'
   } else {
@@ -2502,6 +2711,9 @@ async function verifyLineupPlayer(openId, event) {
   const requiredRole = side === 'home' ? 'assistant1' : 'assistant2'
   const context = await requireAssignedRole(openId, matchId, [requiredRole])
   if (context.error) return context.error
+  if (refereeMode.isLightweightRefereeMode(await matchTournamentDoc(context.match))) {
+    return ok({ matchId, side, skipped:true, lineupsLocked:!!context.match.lineupsLocked }, '轻量化模式已人工确认阵容，无需逐人核验')
+  }
   const lineup = Object.assign({}, context.match[lineupField(side)] || {})
   const confirmations = lineup.confirmations || {}
   if (!(confirmations.mainReferee && confirmations.mainReferee.status === 'approved')) return fail('请等待主裁判确认阵容', 'MAIN_CONFIRMATION_REQUIRED')
@@ -2534,6 +2746,8 @@ async function verifyLineupPlayer(openId, event) {
   if (allPassed) {
     const lockedOther = Object.assign({}, otherLineup, { status:'locked' })
     lineup.status = 'locked'; updateData[lineupField(side)] = lineup; updateData[lineupField(otherSide)] = lockedOther; updateData[lineupStatusField(otherSide)] = 'locked'; updateData.lineupsLockedAt = db.serverDate()
+    await updateLineupSnapshotStatus(lineup.snapshotId, 'locked', { lockedAt:db.serverDate() })
+    await updateLineupSnapshotStatus(lockedOther.snapshotId, 'locked', { lockedAt:db.serverDate() })
   }
   await ensureMatchIdentityCollections()
   await db.collection('matches').doc(matchId).update({ data:updateData })
@@ -2709,6 +2923,8 @@ exports.main = async function(event) {
     if (action === 'sendBindSms') return await sendBindSms(openId, event.phone)
     if (action === 'getRefereeInvitation') return await getRefereeInvitation(openId,event)
     if (action === 'acceptRefereeInvitation') return await acceptRefereeInvitation(openId,event)
+    if (action === 'getRefereeNotifySetting') return await getRefereeNotifySetting(openId)
+    if (action === 'refereeNotifySubscribe') return await refereeNotifySubscribe(openId,event)
     if (action === 'recognizeRefereeCertificate') return await recognizeRefereeCertificate(openId,event)
     if (action === 'processRefereeAvatar') return await processRefereeAvatar(openId,event)
     if (action === 'verifyBindSms') return await verifyBindSms(openId, event.phone, event.code)

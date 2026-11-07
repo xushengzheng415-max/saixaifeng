@@ -35,7 +35,7 @@
             <div class="card-info">
               <h3 class="referee-name">{{ referee.name }}</h3>
               <div class="referee-level">
-                <el-tag v-if="referee.status" :type="getStatusType(referee.status)" size="small" style="margin-left: 8px;">
+                <el-tag v-if="referee.status" :type="getStatusType(referee.status)" :class="statusToneClass(getStatusType(referee.status))" size="small" style="margin-left: 8px;">
                   {{ getStatusLabel(referee.status) }}
                 </el-tag>
               </div>
@@ -328,6 +328,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit } from '@element-plus/icons-vue'
 import { queryList, addRecord, updateRecord, deleteRecord, callFunction } from '../../utils/cloud'
+import { statusToneClass } from '../../utils/statusTone'
 import { permissions, getCurrentRole, ROLES } from '../../utils/permissions'
 
 const loading = ref(false)

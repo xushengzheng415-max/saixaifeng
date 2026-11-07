@@ -428,6 +428,8 @@ async function handleRefereeOAuth(event) {
 const REFEREE_WORKFLOW_ACTIONS = new Set([
   'getWorkbench', 'sendBindSms', 'verifyBindSms', 'getRefereeInvitation', 'recognizeRefereeCertificate', 'processRefereeAvatar', 'acceptRefereeInvitation', 'getRefereeMatch',
   'getHeadRefereeSchedule', 'assignHeadRefereeCrew',
+  'getIdentityVerificationTask', 'confirmLineupStage', 'verifyLineupPlayer',
+  'replaceFailedStarter', 'verifySubstituteIdentity', 'previewAdultMatchPass',
   'updatePreMatchState',
   'reviewLineup',
   'saveRefereeReportDraft',

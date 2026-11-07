@@ -16,7 +16,7 @@
         </div>
         <div class="match-info">
           <span class="match-time">{{ item.matchDate }} {{ item.matchTime }}</span>
-          <el-tag :type="getStatusType(item.status)" size="small">{{ getStatusLabel(item.status) }}</el-tag>
+          <el-tag :type="getStatusType(item.status)" :class="statusToneClass(getStatusType(item.status))" size="small">{{ getStatusLabel(item.status) }}</el-tag>
           <el-tag type="info" size="small">{{ item.roleLabel }}</el-tag>
         </div>
         <div v-if="item.venue" class="match-venue">
@@ -30,6 +30,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { statusToneClass } from '../../utils/statusTone'
 import { ElMessage } from 'element-plus'
 import { queryList, queryById } from '../../utils/cloud'
 import { ROLES } from '../../utils/permissions'
