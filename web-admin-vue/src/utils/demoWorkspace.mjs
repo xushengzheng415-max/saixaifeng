@@ -5,6 +5,7 @@ import pairingTemplates from '../../../cloudfunctions/generateSchedule/pairingTe
 import stageOrder from '../../../cloudfunctions/generateSchedule/stageOrder.cjs'
 import confirmedPairings from '../../../cloudfunctions/generateSchedule/confirmedPairings.js'
 import fixtureCatalog from '../data/syntheticTeamCatalog.mjs'
+import { stableDemoPhoto, demoPlayerPortrait } from './demoPortrait.js'
 export const DEMO_ORG_ID = 'demo-organization'
 export function createDemoWorkspace({assetBase='/preview/admin/',poolDataset=null}={}) {
   let sequence = 0
@@ -550,6 +551,8 @@ export function createDemoWorkspace({assetBase='/preview/admin/',poolDataset=nul
     }
     if (action === 'getPlayers') return { ...success(rows('players')), players: clone(rows('players')) }
     if (action === 'deleteTeam') { remove('teams', params.teamId); tables.players = rows('players').filter(row => row.teamId !== params.teamId); return success({}) }
+    if (action === 'getPlayerCardsForViewer' || action === 'getPlayerCardForViewer') return demoPlayerCards(params, action)
+    if (action === 'seedDemoWalkthrough') return seedWalkthrough()
     return fail('这项操作尚未接入模拟，不会调用真实接口')
   }
   // 原虚拟库球队优先取自平台公用演示数据池（运行时只读接口），
@@ -606,13 +609,137 @@ export function createDemoWorkspace({assetBase='/preview/admin/',poolDataset=nul
       const label = ageGroup === 'open' ? '青少年' : ageGroup
       const logo=assetUrl(`assets/synthetic-fixtures/team-crests/team-${String((ages.indexOf(ageGroup)*8+index-1)%48+1).padStart(2,'0')}.svg`)
       const existing=rows('teams').find(team=>team.ageGroup===ageGroup&&team.name===`模拟${label}球队${index}`&&team.source==='browser_demo')
-      if(existing){Object.assign(existing,{logo,logoUrl:logo,demoPoolType:'supplement'});continue}
+      if(existing){Object.assign(existing,{logo,logoUrl:logo,demoPoolType:'supplement'});ensureSupplementPlayers(existing, index, ageGroup);continue}
       const team = add('teams', { name: `模拟${label}球队${index}`, teamName: `模拟${label}球队${index}`, ageGroup, status: 'active', playerCount: ageGroup === 'open' ? 12 : 18,logo,logoUrl:logo,demoPoolType:'supplement' })
-      for (let number = 1; number <= team.playerCount; number++) add('players', { teamId: team._id, name: `虚拟球员${index}-${number}`, realName: `虚拟球员${index}-${number}`, jerseyNumber: number, number, ageGroup, gender: '男', birthDate: ageGroup === '成人' ? '1996-01-01' : ageGroup === 'open' ? '2014-01-01' : `${2026 - Number(ageGroup.slice(1))}-01-01`, status: 'active', position: number === 1 ? '门将' : '前锋' })
+      ensureSupplementPlayers(team, index, ageGroup)
     }
   }
   }
+  function ensureSupplementPlayers(team, index, ageGroup) {
+    const count = Number(team.playerCount) || (ageGroup === 'open' ? 12 : 18)
+    for (let number = 1; number <= count; number++) {
+      let player = rows('players').find(row => row.teamId === team._id && Number(row.jerseyNumber || row.number) === number && row.source === 'browser_demo')
+      if (!player) player = add('players', { teamId: team._id, name: `虚拟球员${index}-${number}`, realName: `虚拟球员${index}-${number}`, jerseyNumber: number, number, ageGroup, gender: '男', birthDate: ageGroup === '成人' ? '1996-01-01' : ageGroup === 'open' ? '2014-01-01' : `${2026 - Number(String(ageGroup).slice(1))}-01-01`, status: 'active', position: number === 1 ? '门将' : '前锋' })
+      stableDemoPhoto(player, number)
+    }
+  }
+  function demoPlayerCards(params, action) {
+    const ids = [...new Set((action === 'getPlayerCardsForViewer' ? (Array.isArray(params.playerIds) ? params.playerIds : []) : [params.playerId]).map(id => String(id || '').trim()).filter(Boolean))]
+    const cards = ids.map(id => {
+      const player = rows('players').find(row => String(row._id) === id)
+      const portraitUrl = player ? stableDemoPhoto(player, player.jerseyNumber || player.number) : demoPlayerPortrait({ _id: id, name: '球员' })
+      return { success: true, playerId: id, status: 'ready', cardUrl: '', portraitUrl, portraitStatus: 'ready', synthetic: true }
+    })
+    if (action === 'getPlayerCardForViewer') return { success: true, ...(cards[0] || { playerId: '', status: 'unavailable', cardUrl: '', portraitUrl: demoPlayerPortrait({}), portraitStatus: 'ready' }) }
+    return { success: true, cards }
+  }
+  function isoDate(offset) {
+    const date = new Date()
+    date.setHours(12, 0, 0, 0)
+    date.setDate(date.getDate() + offset)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
+  function seedWalkthrough() {
+    const start = isoDate(3)
+    const middle = isoDate(4)
+    const end = isoDate(5)
+    const tournament = add('tournaments', {
+      name: '演示样例·8人制联赛',
+      startDate: start,
+      endDate: end,
+      status: 'ongoing',
+      tournamentType: 'league',
+      formatType: 'league',
+      matchFormat: '8side',
+      category: 'youth',
+      province: '演示省',
+      city: '演示市',
+      demoSeed: true,
+      divisions: [{
+        name: 'U12组',
+        customName: 'U12组',
+        ageGroup: 'open',
+        matchFormat: '8side',
+        playersOnField: 8,
+        formatType: 'league',
+        tournamentType: 'league',
+        mode: 'simple',
+        ruleStatus: 'finalized',
+        rulesLocked: true,
+        ruleFinalized: true,
+        rulesVersion: 'demo-v1',
+        matchMinutes: 40,
+        expectedTeams: 4,
+        maxPlayersPerTeam: 14,
+        maxTeams: 8,
+        loopType: 'single',
+        rules: { matchMinutes: 40, ranking: { points: { win: 3, draw: 1, loss: 0 } } },
+        rulesSnapshot: { matchMinutes: 40 }
+      }]
+    })
+    const divisionId = tournament.divisions[0].id
+    const teams = rows('teams').filter(team => team.ageGroup === 'open' && team.source === 'browser_demo' && /^模拟青少年球队[1-4]$/.test(team.name || '')).sort((a, b) => a.name.localeCompare(b.name, 'zh'))
+    if (teams.length < 4) return fail('虚拟球队不足，无法灌入样例')
+    registration({ action: 'addSyntheticTeams', tournamentId: tournament._id, divisionId, teamIds: teams.map(team => team._id) })
+    registration({ action: 'approveAllDemoRegistrations', tournamentId: tournament._id, divisionId })
+    add('tournament_league_tables', {
+      tournamentId: tournament._id,
+      divisionId,
+      divisionName: 'U12组',
+      tableName: '联赛',
+      tableCode: 'ALL',
+      teams: teams.map((team, index) => ({ teamId: team._id, teamName: team.name, name: team.name, position: index + 1 })),
+      teamCount: 4,
+      type: 'league',
+      loopType: 'single',
+      status: 'confirmed',
+      confirmedAt: new Date().toISOString()
+    })
+    update('tournaments', tournament._id, { drawStatusByDivision: { [divisionId]: 'confirmed' } })
+    const pairings = schedule({ action: 'generatePairings', ensureOnly: true, tournamentId: tournament._id, divisionId })
+    if (!pairings?.success) return fail(pairings?.message || '样例对阵未生成')
+    const matchRows = rows('matches').filter(row => row.tournamentId === tournament._id && row.status !== 'cancelled' && !row.demoLegacyPairing).sort((a, b) => Number(a.matchNo || 0) - Number(b.matchNo || 0))
+    const first = matchRows[0]
+    if (!first) return fail('样例对阵未生成')
+    const lineupFor = teamId => {
+      const player = rows('players').find(row => row.teamId === teamId)
+      if (!player) return fail('样例球队缺少虚拟球员')
+      stableDemoPhoto(player, player.jerseyNumber || 1)
+      return { formation: 'demo-seed', players: [{ id: player._id, playerId: player._id, name: player.name, number: player.jerseyNumber || player.number || 1, position: player.position || '前锋', photo: player.photoUrl, photoUrl: player.photoUrl }], substitutes: [] }
+    }
+    const scheduleConfig = {
+      schemaVersion: 2,
+      startDate: start,
+      endDate: end,
+      matchDays: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+      matchDates: [start, middle, end],
+      sessionWindows: [
+        { key: 'morning', label: '上午', start: '09:00', end: '12:00', enabled: true },
+        { key: 'afternoon', label: '下午', start: '14:00', end: '18:00', enabled: true }
+      ],
+      venueResources: [{ name: '演示1号场地', fieldFormat: '8side', startTime: '09:00', endTime: '18:00', kickoffTimes: ['09:00'] }],
+      venues: ['演示1号场地'],
+      kickoffTimes: ['09:00'],
+      generationMode: 'joint',
+      defaultTurnaroundMinutes: 10,
+      matchDurations: { [divisionId]: 40 }
+    }
+    update('matches', first._id, {
+      matchDate: start,
+      matchTime: '09:00',
+      venue: '演示1号场地',
+      scheduleStatus: 'scheduled',
+      scheduleGenerated: true,
+      scheduleAssignmentSource: 'demo-seed',
+      durationMinutes: 40,
+      matchFormat: '8side',
+      lineups: { home: lineupFor(first.homeTeamId), away: lineupFor(first.awayTeamId) }
+    })
+    update('tournaments', tournament._id, { scheduleConfig, scheduleDraft: scheduleConfig, scheduleGenerated: true, demoSeed: true })
+    return { success: true, tournamentId: tournament._id, divisionId, matchId: first._id, matchCount: matchRows.length, message: '已灌入样例：1 个 8 人制组别、4 支虚拟队，以及 1 场已排程待记分的比赛' }
+  }
   ensureVirtualTeams()
+  for (const player of rows('players')) stableDemoPhoto(player, player.jerseyNumber || player.number)
   for (let index = 1; index <= 8; index++) add('referees', { name: `虚拟裁判${index}`, status: 'approved', auditStatus: 'approved', canOperate: true, availabilityStatus: 'available', level: '一级' })
   return {
     request,
@@ -623,6 +750,7 @@ export function createDemoWorkspace({assetBase='/preview/admin/',poolDataset=nul
       Object.assign(tables, clone(value.tables))
       for(const collection of Object.values(tables))for(const row of collection)sequence=Math.max(sequence,Number(String(row._id||'').match(/-(\d+)$/)?.[1])||0)
       ensureVirtualTeams()
+      for (const player of rows('players')) stableDemoPhoto(player, player.jerseyNumber || player.number)
       normalizeStoredRefereeCrews()
     }
   }

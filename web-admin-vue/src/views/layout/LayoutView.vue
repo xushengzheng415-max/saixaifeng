@@ -205,6 +205,7 @@
           </template>
         </nav>
 
+        <button v-if="showDemoEntry" class="sidebar-demo-entry" type="button" :aria-pressed="demoModeActive" :disabled="demoSwitching" @click="openDemoEntry">{{ demoEntryLabel }}</button>
         <RouterLink v-if="currentTutorial" class="sidebar-tutorial-button" :to="{ path: '/tutorials', query: { lesson: currentTutorial } }" target="_blank" rel="noopener noreferrer">看本页教程</RouterLink>
 
       </aside>
@@ -218,6 +219,7 @@
           </button>
           <div class="workspace-shell-actions">
             <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" plain @click="returnToTournamentSpace">返回赛事空间</el-button>
+            <button v-if="showDemoEntry" class="header-action demo-entry-button" type="button" :aria-pressed="demoModeActive" :disabled="demoSwitching" @click="openDemoEntry">{{ demoEntryLabel }}</button>
             <button class="header-action" type="button" @click="openTutorials"><el-icon><Reading /></el-icon><span>操作教程</span></button>
             <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
             <button class="notification-action" type="button" :aria-label="pendingStaffInvitationCount ? '查看共享赛事邀请' : '查看站内信'" :title="pendingStaffInvitationCount ? '有共享赛事邀请待接受' : '站内信'" @click="showNotifications"><el-icon><Bell /></el-icon><span>{{ pendingStaffInvitationCount ? '赛事邀请' : '站内信' }}</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
@@ -248,6 +250,7 @@
             <span class="page-title">{{ currentPageTitle }}</span>
           </div>
           <div class="header-right">
+            <button v-if="showDemoEntry" class="header-action demo-entry-button" type="button" :aria-pressed="demoModeActive" :disabled="demoSwitching" @click="openDemoEntry">{{ demoEntryLabel }}</button>
             <div class="header-role">{{ isPlatformContext() ? '平台运营' : '主办方管理' }}</div>
             <span class="header-divider" aria-hidden="true"></span>
             <el-dropdown trigger="click" @command="handleUserCommand">
@@ -318,7 +321,7 @@ import {
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import { isLightweightTournament } from '../../utils/lightweightMode'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
-import { demoModeChangeEvent, isDemoMode, setDemoMode } from '../../utils/demoMode'
+import { demoModeChangeEvent, fetchPlatformDemoPool, isDemoMode, isDemoModeAvailable, setDemoMode } from '../../utils/demoMode'
 import productLogo from '../../assets/logo-saixiaofeng.png'
 import { provincesData, cityMapData } from '../team/areaData.js'
 import {
@@ -398,7 +401,22 @@ const demoModeActive = ref(isDemoMode(String(route.params.id || '')))
 const buildStamp = __SXF_BUILD__
 const isTournamentStaff = computed(() => !demoModeActive.value && sessionStorage.getItem('sxfTournamentStaff') === '1')
 const isHeadReferee = ref(false)
+const demoSwitching = ref(false)
 function syncDemoMode() { demoModeActive.value = isDemoMode(String(route.params.id || '')) }
+const demoEntryLabel = computed(() => demoSwitching.value ? '准备演示数据…' : (demoModeActive.value ? '模拟空间' : '演示模式'))
+async function openDemoEntry() {
+  if (demoSwitching.value) return
+  if (demoModeActive.value || sessionStorage.getItem('sxfTournamentDemoMode') === '1') {
+    if (route.path !== '/tournament-space') router.push('/tournament-space')
+    return
+  }
+  demoSwitching.value = true
+  try { await fetchPlatformDemoPool() } catch { /* 平台池失败时仍进入，本地虚拟数据兜底 */ }
+  finally { demoSwitching.value = false }
+  setDemoMode(true)
+  window.location.assign(`${import.meta.env.BASE_URL}#/tournament-space`)
+  window.location.reload()
+}
 function exitDemoMode() {
   setDemoMode(false)
   demoModeActive.value = false
@@ -960,6 +978,7 @@ const isAdminPage = computed(() => {
          route.path.startsWith('/admin/') ||
          (route.path === '/system' && userInfo.value.isPlatformOwner === true)
 })
+const showDemoEntry = computed(() => isDemoModeAvailable() && !isPlatformContext() && !isAdminPage.value)
 
 // 轻量模式隐藏点：报名管理（报名表 Word、报名审核）与裁判管理（指派与签核）。
 // 球队管理、抽签、比赛管理、赛果管理保留；球队页内部再按同一开关隐藏名单相关入口。
@@ -1288,6 +1307,8 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
+.sidebar-demo-entry{display:flex;align-items:center;justify-content:center;flex-shrink:0;min-height:42px;margin:0 14px 10px;padding:10px 14px;border:1px solid rgba(255,255,255,.7);border-radius:6px;background:rgba(255,255,255,.1);color:#fff;font-size:14px;font-weight:700;cursor:pointer}.sidebar-demo-entry:hover,.sidebar-demo-entry:focus-visible{background:#087a48;outline:2px solid #fff;outline-offset:2px}.sidebar-demo-entry:disabled{opacity:.7;cursor:wait}
+.demo-entry-button{padding:6px 12px;border:1px solid #8dceb0;border-radius:7px;color:#087744;font-weight:700;background:#f3fbf6}.demo-entry-button[aria-pressed="true"]{color:#8a5a12;background:#fff7e8;border-color:#efd7a2}
 .sidebar-tutorial-button{display:flex;align-items:center;justify-content:center;flex-shrink:0;min-height:42px;margin:0 14px 18px;padding:10px 14px;border:1px solid rgba(255,255,255,.45);border-radius:6px;background:rgba(0,92,57,.7);color:#fff;font-size:14px;text-decoration:none;box-sizing:border-box}
 .sidebar-tutorial-button:hover{background:#087a48;border-color:#fff}
 .sidebar-tutorial-button:focus-visible{outline:2px solid #fff;outline-offset:3px}

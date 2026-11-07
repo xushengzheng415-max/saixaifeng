@@ -12,8 +12,9 @@
 
 
 
+    <el-alert v-if="isConfirmed && !isArchived" class="pairing-next-alert" type="warning" :closable="false" show-icon title="分组已确认。下一步：生成对阵" description="确认分组只锁定签位，不会自动产生比赛。未点「生成对阵」时，赛程里的待排场次会是 0。" />
     <section v-if="hasSavedResult" class="summary">
-      <span>参赛球队 <b>{{ teamCount }}</b></span><i /><span>已分组 <b>{{ assignedCount }}</b></span><i /><span>{{ resultUnitCount }} {{ unitLabel }}</span><i /><span>{{ sizeLabel }}</span><span v-if="['league','hybrid'].includes(format)">首轮：{{ leaguePairingLabel(leaguePairingChoice) }}</span><i /><em><el-icon><CircleCheckFilled /></el-icon>分组校验通过</em><el-tag :type="isConfirmed ? 'success' : 'warning'" effect="light">{{ statusLabel }}</el-tag><div class="summary-actions"><el-button v-if="!isConfirmed && !isArchived" type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认分组</el-button><el-button v-if="isConfirmed && !isArchived" type="primary" :loading="pairingGenerating" @click="generatePairingsAndViewPairings">赛程中心</el-button><el-button plain @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button></div>
+      <span>参赛球队 <b>{{ teamCount }}</b></span><i /><span>已分组 <b>{{ assignedCount }}</b></span><i /><span>{{ resultUnitCount }} {{ unitLabel }}</span><i /><span>{{ sizeLabel }}</span><span v-if="['league','hybrid'].includes(format)">首轮：{{ leaguePairingLabel(leaguePairingChoice) }}</span><i /><em><el-icon><CircleCheckFilled /></el-icon>分组校验通过</em><el-tag :type="isConfirmed ? 'success' : 'warning'" effect="light">{{ statusLabel }}</el-tag><div class="summary-actions"><el-button v-if="!isConfirmed && !isArchived" type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认分组</el-button><el-button v-if="isConfirmed && !isArchived" type="primary" :loading="pairingGenerating" @click="generatePairingsAndViewPairings">下一步：生成对阵</el-button><el-button plain @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button></div>
     </section>
 
     <section v-if="hasSavedResult" class="toolbar">
@@ -324,7 +325,7 @@ async function confirm() {
   try {
     const scope = { phase: 'confirmation-opened', tournamentId, divisionId: divisionId.value, format: format.value, recordIds: records.value.map(row => row._id), targetStatus: 'confirmed', published: false, schedulePublished: false, deletedRecords: false, changedOtherDivisions: false, changedOtherFormats: false }
     if (visualQa) window.__sxfQuickResultAction = scope
-    if (!visualQa) await ElMessageBox.confirm('确认只锁定当前组别的分组快照，并进入赛程编排；不会发布赛程，也不会覆盖其他组别或归档结果。', '确认分组结果', { type: 'warning', confirmButtonText: '确认并进入赛程编排', cancelButtonText: '取消' })
+    if (!visualQa) await ElMessageBox.confirm('确认只锁定当前组别的分组快照。确认后请点击「下一步：生成对阵」，才会产生比赛；这一步不会发布赛程，也不会覆盖其他组别或归档结果。', '确认分组结果', { type: 'warning', confirmButtonText: '确认分组', cancelButtonText: '取消' })
     confirming.value = true
     if (visualQa) {
       window.__sxfQuickResultAction = { ...scope, phase: 'confirmed', cloudWrite: false }
@@ -336,8 +337,8 @@ async function confirm() {
       resultStatus.value = 'confirmed'
       publishConfirmedProjection()
     }
-    ElMessage.success('当前组别抽签已完成')
-    router.push({ path: `/tournaments/${tournamentId}/draw`, query: visualQa ? { visualQa: '1' } : {} })
+    ElMessage.success(visualQa ? '当前组别抽签已完成' : '分组已确认。下一步请生成对阵，赛程里才会出现待排比赛')
+    if (visualQa) router.push({ path: `/tournaments/${tournamentId}/draw`, query: { visualQa: '1' } })
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error.message || '确认失败')
   } finally { confirming.value = false }
@@ -369,5 +370,5 @@ onMounted(load)
 .logo-source-alert{margin-top:15px}.league-result-card{height:auto;min-height:485px}.league-result-card ol{display:grid;grid-template-columns:1fr;gap:8px}.league-result-card li{display:grid;grid-template-columns:52px 48px minmax(0,1fr);align-items:center;box-sizing:border-box;height:54px;min-height:54px;padding:0 16px;border-color:#dfe7e2;background:linear-gradient(90deg,#f3f8f5 0,#fff 36%)}.league-result-card li>b{display:grid;width:34px;height:34px;place-items:center;border-radius:8px;background:#087f46;color:#fff;font-size:16px}.league-result-card li>.crest{width:36px;height:36px;justify-self:start}.league-result-card li>strong{min-width:0;font-size:16px;line-height:1.25}.poster-league-list ol{display:grid;grid-template-columns:1fr;gap:8px}.poster-league-list li{grid-template-columns:42px 48px minmax(0,1fr) 82px;box-sizing:border-box;height:58px;min-height:58px;padding:0 14px;background:linear-gradient(90deg,rgba(255,255,255,.12),rgba(255,255,255,.04))}.poster-league-list li>span{display:grid;width:32px;height:32px;place-items:center;border-radius:8px;background:rgba(255,255,255,.14)}.poster-league-list li>i{width:38px;height:38px}.poster-league-list li strong{font-size:16px}.poster-league-list li small{text-align:right}
 @media(max-width:1000px){.knockout-result-layout{grid-template-columns:1fr}.knockout-center{min-height:150px}.poster-knockout-grid{grid-template-columns:1fr}}
 
-.summary-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0}.summary .summary-actions .el-button{margin-left:0!important}.summary{flex-wrap:wrap;gap:12px}.summary-actions .el-button{white-space:nowrap}
+.pairing-next-alert{margin-top:15px}.summary-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0}.summary .summary-actions .el-button{margin-left:0!important}.summary{flex-wrap:wrap;gap:12px}.summary-actions .el-button{white-space:nowrap}
 </style>

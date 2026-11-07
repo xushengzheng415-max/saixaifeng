@@ -1194,6 +1194,7 @@ import { ArrowDown, Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, 
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl, rosterExceptionBoard, uploadImageViaWebApi } from '../../utils/cloud'
 import { crewRoles, isLightweightReferee } from '../../utils/refereeMode'
 import { isDemoMode } from '../../utils/demoMode'
+import { demoStartLineupBlock } from '../../utils/demoPortrait.js'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
@@ -2117,6 +2118,13 @@ async function confirmPostpone() {
 // 更新比赛状态
 async function updateStatus(status) {
   if (!ensureEvidenceEditable()) return
+  if (status === 'ongoing' && isDemoMode(match.value.tournamentId || route.params.id)) {
+    const blocked = demoStartLineupBlock(lineups.value, { home: homeName.value, away: awayName.value })
+    if (blocked) {
+      ElMessage.warning(blocked)
+      return
+    }
+  }
   saving.value = true
   try {
     const result = await callFunction('updateMatch', {
