@@ -136,7 +136,7 @@
       <!-- 顶部工具栏 -->
       <div class="editor-toolbar dual-toolbar">
         <div class="toolbar-left">
-          <h2 class="editor-title">{{ props.homeTeamName || '主队' }} vs {{ props.awayTeamName || '客队' }}</h2>
+          <h2 class="editor-title">阵容编辑器</h2>
         </div>
         <div class="toolbar-center dual-formations">
           <el-form :inline="true">
