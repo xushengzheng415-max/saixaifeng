@@ -12,7 +12,6 @@
         </div>
         <div class="player-edit-fields">
           <el-form-item label="姓名" required><el-input v-model="draft.name" maxlength="30" /></el-form-item>
-          <el-form-item label="球衣名"><el-input v-model="draft.jerseyName" maxlength="32" /></el-form-item>
           <el-form-item label="证件类型"><el-select v-model="draft.documentType"><el-option label="身份证" value="resident_id" /><el-option label="护照" value="passport" /></el-select></el-form-item>
           <el-form-item :label="draft.documentType === 'resident_id' ? '身份证号' : '护照号'"><el-input v-model="draft.identityNumber" :disabled="identityPending" :maxlength="draft.documentType === 'resident_id' ? 18 : 30" autocomplete="off" />
             <el-checkbox v-model="identityPending" @change="error = ''">证件待补齐</el-checkbox>
@@ -21,6 +20,7 @@
           <el-form-item label="性别"><el-select v-model="draft.gender" clearable><el-option label="男" value="male" /><el-option label="女" value="female" /></el-select></el-form-item>
           <el-form-item label="籍贯"><el-input v-model="draft.nativePlace" maxlength="60" /></el-form-item>
           <el-form-item label="国籍"><el-select v-model="draft.nationality" filterable clearable placeholder="待确认"><el-option v-for="item in nationalities" :key="item.code" :label="item.zh" :value="item.zh" /></el-select></el-form-item>
+          <el-form-item label="球衣名"><el-input v-model="draft.jerseyName" maxlength="32" /></el-form-item>
           <el-form-item label="球衣号码"><el-input v-model="draft.jerseyNumber" maxlength="3" inputmode="numeric" /></el-form-item>
           <el-form-item label="场上位置"><el-select v-model="draft.position" clearable><el-option v-for="item in positions" :key="item" :label="item" :value="item" /></el-select></el-form-item>
           <el-form-item label="惯用脚"><el-select v-model="draft.strongFoot" clearable><el-option label="左脚" value="left" /><el-option label="右脚" value="right" /><el-option label="双脚" value="both" /></el-select></el-form-item>
@@ -37,6 +37,7 @@
 import nationalityCatalog from '../../../../cloudfunctions/webLoginApi/nationality-catalog.json'
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { editableImportedProfile } from '../../../../cloudfunctions/tournamentRegistrationFlow/importPersonFields.cjs'
+import { resolveNativePlace } from '../../../../cloudfunctions/dataCenter/shared/idcard-region.cjs'
 const props=defineProps({modelValue:Boolean,player:Object,team:Object})
 const emit=defineEmits(['update:modelValue','save'])
 const draft=ref({}),error=ref(''),previewUrl=ref(''),photoFile=ref(null),identityPending=ref(false)
@@ -52,6 +53,24 @@ watch(()=>props.modelValue,visible=>{
   draft.value={...player,identityNumber:player.identityNumber || player.identityNumberPrefix || '',documentType:player.documentType || (/^\d{17}[0-9X]$/.test(player.identityNumber || '')?'resident_id':player.identityNumber?'passport':'resident_id'),height:player.height ?? null,weight:player.weight ?? null}
   identityPending.value=!player.identityNumber
   previewUrl.value=player.previewUrl || ''
+})
+// 身份证号是后续出生日期、性别、籍贯的来源，录入后自动补齐未填写的项。
+function deriveFromIdNumber(value){
+  const id=String(value || '').replace(/\s/g,'').toUpperCase()
+  if(!/^\d{17}[0-9X]$/.test(id))return null
+  return {
+    birthDate:`${id.slice(6,10)}-${id.slice(10,12)}-${id.slice(12,14)}`,
+    gender:Number(id.charAt(16))%2===1 ? 'male' : 'female',
+    nativePlace:resolveNativePlace(id)?.nativePlace || ''
+  }
+}
+watch(()=>draft.value.identityNumber,value=>{
+  if(draft.value.documentType !== 'resident_id')return
+  const derived=deriveFromIdNumber(value)
+  if(!derived)return
+  if(!draft.value.birthDate)draft.value.birthDate=derived.birthDate
+  if(!draft.value.gender)draft.value.gender=derived.gender
+  if(!draft.value.nativePlace && derived.nativePlace)draft.value.nativePlace=derived.nativePlace
 })
 function selectPhoto(file){
   const raw=file.raw

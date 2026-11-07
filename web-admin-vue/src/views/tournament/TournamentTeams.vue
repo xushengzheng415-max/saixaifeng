@@ -29,6 +29,7 @@
 
         </div>
         <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button plain @click="registrationNotify.open()">通知催认领</el-button>
+          <el-button plain @click="openMaterialSettings"><el-icon><DocumentChecked /></el-icon>报名材料设置</el-button>
           <el-button plain :disabled="creatingTargetedRegistrationLink" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>邀请球队</el-button>
           <template v-if="lightweightMode">
             <el-button plain @click="openAddTeamEntry('manual')"><el-icon><Plus /></el-icon>快速添加</el-button>
@@ -224,14 +225,14 @@
             <template v-if="isApplicationReviewView">
               <span>{{ activeDivision.name }}</span><span>{{ teamSource(row) }}</span><span>{{ applicationOwner(row) }}</span>
               <span><el-tag type="success" effect="light" size="small">{{ longTermTeamLabel(row) }}</el-tag></span><span>{{ applicationTime(row) }}</span>
-              <span><el-tag :type="applicationRiskType(row)" effect="plain" size="small">{{ applicationRiskLabel(row) }}</el-tag></span>
+              <span><el-tag :type="applicationRiskType(row)" :class="statusToneClass(applicationRiskType(row))" effect="plain" size="small">{{ applicationRiskLabel(row) }}</el-tag></span>
               <div class="team-row-actions"><el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><template v-if="['pending','invited'].includes(row.status)"><el-button link type="success" :disabled="Number(row.playerReviewPendingCount || 0) > 0" :title="Number(row.playerReviewPendingCount || 0) > 0 ? `还有 ${row.playerReviewPendingCount} 名球员未审核` : '通过'" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template><el-button link @click="openTeamActions(row)">更多</el-button></div>
             </template>
             <template v-else>
-            <span>{{ teamRegistrationNo(row) }}</span><span><el-tag :type="teamSource(row) === '主办方邀请' ? 'primary' : 'warning'" effect="light" size="small">{{ teamSource(row) }}</el-tag></span>
-            <span><el-tag :type="claimType(row)" effect="plain" size="small">{{ claimLabel(row) }}</el-tag></span>
-            <span><el-tag :type="getStatusType(row.status)" size="small">{{ getStatusLabel(row.status) }}</el-tag></span>
-            <span v-if="isProfessional"><el-tag :type="rosterTagType(row)" effect="light" size="small">{{ rosterLabel(row) }}<template v-if="rosterPlayerCount(row)">（{{ rosterPlayerCount(row) }}人）</template></el-tag></span>
+            <span>{{ teamRegistrationNo(row) }}</span><span><el-tag :class="statusToneClass('info')" effect="light" size="small">{{ teamSource(row) }}</el-tag></span>
+            <span><el-tag :type="claimType(row)" :class="statusToneClass(claimType(row))" effect="plain" size="small">{{ claimLabel(row) }}</el-tag></span>
+            <span><el-tag :type="getStatusType(row.status)" :class="statusToneClass(getStatusType(row.status))" size="small">{{ getStatusLabel(row.status) }}</el-tag></span>
+            <span v-if="isProfessional"><el-tag :type="rosterTagType(row)" :class="statusToneClass(rosterTagType(row))" effect="light" size="small">{{ rosterLabel(row) }}<template v-if="rosterPlayerCount(row)">（{{ rosterPlayerCount(row) }}人）</template></el-tag></span>
             <span class="player-count-cell"><strong>{{ teamPlayerCount(row) }} 人</strong></span>
             <div class="team-row-actions">
               <el-button v-if="activeDivisionId === 'default'" link type="success" @click="openDivisionAssignment(row)">分配组别</el-button>
@@ -249,7 +250,7 @@
       <el-dialog v-model="syntheticTeamDialogVisible" title="添加虚拟球队" width="760px"><div class="synthetic-team-dialog-heading"><div><strong>{{ activeDivision.name }}</strong><span>可多选；添加后进入待审查，不会自动通过。</span><span v-if="!syntheticAgeFilterEnabled" class="synthetic-age-note">当前组别未设置年龄组，已列出全部虚拟球队（测试资料）。</span></div><el-button link type="primary" :disabled="!availableSyntheticTeams.length" @click="selectAllSyntheticTeams">选择全部可用球队</el-button></div><div v-loading="syntheticTeamLoading" class="synthetic-team-grid"><label v-for="team in syntheticTeamCandidates" :key="team._id" class="synthetic-team-option" :class="{ disabled:team.alreadyAdded }"><el-checkbox v-model="selectedSyntheticTeamIds" :value="team._id" :disabled="team.alreadyAdded" /><img v-if="team.logo || team.logoUrl" :src="team.logo || team.logoUrl" alt="" /><span v-else class="synthetic-team-mark">队</span><span><strong>{{ team.name || team.teamName }}</strong><small>{{ team.alreadyAdded ? '已加入当前组别' : syntheticOptionMeta(team) }}</small></span></label><el-empty v-if="!syntheticTeamLoading && !syntheticTeamCandidates.length" :description="syntheticEmptyText" /></div><template #footer><el-button @click="syntheticTeamDialogVisible=false">取消</el-button><el-button type="primary" :loading="addingSyntheticTeams" :disabled="!selectedSyntheticTeamIds.length" @click="submitSyntheticTeams">添加已选 {{ selectedSyntheticTeamIds.length }} 支球队</el-button></template></el-dialog>
       <section v-if="isRegistrationWorkspace && isApplicationReviewView && pendingClaimRows.length" class="teams-table-panel pending-claim-panel">
         <div class="table-toolbar"><div><strong>主办方邀请待认领 {{ pendingClaimRows.length }} 支</strong></div></div>
-        <div class="teams-data-table" role="table"><div class="teams-table-row pending-claim-row teams-table-head" role="row"><span>球队（队徽 + 名称）</span><span>所属组别</span><span>专属小程序认领链接</span><span>发送时间</span><span>操作</span></div><div v-for="row in pendingClaimRows" :key="row.recordId" class="teams-table-row pending-claim-row" role="row"><div class="team-identity"><img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-crest" alt="" /><span v-else class="team-crest-placeholder">{{ teamInitial(row) }}</span><div><strong>{{ row.name || row.teamName }}</strong></div></div><span>{{ activeDivision.name }}</span><span><el-tag type="warning" effect="plain" size="small">未认领</el-tag></span><span>{{ applicationTime(row) }}</span><div class="team-row-actions"><el-button link type="primary" @click="openClaimReminder(row)">复制认领链接</el-button><el-button link type="success" @click="openClaimReminder(row)">发送提醒</el-button><el-button v-if="claimLabel(row) !== '已认领'" link type="danger" @click="deleteUnclaimedTeam(row)">删除队伍</el-button><el-button v-else link type="danger" @click="removeTeam(row)">移出赛事</el-button></div></div></div>
+        <div class="teams-data-table" role="table"><div class="teams-table-row pending-claim-row teams-table-head" role="row"><span>球队（队徽 + 名称）</span><span>所属组别</span><span>专属小程序认领链接</span><span>发送时间</span><span>操作</span></div><div v-for="row in pendingClaimRows" :key="row.recordId" class="teams-table-row pending-claim-row" role="row"><div class="team-identity"><img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-crest" alt="" /><span v-else class="team-crest-placeholder">{{ teamInitial(row) }}</span><div><strong>{{ row.name || row.teamName }}</strong></div></div><span>{{ activeDivision.name }}</span><span><el-tag type="warning" :class="statusToneClass('warning')" effect="plain" size="small">未认领</el-tag></span><span>{{ applicationTime(row) }}</span><div class="team-row-actions"><el-button link type="primary" @click="openClaimReminder(row)">复制认领链接</el-button><el-button link type="success" @click="openClaimReminder(row)">发送提醒</el-button><el-button v-if="claimLabel(row) !== '已认领'" link type="danger" @click="deleteUnclaimedTeam(row)">删除队伍</el-button><el-button v-else link type="danger" @click="removeTeam(row)">移出赛事</el-button></div></div></div>
       </section>
       <div v-if="isProfessionalApplicationView" class="professional-application-boundary"><el-icon><InfoFilled /></el-icon><span>申请通过后，球队先完成小程序认领与参赛确认，再进入赛事参赛名单提交；审核不会自动生成名单或授予球队所有权。</span></div>
       </div>
@@ -602,6 +603,11 @@
       </div>
     </el-dialog>
 
+    <el-dialog v-model="materialSettingsVisible" title="报名材料设置" width="900px" style="max-width:calc(100vw - 32px)" top="5vh" destroy-on-close append-to-body>
+      <RegistrationMaterialSettings v-if="materialForm" :form="materialForm" />
+      <template #footer><el-button @click="materialSettingsVisible = false">取消</el-button><el-button type="primary" :loading="savingMaterialSettings" @click="saveMaterialSettings">保存设置</el-button></template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -619,11 +625,14 @@ import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFuncti
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import PlayerReviewQueue from '../../components/tournament/PlayerReviewQueue.vue'
+import RegistrationMaterialSettings from './RegistrationMaterialSettings.vue'
 import PlayerNotifyDialog from '../../components/tournament/PlayerNotifyDialog.vue'
 import TeamRegistrationWordImporter from '../../components/tournament/TeamRegistrationWordImporter.vue'
 import TeamLogoAiGenerator from '../../components/tournament/TeamLogoAiGenerator.vue'
 import { isLightweightTournament } from '../../utils/lightweightMode'
 import { isDemoMode, demoRequest } from '../../utils/demoMode'
+import { statusToneClass } from '../../utils/statusTone'
+import { buildMaterialPayload, normalizeIdDocParts, normalizeMaterialRequirements } from '../../utils/registrationMaterials'
 
 const route = useRoute()
 const router = useRouter()
@@ -999,6 +1008,50 @@ function divisionCapacity(division) {
   return candidates.map(Number).find(value => Number.isFinite(value) && value > 0) || 0
 }
 const activeDivisionCapacity = computed(() => divisionCapacity(activeDivision.value))
+const materialSettingsVisible = ref(false)
+const materialForm = ref(null)
+const savingMaterialSettings = ref(false)
+
+function openMaterialSettings() {
+  const division = activeDivision.value || {}
+  materialForm.value = {
+    materialRequirements: normalizeMaterialRequirements(division),
+    idDocParts: normalizeIdDocParts(division),
+    singleDivisionOnly: division.singleDivisionOnly !== false,
+    jerseyNumberMin: Number(division.regulationDetails?.jerseyNumberMin ?? 1),
+    jerseyNumberMax: Number(division.regulationDetails?.jerseyNumberMax ?? 99)
+  }
+  materialSettingsVisible.value = true
+}
+
+async function saveMaterialSettings() {
+  if (!materialForm.value) return
+  const division = activeDivision.value || {}
+  const divisionId = division.id
+  if (!divisionId || divisionId === 'default') { ElMessage.warning('请先选择正式竞赛组别'); return }
+  const min = Number(materialForm.value.jerseyNumberMin)
+  const max = Number(materialForm.value.jerseyNumberMax)
+  if (Number.isFinite(min) && Number.isFinite(max) && min > max) { ElMessage.warning('球衣号码下限不能大于上限'); return }
+  savingMaterialSettings.value = true
+  try {
+    const payload = {
+      ...buildMaterialPayload(materialForm.value.materialRequirements, materialForm.value.idDocParts),
+      singleDivisionOnly: materialForm.value.singleDivisionOnly,
+      regulationDetails: { ...(division.regulationDetails || {}), jerseyNumberMin: min, jerseyNumberMax: max },
+      materialSettingsUpdatedAt: new Date(),
+      updateTime: new Date()
+    }
+    // 演示赛事只在本页生效，避免把演示配置写进真实组别记录。
+    if (!isDemoModeActive) await updateRecord('divisions', divisionId, payload)
+    divisionRecords.value = divisionRecords.value.map(item => String(item.id || item._id || '') === divisionId ? { ...item, ...payload } : item)
+    materialSettingsVisible.value = false
+    ElMessage.success(isDemoModeActive ? '演示模式已应用，未写入数据库' : '报名材料设置已保存')
+  } catch (error) {
+    ElMessage.error(error?.message || '保存报名材料设置失败')
+  } finally {
+    savingMaterialSettings.value = false
+  }
+}
 const assignableDivisions = computed(() => divisionOptions.value.filter(item => item.id !== 'default'))
 const divisionTournamentTeams = computed(() => tournamentTeams.value.filter(item => (item.divisionId || 'default') === activeDivisionId.value))
 const inactiveRegistrationStatuses = new Set(['cancel_requested', 'invite_cancelled', 'withdrawn', 'removed', 'cancelled'])
