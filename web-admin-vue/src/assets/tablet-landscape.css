@@ -118,3 +118,17 @@ html[data-tablet-landscape] #app .division-management .operation-cell .el-button
   html[data-tablet-landscape] #app .division-management .division-table td,html[data-tablet-landscape] #app .division-management .division-table th { padding-inline:8px; }
   html[data-tablet-landscape] #app .division-management .operation-cell { flex-wrap:wrap; gap:0 6px; }
 }
+
+/* 平板横屏：编辑阵容弹窗固定高度，正文不滚动，高度由球场与替补席内部自适应 */
+html[data-tablet-landscape] .lineup-editor-dialog { height: 96vh; margin-top: 0; margin-bottom: 0; display: flex; flex-direction: column; }
+html[data-tablet-landscape] .lineup-editor-dialog .el-dialog__header { flex: 0 0 auto; margin-right: 0; }
+html[data-tablet-landscape] .lineup-editor-dialog .el-dialog__body { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 0 8px 8px; }
+
+/* PAD 原生客户端：Element 提示条固定在视口顶部 20px（每条 40px、间隔 16px），而平板弹窗被压到贴顶，
+   提示条会盖住弹窗标题和表单标签。只在 PAD 标识下把弹窗下移到两条提示条之下：
+   20 + 40 + 16 + 40 + 8 = 124px，并以可用高度相应扣减，避免底部按钮出屏。
+   固定高度的编辑阵容弹窗单独定位，排除在外；手机竖屏与 PC 不带该标识，规则不生效。 */
+html[data-sxf-pad-client] .el-overlay .el-dialog:not(.lineup-editor-dialog) {
+  margin-top: 124px;
+  max-height: calc(100dvh - 144px);
+}
