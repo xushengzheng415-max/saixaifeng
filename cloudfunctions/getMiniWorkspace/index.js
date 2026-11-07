@@ -1942,6 +1942,74 @@ async function returnOfficialRosterForOrganizer(event, identity) {
   return { success: true, status: 'returned' }
 }
 
+// 单场阵容位置：与 PC 端 formation-data / 小程序 lineup-layout 的 23 套阵型对齐，
+// 另保留 8 人制历史的 2-3-2、2-4-1。服务端据此校验阵型并给每个 slot 落位置。
+const LINEUP_FORMATION_SLOTS = {
+  5: {
+    '2-1-1': ['GK', 'DF', 'DF', 'MF', 'FW'],
+    '2-2': ['GK', 'DF', 'DF', 'FW', 'FW'],
+    '3-1': ['GK', 'DF', 'DF', 'DF', 'FW'],
+    '1-2-1': ['GK', 'DF', 'MF', 'MF', 'FW']
+  },
+  7: {
+    '2-3-1': ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'],
+    '3-2-1': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW'],
+    '2-1-2-1': ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'],
+    '1-4-1': ['GK', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW']
+  },
+  8: {
+    '2-3-2': ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'],
+    '3-3-1': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'],
+    '2-4-1': ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW'],
+    '3-2-2': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW', 'FW'],
+    '2-2-3': ['GK', 'DF', 'DF', 'MF', 'MF', 'FW', 'FW', 'FW'],
+    '4-2-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW'],
+    '1-3-2-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW']
+  },
+  9: {
+    '3-3-2': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'],
+    '3-4-1': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW'],
+    '3-2-3': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW', 'FW', 'FW']
+  },
+  11: {
+    '4-3-3': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW', 'FW'],
+    '4-4-2': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW', 'FW'],
+    '4-2-3-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW', 'MF', 'FW', 'FW'],
+    '3-5-2': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'DF', 'FW', 'FW'],
+    '3-4-3': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'DF', 'FW', 'FW', 'FW'],
+    '5-3-2': ['GK', 'DF', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'],
+    '5-4-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW']
+  }
+}
+const LINEUP_POSITION_TEXT = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }
+
+// 首发人数以竞赛组别的几人制为准；比赛未单独记录时回落到组别规则，绝不默认 11 人制
+function lineupMinPlayers(match, division) {
+  const direct = Number(firstValue(match && match.playersOnField, division && division.playersOnField, 0))
+  if (direct > 0) return direct
+  const format = String(firstValue(match && match.matchFormat, division && division.matchFormat, ''))
+  const matched = /(\d+)/.exec(format)
+  return matched ? Number(matched[1]) : 0
+}
+
+function lineupPositionText(code) {
+  const value = String(code || '').trim()
+  return LINEUP_POSITION_TEXT[value.toUpperCase()] || (/[\u4e00-\u9fa5]/.test(value) ? value : '')
+}
+
+function lineupFormationSlots(minPlayers, formation) {
+  const rows = LINEUP_FORMATION_SLOTS[Number(minPlayers)]
+  if (!rows) return null
+  return rows[String(formation || '')] || null
+}
+
+function lineupSlotPosition(minPlayers, formation, slotId) {
+  const slots = lineupFormationSlots(minPlayers, formation)
+  if (!slots) return ''
+  const matched = /^slot-(\d+)$/.exec(String(slotId || ''))
+  return matched ? String(slots[Number(matched[1])] || '') : ''
+}
+
 async function matchLineupForWorkspace(event, identity) {
   const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
   if ((result.workspace.permissions || []).indexOf('team.view') < 0 && (result.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有访问比赛阵容的权限')
@@ -1980,10 +2048,10 @@ async function matchLineupForWorkspace(event, identity) {
   return {
     success: true,
     workspaceOrgId: String(result.workspace.orgId || ''),
-     match: { id: matchId, tournamentId, divisionId: rosterDivisionId, side, minPlayers: Number(match.minPlayers || 11), name: String(match.name || ''), matchDate: String(match.matchDate || ''), venue: String(match.venue || ''), divisionName: String(match.divisionName || match.division || ''), homeTeamName: String(home.name || match.homeTeamName || '主队'), awayTeamName: String(away.name || match.awayTeamName || '客队'), homeLogo: String(home.logoUrl || home.logo || ''), awayLogo: String(away.logoUrl || away.logo || ''), refereeArrived, homeArrived, awayArrived, teamArrived:side === 'home' ? homeArrived : awayArrived, allArrived:refereeArrived && homeArrived && awayArrived },
+     match: { id: matchId, tournamentId, divisionId: rosterDivisionId, side, minPlayers: lineupMinPlayers(match, rosterContext.division), name: String(match.name || ''), matchDate: String(match.matchDate || ''), venue: String(match.venue || ''), divisionName: String(match.divisionName || match.division || ''), homeTeamName: String(home.name || match.homeTeamName || '主队'), awayTeamName: String(away.name || match.awayTeamName || '客队'), homeLogo: String(home.logoUrl || home.logo || ''), awayLogo: String(away.logoUrl || away.logo || ''), refereeArrived, homeArrived, awayArrived, teamArrived:side === 'home' ? homeArrived : awayArrived, allArrived:refereeArrived && homeArrived && awayArrived },
     rosterId: String(roster._id),
     players: players.map(player=>({...formatTeamPlayer({...player,organizerReviewStatus:''},rosterContext.requirements),lineupEligible:formatTeamPlayer({...player,organizerReviewStatus:''},rosterContext.requirements).profileStatus==='complete'})),
-    lineup: latest ? { id: String(latest._id), formation: String(latest.formation || ''), starters: latest.starters || [], substitutes: latest.substitutes || [], status: String(latest.status || ''), returnReason: String(latest.returnReason || ''), submittedAtText: dateText(firstValue(latest.updateTime, latest.createTime)) } : null,
+    lineup: latest ? { id: String(latest._id), formation: String(latest.formation || ''), formationText: String(latest.formation || ''), starters: (latest.starters || []).map(item => Object.assign({}, item, { positionText: lineupPositionText(firstValue(item.slotPosition, item.position)) })), substitutes: (latest.substitutes || []).map(item => Object.assign({}, item, { positionText: lineupPositionText(firstValue(item.slotPosition, item.position)) })), status: String(latest.status || ''), returnReason: String(latest.returnReason || ''), submittedAtText: dateText(firstValue(latest.updateTime, latest.createTime)) } : null,
     canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0
   }
 }
@@ -2059,17 +2127,43 @@ async function submitMatchLineupForWorkspace(event, identity) {
   if (!loaded.match.refereeArrived || !loaded.match.homeArrived || !loaded.match.awayArrived) throw new Error('请等待主裁判和双方球队负责人完成赛前报到')
   const starters = Array.isArray(event.starters) ? event.starters : []
   const substitutes = Array.isArray(event.substitutes) ? event.substitutes : []
+  const formation = String(event.formation || '')
+  if (!LINEUP_FORMATION_SLOTS[Number(loaded.match.minPlayers)]) throw new Error('当前竞赛组别未设置几人制（仅支持 5/7/8/9/11 人制），请联系主办方补充竞赛规则')
+  if (!lineupFormationSlots(loaded.match.minPlayers, formation)) {
+    const availableFormations = Object.keys(LINEUP_FORMATION_SLOTS[Number(loaded.match.minPlayers)] || {})
+    throw new Error('阵型不属于本场人数（本场可选 ' + availableFormations.length + ' 套：' + availableFormations.join('、') + '），请重新选择阵型')
+  }
   const ids = unique(starters.map(item => item.playerId).concat(substitutes.map(item => item.playerId)))
   const allowed = new Set(loaded.players.filter(item=>item.lineupEligible===true).map(item => item.id))
   if (starters.length !== loaded.match.minPlayers || ids.length !== starters.length + substitutes.length || ids.some(id => !allowed.has(id))) throw new Error('首发人数或阵容成员不符合已审核正式名单')
+  const playerMap = {}
+  loaded.players.forEach(item => { playerMap[String(item.id)] = item })
+  const lineupPlayer = id => playerMap[String(id)] || {}
+  const missingNumberIds = ids.filter(id => !String(firstValue(lineupPlayer(id).jerseyNumber, '')).trim())
+  if (missingNumberIds.length) throw new Error('请先补全球衣号码：' + missingNumberIds.map(id => String(lineupPlayer(id).name || '未命名球员')).join('、'))
+  const seenNumbers = {}
+  for (const id of ids) {
+    const number = String(firstValue(lineupPlayer(id).jerseyNumber, '')).trim()
+    if (seenNumbers[number]) throw new Error('球衣号码' + number + '重复，请核对正式名单')
+    seenNumbers[number] = true
+  }
+  const starterRows = starters.map(item => {
+    const player = lineupPlayer(item.playerId)
+    const position = lineupSlotPosition(loaded.match.minPlayers, formation, item.slotId)
+    return Object.assign({}, player, { _id:String(item.playerId), playerId:String(item.playerId), slotId:String(item.slotId || ''), slotPosition:position, positionText:lineupPositionText(position) })
+  })
+  if (starterRows.some(row => !row.slotPosition)) throw new Error('首发位置无效，请重新编排阵型')
+  const substituteRows = substitutes.map(item => {
+    const player = lineupPlayer(item.playerId)
+    const position = String(firstValue(player.position, '')).toUpperCase()
+    return Object.assign({}, player, { _id:String(item.playerId), playerId:String(item.playerId), slotPosition:'', positionText:lineupPositionText(position) })
+  })
   const existing = await safeGet('match_lineup_snapshots', { matchId: loaded.match.id, teamId: String(event.teamId || '') }, 20)
   if (existing.some(item => ['submitted', 'locked'].indexOf(String(item.status || '')) >= 0)) throw new Error('该场阵容已提交或锁定')
   const version = existing.reduce((max, item) => Math.max(max, Number(item.version || 1)), 0) + 1
   const now = db.serverDate()
-  const created = await db.collection('match_lineup_snapshots').add({ data: { matchId: loaded.match.id, tournamentId: loaded.match.tournamentId, teamId: String(event.teamId || ''), rosterId: loaded.rosterId, formation: String(event.formation || ''), starters, substitutes, version, status: 'submitted', submittedBy: identity.user._id, createTime: now, updateTime: now } })
-  const playerMap = {}
-  loaded.players.forEach(item => { playerMap[String(item.id)] = item })
-  const lineup = { teamId:String(event.teamId || ''), formation:String(event.formation || ''), starters:starters.map(item => Object.assign({}, playerMap[String(item.playerId)] || {}, { _id:String(item.playerId), playerId:String(item.playerId), slotId:String(item.slotId || '') })), substitutes:substitutes.map(item => Object.assign({}, playerMap[String(item.playerId)] || {}, { _id:String(item.playerId), playerId:String(item.playerId) })), status:'submitted', submitted:true, version, snapshotId:String(created._id), confirmations:{}, identityChecks:{}, submittedAt:now, submittedByUserId:String(identity.user._id) }
+  const created = await db.collection('match_lineup_snapshots').add({ data: { matchId: loaded.match.id, tournamentId: loaded.match.tournamentId, teamId: String(event.teamId || ''), rosterId: loaded.rosterId, formation, formationText: formation, starters:starterRows, substitutes:substituteRows, version, status: 'submitted', submittedBy: identity.user._id, createTime: now, updateTime: now } })
+  const lineup = { teamId:String(event.teamId || ''), formation, formationText:formation, starters:starterRows, substitutes:substituteRows, status:'submitted', submitted:true, version, snapshotId:String(created._id), confirmations:{}, identityChecks:{}, submittedAt:now, submittedByUserId:String(identity.user._id) }
   const side = loaded.match.side
   const matchUpdate = { lineupsLocked:false, identityVerificationStatus:'pending_lineup_confirmation', updateTime:now }
   matchUpdate[side === 'home' ? 'homeLineup' : 'awayLineup'] = lineup
