@@ -3,10 +3,10 @@
   "feed": {
     "url": "https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi",
     "method": "POST",
-    "token": "59b07d883a4dcf1c4dca3e0cf6fb3737353f5954b2100dd3",
+    "token": "<LIVE_FEED_TOKEN>",
     "body": {
       "action": "liveFeed",
-      "matchId": "22dda3756aadf4bf017112cd22b7e531"
+      "matchId": "<MATCH_ID>"
     },
     "headers": { "Content-Type": "application/json" },
     "pollIntervalMs": 2000,
