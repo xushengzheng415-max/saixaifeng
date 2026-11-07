@@ -1942,45 +1942,47 @@ async function returnOfficialRosterForOrganizer(event, identity) {
   return { success: true, status: 'returned' }
 }
 
-// 单场阵容位置：与 PC 端 formation-data / 小程序 lineup-layout 的 23 套阵型对齐，
-// 另保留 8 人制历史的 2-3-2、2-4-1。服务端据此校验阵型并给每个 slot 落位置。
-const LINEUP_FORMATION_SLOTS = {
-  5: {
-    '2-1-1': ['GK', 'DF', 'DF', 'MF', 'FW'],
-    '2-2': ['GK', 'DF', 'DF', 'FW', 'FW'],
-    '3-1': ['GK', 'DF', 'DF', 'DF', 'FW'],
-    '1-2-1': ['GK', 'DF', 'MF', 'MF', 'FW']
-  },
-  7: {
-    '2-3-1': ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'],
-    '3-2-1': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW'],
-    '2-1-2-1': ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'],
-    '1-4-1': ['GK', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW']
-  },
-  8: {
-    '2-3-2': ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'],
-    '3-3-1': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'],
-    '2-4-1': ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW'],
-    '3-2-2': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW', 'FW'],
-    '2-2-3': ['GK', 'DF', 'DF', 'MF', 'MF', 'FW', 'FW', 'FW'],
-    '4-2-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW'],
-    '1-3-2-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW']
-  },
-  9: {
-    '3-3-2': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'],
-    '3-4-1': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW'],
-    '3-2-3': ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW', 'FW', 'FW']
-  },
-  11: {
-    '4-3-3': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW', 'FW'],
-    '4-4-2': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW', 'FW'],
-    '4-2-3-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'FW', 'MF', 'FW', 'FW'],
-    '3-5-2': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'DF', 'FW', 'FW'],
-    '3-4-3': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'DF', 'FW', 'FW', 'FW'],
-    '5-3-2': ['GK', 'DF', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'],
-    '5-4-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW']
-  }
+// 单场阵容位置：唯一真源是 shared/formation-templates.json（经 tools/sync-formation-templates.mjs
+// 同步到本目录）。服务端不再维护第二份阵型表：提交校验的槽位表由模板 slotRoles 运行时派生。
+// retired 阵型（如 11 人制 4-5-1）只允许历史回看，不能用于新提交，但仍可通过 formationTemplates 接口按编号读到。
+const FORMATION_TEMPLATE_SEED = require('./formation-templates.json')
+// 坐标以代码种子为唯一真源：formation_templates 集合只保存平台运营的草稿与历史版本，
+// 不参与提交校验和各端渲染，避免运营改了种子之后又被库里的旧坐标盖住。
+let formationSlotTableCache = null
+
+function formationSeedFormats() {
+  return FORMATION_TEMPLATE_SEED && FORMATION_TEMPLATE_SEED.formats ? FORMATION_TEMPLATE_SEED.formats : {}
 }
+
+function templateSlotRoles(template) {
+  if (!template) return []
+  if (Array.isArray(template.slotRoles) && template.slotRoles.length) return template.slotRoles.map(role => String(role || ''))
+  if (Array.isArray(template.positions)) return template.positions.map(position => String(position && position.role || ''))
+  return []
+}
+
+function buildFormationSlotTable(formats) {
+  const table = {}
+  Object.keys(formats || {}).forEach(size => {
+    const format = formats[size] || {}
+    const templates = format.templates || {}
+    const rows = {}
+    Object.keys(templates).forEach(code => {
+      const template = templates[code] || {}
+      if (String(template.status || 'active') !== 'active') return
+      const roles = templateSlotRoles(template)
+      if (roles.length) rows[String(code)] = roles
+    })
+    if (Object.keys(rows).length) table[Number(size)] = rows
+  })
+  return table
+}
+
+function lineupSlotTable() {
+  if (!formationSlotTableCache) formationSlotTableCache = buildFormationSlotTable(formationSeedFormats())
+  return formationSlotTableCache
+}
+
 const LINEUP_POSITION_TEXT = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }
 
 // 首发人数以竞赛组别的几人制为准；比赛未单独记录时回落到组别规则，绝不默认 11 人制
@@ -1997,17 +1999,70 @@ function lineupPositionText(code) {
   return LINEUP_POSITION_TEXT[value.toUpperCase()] || (/[\u4e00-\u9fa5]/.test(value) ? value : '')
 }
 
-function lineupFormationSlots(minPlayers, formation) {
-  const rows = LINEUP_FORMATION_SLOTS[Number(minPlayers)]
+function lineupFormationSlots(table, minPlayers, formation) {
+  const rows = (table || {})[Number(minPlayers)]
   if (!rows) return null
   return rows[String(formation || '')] || null
 }
 
-function lineupSlotPosition(minPlayers, formation, slotId) {
-  const slots = lineupFormationSlots(minPlayers, formation)
+function lineupSlotPosition(table, minPlayers, formation, slotId) {
+  const slots = lineupFormationSlots(table, minPlayers, formation)
   if (!slots) return ''
   const matched = /^slot-(\d+)$/.exec(String(slotId || ''))
   return matched ? String(slots[Number(matched[1])] || '') : ''
+}
+
+// 阵型模板只读接口：各端读同一份代码种子（含 retired 只读回看），坐标语义见 coordinateSystem。
+// formation_templates 集合只保存运营草稿与历史版本，不参与这里的下发，避免库里的旧坐标覆盖种子。
+async function buildFormationTemplatesForReading() {
+  const formats = formationSeedFormats()
+  const rows = []
+  Object.keys(formats).forEach(size => {
+    const format = formats[size] || {}
+    const playersOnField = Number(format.playersOnField || size)
+    const templates = format.templates || {}
+    const list = Object.keys(templates).map(code => {
+      const seed = templates[code] || {}
+      const roles = templateSlotRoles(seed)
+      const positions = Array.isArray(seed.positions) ? seed.positions : []
+      return {
+        code: String(code),
+        name: String(seed.name || code),
+        description: String(seed.description || ''),
+        status: String(seed.status || 'active') === 'active' ? 'active' : 'retired',
+        slots: positions.map((position, index) => ({
+          slotId: 'slot-' + index,
+          role: String(position && position.role || (roles[index] || '')),
+          label: String((position && (position.label || position.name)) || ''),
+          position: String((position && position.position) || (roles[index] || '')),
+          x: Number(position && position.x || 0),
+          y: Number(position && position.y || 0)
+        }))
+      }
+    })
+    rows.push({
+      playersOnField,
+      label: String(format.label || playersOnField + '人制'),
+      description: String(format.description || ''),
+      active: list.filter(item => item.status === 'active').map(item => item.code),
+      retired: list.filter(item => item.status !== 'active').map(item => item.code),
+      templates: list
+    })
+  })
+  return { coordinateSystem: FORMATION_TEMPLATE_SEED.coordinateSystem || {}, formats: rows, slotTableReady: Object.keys(lineupSlotTable()).length > 0 }
+}
+
+async function formationTemplatesForReading(event) {
+  const payload = await buildFormationTemplatesForReading()
+  const size = Number(event.playersOnField || event.minPlayers || 0)
+  const code = String(event.formation || event.code || '')
+  if (!size) return Object.assign({ success: true }, payload)
+  const format = payload.formats.filter(row => Number(row.playersOnField) === size)[0]
+  if (!format) return { success: false, code: 'FORMATION_TEMPLATE_FORMAT_UNKNOWN', error: '不支持的人数制' }
+  if (!code) return { success: true, coordinateSystem: payload.coordinateSystem, format }
+  const template = format.templates.filter(row => row.code === code)[0]
+  if (!template) return { success: false, code: 'FORMATION_TEMPLATE_NOT_FOUND', error: '阵型模板不存在' }
+  return { success: true, coordinateSystem: payload.coordinateSystem, readOnly: template.status !== 'active', template }
 }
 
 async function matchLineupForWorkspace(event, identity) {
@@ -2071,7 +2126,10 @@ async function confirmTeamArrivalForWorkspace(event, identity) {
   state.teamArrivals = Object.assign({}, state.teamArrivals || {})
   state.teamArrivals[side] = { confirmedAt:new Date(), confirmedByUserId:String(identity.user._id), confirmedByPhoneMasked:maskPhone(String(firstValue(identity.user.phone, identity.user.phoneNumber) || '')) }
   state.teamsArrival = state.teamArrivals.home && state.teamArrivals.away ? { confirmedAt:new Date(), source:'two_team_confirmations' } : null
-  await db.collection('matches').doc(matchId).update({ data:{ preMatchState:state, updateTime:db.serverDate() } })
+  // 云数据库 update 会把嵌套对象展开成 preMatchState.xxx.yyy 点路径；父字段当前是 null 时
+  // 无法在其下新建字段，会直接报 -50201 database request。赛前报到里 teamsArrival 未完成时就是 null，
+  // 第二支球队确认时正是把它从 null 升级为对象，因此这里用 _.set 整体替换 preMatchState，不再展开点路径。
+  await db.collection('matches').doc(matchId).update({ data:{ preMatchState:_.set(state), updateTime:db.serverDate() } })
   return { success:true, side, teamArrived:true, allTeamsArrived:Boolean(state.teamArrivals.home && state.teamArrivals.away) }
 }
 
@@ -2128,9 +2186,10 @@ async function submitMatchLineupForWorkspace(event, identity) {
   const starters = Array.isArray(event.starters) ? event.starters : []
   const substitutes = Array.isArray(event.substitutes) ? event.substitutes : []
   const formation = String(event.formation || '')
-  if (!LINEUP_FORMATION_SLOTS[Number(loaded.match.minPlayers)]) throw new Error('当前竞赛组别未设置几人制（仅支持 5/7/8/9/11 人制），请联系主办方补充竞赛规则')
-  if (!lineupFormationSlots(loaded.match.minPlayers, formation)) {
-    const availableFormations = Object.keys(LINEUP_FORMATION_SLOTS[Number(loaded.match.minPlayers)] || {})
+  const slotTable = lineupSlotTable()
+  if (!slotTable[Number(loaded.match.minPlayers)]) throw new Error('当前竞赛组别未设置几人制（仅支持 5/7/8/9/11 人制），请联系主办方补充竞赛规则')
+  if (!lineupFormationSlots(slotTable, loaded.match.minPlayers, formation)) {
+    const availableFormations = Object.keys(slotTable[Number(loaded.match.minPlayers)] || {})
     throw new Error('阵型不属于本场人数（本场可选 ' + availableFormations.length + ' 套：' + availableFormations.join('、') + '），请重新选择阵型')
   }
   const ids = unique(starters.map(item => item.playerId).concat(substitutes.map(item => item.playerId)))
@@ -2149,7 +2208,7 @@ async function submitMatchLineupForWorkspace(event, identity) {
   }
   const starterRows = starters.map(item => {
     const player = lineupPlayer(item.playerId)
-    const position = lineupSlotPosition(loaded.match.minPlayers, formation, item.slotId)
+    const position = lineupSlotPosition(slotTable, loaded.match.minPlayers, formation, item.slotId)
     return Object.assign({}, player, { _id:String(item.playerId), playerId:String(item.playerId), slotId:String(item.slotId || ''), slotPosition:position, positionText:lineupPositionText(position) })
   })
   if (starterRows.some(row => !row.slotPosition)) throw new Error('首发位置无效，请重新编排阵型')
@@ -3424,6 +3483,7 @@ exports.main = async function(event) {
     if (event.action === 'officialRoster') return await officialRosterForWorkspace(event, identity)
     if (event.action === 'submitOfficialRoster') return await submitOfficialRosterForWorkspace(event, identity)
     if (event.action === 'returnOfficialRoster') return await returnOfficialRosterForOrganizer(event, identity)
+    if (event.action === 'formationTemplates') return await formationTemplatesForReading(event)
     if (event.action === 'matchLineup') return await matchLineupForWorkspace(event, identity)
     if (event.action === 'confirmTeamArrival') return await confirmTeamArrivalForWorkspace(event, identity)
     if (event.action === 'adultElectronicPass') return await adultElectronicPassForWorkspace(event, identity)

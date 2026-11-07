@@ -60,8 +60,8 @@
               :key="pos.role"
               class="player-slot"
               :style="{
-                left: pos.x + '%',
-                top: pos.y + '%'
+                left: (7 + pos.x * 0.86) + '%',
+                top: (5 + pos.y * 0.9) + '%'
               }"
               @click="handlePlayerSlotClick(pos)"
             >
@@ -231,10 +231,10 @@
       </div>
 
       <!-- 足球场主体 -->
-      <div class="dual-field-outer">
-        <div class="dual-field-container" ref="dualFieldRef" :style="{ backgroundImage: `url(${fieldBgImage})` }">
+      <div class="dual-field-outer" ref="dualFieldOuterRef">
+        <div class="dual-field-container" ref="dualFieldRef" :style="{ ...dualFieldStyle, backgroundImage: `url(${fieldBgImage})` }">
           <!-- 实际球场边界（黄框区域） -->
-          <div class="field-boundary">
+          <div class="field-boundary" :style="dualCardStyle">
             <!-- 主队球员（左半场：x映射到0%-50%） -->
             <div
               v-for="pos in homeCurrentPositions"
@@ -514,6 +514,7 @@ import {
   ArrowUp,
   ArrowDown
 } from '@element-plus/icons-vue'
+import { callFunctionHTTP } from '@/utils/cloud'
 import PlayerCard from '@/components/player/PlayerCard.vue'
 import formationData from '@/data/formation-data.json'
 import fieldBgImage from '@/assets/images/football-field-dual.jpg'
@@ -557,19 +558,6 @@ const props = defineProps({
 })
 
 // ==================== 工具函数 ====================
-function mirrorPositions(positions) {
-  // 客队左右镜像：x 镜像，y 不变，label 互换左/右
-  return positions.map(p => ({
-    ...p,
-    x: 100 - p.x,
-    y: p.y,
-    label: p.label
-      .replace(/左/g, '__TMP__')
-      .replace(/右/g, '左')
-      .replace(/__TMP__/g, '右')
-  }))
-}
-
 function getInitials(name) {
   if (!name) return '?'
   return name.length >= 2 ? name.slice(-2) : name
@@ -650,7 +638,12 @@ function getJerseyName(player) {
 }
 
 // ==================== 共享：阵型数据 ====================
+// 接口优先：读取平台后台已发布的阵型模板坐标；接口失败或未返回时回退本地 formation-data.json 种子，
+// 保证弱网与接口异常时首屏不空白。坐标语义：x=本方半场纵深（0 球门线，100 中线），y=横向（0 左，100 右）。
 const selectedPlayerCount = ref(null)
+const templatePositions = ref({})
+const templateLoadedCounts = new Set()
+const templateLoadingCounts = new Set()
 
 const playerCounts = computed(() => {
   return Object.keys(formationData)
@@ -660,16 +653,15 @@ const playerCounts = computed(() => {
     .sort((a, b) => a - b)
 })
 
-const availableFormations = computed(() => {
-  if (!selectedPlayerCount.value) return []
-  const key = selectedPlayerCount.value + '人制'
-  const data = formationData[key]
+function localFormationsFor(count) {
+  if (!count) return []
+  const data = formationData[count + '人制']
   if (!data || !data.formations) return []
   return Object.entries(data.formations)
     .filter(([, formation]) => {
       const positions = Array.isArray(formation.positions) ? formation.positions : []
       const goalkeeperCount = positions.filter(position => position.role === 'GK').length
-      return positions.length === selectedPlayerCount.value && goalkeeperCount === 1
+      return positions.length === count && goalkeeperCount === 1
     })
     .map(([id, f]) => ({
       id,
@@ -677,7 +669,47 @@ const availableFormations = computed(() => {
       description: f.description,
       positions: f.positions
     }))
+}
+
+// 按人数制批量读取模板坐标；任一请求失败只影响对应阵型，读取过的按人数制缓存。
+async function loadFormationTemplates(count) {
+  if (!count || templateLoadedCounts.has(count) || templateLoadingCounts.has(count)) return
+  templateLoadingCounts.add(count)
+  try {
+    const formations = localFormationsFor(count)
+    const results = await Promise.all(formations.map(async formation => {
+      const result = await callFunctionHTTP('getFormationTemplate', { playersOnField: count, formation: formation.id })
+      const slots = result && result.template && Array.isArray(result.template.slots) ? result.template.slots : []
+      if (!slots.length) return null
+      return [count + ':' + formation.id, slots.map(slot => ({
+        role: String(slot.role || ''),
+        label: String(slot.label || ''),
+        x: Number(slot.x || 0),
+        y: Number(slot.y || 0)
+      }))]
+    }))
+    const next = { ...templatePositions.value }
+    results.filter(Boolean).forEach(([key, positions]) => { next[key] = positions })
+    templatePositions.value = next
+    templateLoadedCounts.add(count)
+  } catch (error) {
+    // 回退本地种子：不阻断编辑，下次选中人数制时再试
+    console.warn('阵型模板接口读取失败，已回退本地坐标', error)
+  } finally {
+    templateLoadingCounts.delete(count)
+  }
+}
+
+const availableFormations = computed(() => {
+  const count = selectedPlayerCount.value
+  if (!count) return []
+  return localFormationsFor(count).map(formation => {
+    const remote = templatePositions.value[count + ':' + formation.id]
+    return remote ? { ...formation, positions: remote } : formation
+  })
 })
+
+watch(selectedPlayerCount, count => { if (count) loadFormationTemplates(count) }, { immediate: true })
 
 // ==================== 单队模式状态 ====================
 const editorContentRef = ref(null)
@@ -725,6 +757,46 @@ const filteredPlayers = computed(() => {
 
 // ==================== 双队模式状态 ====================
 const dualFieldRef = ref(null)
+const dualFieldOuterRef = ref(null)
+const CARD_ASPECT = 43 / 30
+const FIELD_ASPECT = 2560 / 1100
+const cardSize = ref({ width: 126, height: 181 })
+const fieldFrame = ref({ width: 0, height: 0 })
+const dualFieldStyle = computed(() => ({
+  width: fieldFrame.value.width ? fieldFrame.value.width + 'px' : '100%',
+  height: fieldFrame.value.height ? fieldFrame.value.height + 'px' : 'auto'
+}))
+const dualCardStyle = computed(() => ({
+  '--slot-card-width': cardSize.value.width + 'px',
+  '--slot-card-height': cardSize.value.height + 'px'
+}))
+function updateCardSize() {
+  const el = dualFieldOuterRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  // 底图按 2560×1100 等比铺满可用区域，容器就是这个比例，点位基准与画线严格对齐
+  let width = Math.max(0, rect.width)
+  let height = width / FIELD_ASPECT
+  if (height > rect.height) { height = Math.max(0, rect.height); width = height * FIELD_ASPECT }
+  fieldFrame.value = { width: Math.round(width), height: Math.round(height) }
+  // 球员卡按线内矩形（左右 7%/86%，上下 5%/90%）缩放
+  const minSide = Math.min(width * 0.86, height * 0.9)
+  const cardWidth = Math.round(Math.max(52, Math.min(126, minSide * 0.33)))
+  cardSize.value = { width: cardWidth, height: Math.round(cardWidth * CARD_ASPECT) }
+}
+let cardResizeObserver = null
+onMounted(() => {
+  nextTick(() => {
+    updateCardSize()
+    if (dualFieldOuterRef.value && typeof ResizeObserver !== 'undefined') {
+      cardResizeObserver = new ResizeObserver(updateCardSize)
+      cardResizeObserver.observe(dualFieldOuterRef.value)
+    }
+  })
+})
+onUnmounted(() => {
+  if (cardResizeObserver) { cardResizeObserver.disconnect(); cardResizeObserver = null }
+})
 const homeSelectedFormationId = ref('')
 const awaySelectedFormationId = ref('')
 const homeAssignedPlayers = ref({})
@@ -766,11 +838,11 @@ const homeCurrentPositions = computed(() => {
   return f.positions
 })
 
-// 客队（右半场）：左右镜像（x 镜像，y 不变）
+// 客队（右半场）：只做整体平移，不做左右镜像（与模板真源 mirrorAway=false 一致）
 const awayCurrentPositions = computed(() => {
   const f = availableFormations.value.find(f => f.id === awaySelectedFormationId.value)
   if (!f || !f.positions) return []
-  return mirrorPositions(f.positions)
+  return f.positions
 })
 
 // 球员库：未在场上也不在替补席的球员
@@ -1730,11 +1802,11 @@ function handlePlayerSearch() {}
 
 .dual-field-container {
   position: relative;
-  width: 100%;
-  height: 100%;
-  max-width: none;
+  // 尺寸由脚本按 2560×1100 等比适配可用区域（见 dualFieldStyle），底图与点位共用同一基准。
+  max-width: 100%;
+  max-height: 100%;
   background: transparent;
-  background-size: contain;
+  background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
   border-radius: 0;
@@ -1848,10 +1920,10 @@ function handlePlayerSearch() {}
     transform: translate(-50%, -50%) scale(1.06);
   }
 
-  // 已生成卡片按原始比例填满球场槽位。
+  // 已生成卡片按原始比例填满球场槽位；尺寸由容器自适应（见字段区 --slot-card-*）。
   .slot-card-wrapper {
-    width: 126px;
-    height: 181px;
+    width: var(--slot-card-width, 126px);
+    height: var(--slot-card-height, 181px);
     position: relative;
     overflow: visible;
 
@@ -2295,11 +2367,7 @@ function handlePlayerSearch() {}
 
 // ==================== 平板横屏：固定版面 + 替补席可收起 ====================
 // 只影响平板断点，手机端与 PC 端布局和尺寸不变。
-// 1) 球员卡整体等比缩放（成卡原始比例 30:43），卡内布局与绘制逻辑不动。
-html[data-tablet-landscape] .visual-lineup-editor .dual-player-slot .slot-card-wrapper {
-  width: 76px;
-  height: 109px;
-}
+// 1) 球员卡尺寸统一由容器 min(宽,高) 计算（见 dualCardStyle），平板不再单独写死第二套尺寸。
 
 // 2) 编辑器撑满弹窗正文，取消整页上下滚动；收起替补席后球场占满剩余高度。
 html[data-tablet-landscape] .visual-lineup-editor.is-dual-mode {

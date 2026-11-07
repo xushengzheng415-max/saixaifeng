@@ -28,6 +28,10 @@ work/
 !.env.example
 cloudbaserc.json
 project.private.config.json
+# vMix 桥接真实配置含 liveFeed token 与生产 matchId，只保留 config.example.json
+tools/vmix-bridge/config.json
+tools/vmix-bridge/state.json
+tools/vmix-bridge/cache/
 web-admin-vue/.env.production
 web-admin-vue/cloudbaserc.json
 cloudbase.deploy-safe.json

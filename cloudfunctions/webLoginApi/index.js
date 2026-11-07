@@ -6073,6 +6073,15 @@ exports.main = async (event, context) => {
     }
     let result
     switch (action) {
+      case 'listFormationTemplates':
+      case 'getFormationTemplate':
+      case 'listFormationTemplateVersions':
+      case 'saveFormationTemplateDraft':
+      case 'publishFormationTemplate':
+      case 'archiveFormationTemplate':
+      case 'restoreFormationTemplateVersion':
+      case 'seedFormationTemplates':
+        result = await require('./formationTemplates.cjs').createFormationTemplates({ cloud, authenticateWebSession })(params); break
       case 'miniFeedbackSubmit':
       case 'miniFeedbackList':
         result = await require('./servicePrivate.cjs')({cloud,config:SERVICE_ACCOUNT_CONFIG,hashSessionToken,dateValue,httpsGet,createSession:createRefereeH5Session})(action, params); break

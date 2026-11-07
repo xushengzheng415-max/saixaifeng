@@ -1313,3 +1313,12 @@ TeamDetail新建/编辑补齐身份证/护照选择，共用报名导入校验�
 
 
 2026-11-04：战术板自动恢复、相邻载入按钮、临时姓名与红蓝轨迹已实现。共享getMiniWorkspace仅规则模块差量发布并回读，开发版1.2.44已上传、日志同步；微信体验/正式尚未发布。隔离真实处理器/页面回归通过，原生测试显示保存内容；最终截图接口重跑超时已记录。见docs/releases/tactics-restore-trails-20261104.md。
+
+
+2026-11-07：阵型模板第一阶段（坐标真源 + 运营后台编辑器）源码并入 main。真源 shared/formation-templates.json 收口 5/7/8/9/11 人制 25 个 active 阵型（8 人制补 2-3-2、2-4-1），11 人制 4-5-1 登记 retired 仅供历史回看；tools/sync-formation-templates.mjs 同步 PC 副本与服务端副本，并校验 getMiniWorkspace 槽位由模板派生。webLoginApi 新增 8 个 formationTemplates action（读接口登录可用，写接口仅平台运营，seed 默认 dryRun）；PC 后台新增 /formation-templates「阵型模板」页替换原阵型设计器死链，平台运营可拖拽调坐标、保存草稿、发布与回查历史版本。方案见 docs/design/formation-template-plan.md，后端上线记录见 docs/releases/formation-templates-backend-20261107.md。
+
+
+2026-11-07：阵型模板后端此前已上线并完成种子写入（webLoginApi 差量发布，formation_templates 26 条：25 active + 11 人制 4-5-1 archived；formation_template_versions 当时 0 条，已补 {templateKey:1, version:-1} 复合索引）。本次把 PC 后台 /formation-templates 页与阵型坐标渲染（VisualLineupEditor 接口优先、失败回退本地）发布正式 /admin/。
+
+
+2026-11-07：vMix 直播桥接真实配置移出仓库。tools/vmix-bridge/config.json 曾明文保存 liveFeed token 与生产 matchId，现改为仓库外 %LOCALAPPDATA%\SxfVmix\vmix-bridge.json（用 VMIX_CONFIG_PATH 指向），仓库只保留 config.example.json 与 README，config.json/state.json/cache/ 已加入 .gitignore。该 token 已存在于 989dd8b0a 起的 main/preview 历史，删除文件无法清除，是否轮换由用户决定。

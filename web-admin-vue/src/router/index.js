@@ -44,6 +44,7 @@ const routes = [
     meta: { requiresAuth: false, skipAuthCheck: true, title: '操作教程' }
   },
   { path:'/data-center', component:() => import('../views/layout/LayoutView.vue'), meta:{requiresAuth:true,title:'数据中心'}, children:[{path:'',component:() => import('../views/data/DataCenter.vue')}] },
+  { path:'/formation-templates', component:() => import('../views/layout/LayoutView.vue'), meta:{requiresAuth:true,title:'阵型模板'}, children:[{path:'',component:() => import('../views/formation/FormationTemplates.vue')}] },
   {
     path: '/quick-demo-draw-screen/:id',
     name: 'QuickDemoDrawScreen',
