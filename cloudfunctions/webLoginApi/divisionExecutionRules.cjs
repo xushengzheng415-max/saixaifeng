@@ -1,5 +1,7 @@
 'use strict'
 const benchFields={benchPlayerLimit:30}
+// 替补人数不设上限是布尔开关，与人数上限分开校验，避免用 0 或负数哨兵混淆“禁止替补”。
+const benchBooleanFields=new Set(['benchPlayerLimitUnlimited'])
 const metadata=new Set(['action','authToken','dynamicCardProtocol','assistanceGrantId','staffTournamentId','staffModule','divisionId','expectedRulesVersion'])
 const editable=new Set(['substitutionMode','substitutionLimit','substitutionWindows','substitutionReentryAllowed','regulationDetails'])
 const integer=value=>value!=null&&['number','string'].includes(typeof value)&&String(value).trim()!==''&&Number.isInteger(Number(value))&&Number(value)>=0?Number(value):null
@@ -13,6 +15,7 @@ function buildDivisionExecutionUpdate(before,input,actor,now=new Date()){
   if(input.regulationDetails!==undefined){
     if(!input.regulationDetails||typeof input.regulationDetails!=='object'||Array.isArray(input.regulationDetails))fail('BENCH_RULE_INVALID','替补席设置格式不正确')
     for(const [field,value] of Object.entries(input.regulationDetails)){
+      if(benchBooleanFields.has(field)){bench[field]=value===true;continue}
       if(!Object.hasOwn(benchFields,field))fail('EXEC_RULE_FIELDS_LOCKED','仅可调整换人和替补球员人数，请刷新后再保存')
       if(value==null||typeof value==='string'&&!value.trim()){bench[field]=null;continue}
       const count=integer(value)
@@ -58,13 +61,14 @@ function createDivisionExecutionRules({cloud,authenticateWebSession,buildOrganiz
         if(String(event.expectedRulesVersion||'')!==String(before.rulesVersion||'V1.0'))fail('DIVISION_RULE_VERSION_CHANGED','规则已更新，请刷新后重新修改')
         if(before.rulesLocked!==true&&!before.activeRulesVersion)fail('DIVISION_RULE_NOT_FINALIZED','请在规则草稿中修改比赛设置')
         const update=buildDivisionExecutionUpdate(before,event,{id:auth.userId||auth.user?._id,type:owner?'platform_owner':'organizer'})
-        const detailKeys=['firstHalfSubstitutionWindows','secondHalfSubstitutionWindows','halftimeSubstitutionWindows','substitutionReentryForbidden','unlimitedPlayersPerWindow',...Object.keys(benchFields)]
+        const detailKeys=['firstHalfSubstitutionWindows','secondHalfSubstitutionWindows','halftimeSubstitutionWindows','substitutionReentryForbidden','unlimitedPlayersPerWindow',...Object.keys(benchFields),...benchBooleanFields]
         const ruleKeys=['substitutionMode','substitutionLimit','substitutionWindows','substitutionReentryAllowed']
         const prior=before.activeRulesSnapshot||before.rulesSnapshot||{},priorDetails=prior.regulationDetails||{}
+        const val=(source,key)=>benchBooleanFields.has(key)?source?.[key]===true:(source?.[key]??null)
         const same=Object.keys(event.regulationDetails||{}).every(key=>Object.hasOwn(priorDetails,key))
           &&ruleKeys.every(key=>before[key]===update[key]&&(!Object.hasOwn(prior,key)||prior[key]===update[key]))
-          &&detailKeys.every(key=>(before.regulationDetails?.[key]??null)===(update.regulationDetails[key]??null)
-            &&(Object.hasOwn(priorDetails,key)?priorDetails[key]:before.regulationDetails?.[key]??null)===(update.activeRulesSnapshot.regulationDetails[key]??null))
+          &&detailKeys.every(key=>val(before.regulationDetails,key)===val(update.regulationDetails,key)
+            &&val(Object.hasOwn(priorDetails,key)?priorDetails[key]:before.regulationDetails,key)===val(update.activeRulesSnapshot.regulationDetails,key))
         if(same){result={...before,alreadyCurrent:true};return}
         await transaction.collection('divisions').doc(id).update({data:update});result={...before,...update}
       })

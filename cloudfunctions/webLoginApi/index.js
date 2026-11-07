@@ -2262,7 +2262,7 @@ const REGULATION_DETAIL_BOOLEAN_FIELDS = new Set([
   'twoKitsRequired', 'captainArmbandRequired', 'shinGuardsRequired', 'metalStudsForbidden',
   'jerseyModificationForbidden', 'benchKitContrastRequired', 'resumeRemainingTimePreferred',
   'resumeStatePreserved', 'withdrawalVoidsResults', 'fairPlayDisqualification',
-  'cardsCarryToNextStage', 'teamOfficialsDiscipline'
+  'cardsCarryToNextStage', 'teamOfficialsDiscipline', 'benchPlayerLimitUnlimited'
 ])
 const REGULATION_DETAIL_SCORE_FIELDS = new Set(['eligibilityViolationScore', 'terminationForfeitScore'])
 

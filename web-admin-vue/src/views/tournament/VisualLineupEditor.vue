@@ -135,9 +135,6 @@
     <template v-if="props.mode === 'dual'">
       <!-- 顶部工具栏 -->
       <div class="editor-toolbar dual-toolbar">
-        <div class="toolbar-left">
-          <h2 class="editor-title">{{ props.homeTeamName || '主队' }} vs {{ props.awayTeamName || '客队' }}</h2>
-        </div>
         <div class="toolbar-center dual-formations">
           <el-form :inline="true">
             <el-form-item label="比赛人数">
@@ -295,7 +292,7 @@
           <div class="bench-section" style="flex: 1; min-width: auto;">
             <div class="bench-header">
               <span class="bench-title" style="color:#f56c6c;">{{ props.homeTeamName || '主队' }} 替补席</span>
-              <el-tag size="small" type="info">{{ homeBench.length }} / {{ maxBenchSlots }} 人</el-tag>
+              <el-tag size="small" type="info">{{ props.benchUnlimited ? `${homeBench.length} 人 · 不限` : `${homeBench.length} / ${maxBenchSlots} 人` }}</el-tag>
             </div>
             <div class="bench-list">
               <div
@@ -321,6 +318,9 @@
               >
                 <span class="bench-empty-icon">+</span>
               </div>
+              <div v-if="props.benchUnlimited" :key="'h-add'" class="bench-empty-slot bench-add-slot" title="继续添加替补" @click="addHomeBenchSlot">
+                <span class="bench-empty-icon">+</span>
+              </div>
             </div>
           </div>
         </div>
@@ -330,7 +330,7 @@
           <div class="bench-section" style="flex: 1; min-width: auto;">
             <div class="bench-header">
               <span class="bench-title" style="color:#e6a23c;">{{ props.awayTeamName || '客队' }} 替补席</span>
-              <el-tag size="small" type="info">{{ awayBench.length }} / {{ maxBenchSlots }} 人</el-tag>
+              <el-tag size="small" type="info">{{ props.benchUnlimited ? `${awayBench.length} 人 · 不限` : `${awayBench.length} / ${maxBenchSlots} 人` }}</el-tag>
             </div>
             <div class="bench-list">
               <div
@@ -354,6 +354,9 @@
                 class="bench-empty-slot"
                 @click="handleAwayBenchSlotClick"
               >
+                <span class="bench-empty-icon">+</span>
+              </div>
+              <div v-if="props.benchUnlimited" :key="'a-add'" class="bench-empty-slot bench-add-slot" title="继续添加替补" @click="addAwayBenchSlot">
                 <span class="bench-empty-icon">+</span>
               </div>
             </div>
@@ -516,6 +519,8 @@ const props = defineProps({
   onSave: { type: Function, default: undefined },
   playerCount: { type: Number, default: undefined },
   substitutePlayerLimit: { type: Number, default: undefined },
+  // 组别规程勾选“不限替补”时：先按标准位置给槽位，末尾保留一个加号继续追加
+  benchUnlimited: { type: Boolean, default: false },
   // 双队模式
   mode: { type: String, default: 'single' },
   homeTeamName: { type: String, default: '' },
@@ -724,8 +729,12 @@ const maxBenchSlots = computed(() => {
   return rule.maxSubs
 })
 
-const homeEmptyBenchSlots = computed(() => Math.max(0, maxBenchSlots.value - homeBench.value.length))
-const awayEmptyBenchSlots = computed(() => Math.max(0, maxBenchSlots.value - awayBench.value.length))
+// 不限替补时以标准位置为基础容量，每次点末尾加号再追加一个槽位
+const extraBenchSlots = ref(0)
+const benchCapacity = computed(() => props.benchUnlimited ? maxBenchSlots.value + extraBenchSlots.value : maxBenchSlots.value)
+
+const homeEmptyBenchSlots = computed(() => Math.max(0, benchCapacity.value - homeBench.value.length))
+const awayEmptyBenchSlots = computed(() => Math.max(0, benchCapacity.value - awayBench.value.length))
 
 // 主队（左半场）：直接使用 formation-data.json 原始坐标
 const homeCurrentPositions = computed(() => {
@@ -1253,7 +1262,7 @@ function handleHomeBenchSlotClick() {
     ElMessage.warning('请先选择主队阵型')
     return
   }
-  if (homeBench.value.length >= maxBenchSlots.value) {
+  if (homeBench.value.length >= benchCapacity.value) {
     ElMessage.warning('替补席已满')
     return
   }
@@ -1263,13 +1272,23 @@ function handleHomeBenchSlotClick() {
   showPlayerDialog.value = true
 }
 
+// 不限替补时，末尾加号先追加一个槽位再打开选择
+function addHomeBenchSlot() {
+  extraBenchSlots.value += 1
+  handleHomeBenchSlotClick()
+}
+function addAwayBenchSlot() {
+  extraBenchSlots.value += 1
+  handleAwayBenchSlotClick()
+}
+
 // 点击客队替补席空槽位
 function handleAwayBenchSlotClick() {
   if (!awaySelectedFormationId.value) {
     ElMessage.warning('请先选择客队阵型')
     return
   }
-  if (awayBench.value.length >= maxBenchSlots.value) {
+  if (awayBench.value.length >= benchCapacity.value) {
     ElMessage.warning('替补席已满')
     return
   }
@@ -1657,10 +1676,6 @@ function handlePlayerSearch() {}
   background: rgba(10, 31, 15, 0.92);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-
-  .editor-title {
-    color: #fff;
-  }
 
   :deep(.el-form-item__label) {
     color: rgba(255, 255, 255, 0.85);
@@ -2161,6 +2176,18 @@ function handlePlayerSearch() {}
     font-size: 24px;
     font-weight: 300;
     color: #888;
+  }
+}
+
+// 不限替补时始终保留的追加按钮，和普通空槽位区分开
+.bench-add-slot {
+  border-style: solid;
+  border-color: #2f6b4f;
+  background: #22372c;
+
+  .bench-empty-icon {
+    color: #4caf7d;
+    font-weight: 500;
   }
 }
 

@@ -614,6 +614,7 @@
         :awayPlayersList="awayPlayers"
         :playerCount="currentPlayerCount"
         :substitutePlayerLimit="substitutePlayerLimit"
+        :benchUnlimited="substituteBenchUnlimited"
         :homeInitialLineup="match.lineups?.home"
         :awayInitialLineup="match.lineups?.away"
         @save="handleVisualLineupSave"
@@ -1151,7 +1152,7 @@
 </template>
 
 <script setup>
-import { resolveMatchSubstitutePlayerLimit } from '../../utils/lineupBenchLimit.js'
+import { resolveMatchSubstitutePlayerLimit, resolveMatchBenchUnlimited } from '../../utils/lineupBenchLimit.js'
 import MatchDecision from '../../components/match/MatchDecision.vue'
 import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
@@ -1246,6 +1247,8 @@ const refName = ref('')
 const tournamentNameStr = ref('')
 const tournamentMatchFormat = ref('')
 const substitutePlayerLimit = ref(null)
+// 组别规程勾选“不限替补”时，裁判端阵容按标准位置给槽位并在末尾保留加号
+const substituteBenchUnlimited = ref(false)
 const saving = ref(false)
 const refereeSheetLoading = ref(false)
 const reviewSaving = ref(false)
@@ -1857,6 +1860,7 @@ async function loadTournamentName(tid, divisionId = '') {
       tournamentMatchFormat.value = division?.matchFormat || tournament.matchFormat || ''
       const playerCount = Number.parseInt(String(division?.matchFormat || tournamentMatchFormat.value || tournament.matchFormat || ''), 10)
       substitutePlayerLimit.value = resolveMatchSubstitutePlayerLimit(playerCount, match.value, division || {}, tournament)
+      substituteBenchUnlimited.value = resolveMatchBenchUnlimited(match.value, division || {}, tournament)
     }
   } catch (e) {
     console.warn('加载赛事名称失败:', e)
