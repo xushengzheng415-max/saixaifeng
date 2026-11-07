@@ -17,6 +17,10 @@
   var refereeInviteDraft = { inviteToken: '', certificateImageDataUrl: '', avatarImageDataUrl: '', avatarPreviewDataUrl: '', certificateRisks: [] }
   var refereeAvatarCropState = { image: null, baseScale: 1, zoom: 1, offsetX: 0, offsetY: 0, dragging: false, pointerX: 0, pointerY: 0 }
   var currentMatch = null
+  var preMatchDraft = null
+  var preMatchPollTimer = null
+  var preMatchRefreshing = false
+  var preMatchVisibilityBound = false
   var clockTimer = null
   var workbenchFilter = 'all'
   var signatureStrokes = []
@@ -49,6 +53,7 @@
 
   function loading(text) {
     stopClockTicker()
+    stopPreMatchPoll()
     app.innerHTML = '<div class="loading"><div class="spinner"></div>' + escapeHtml(text || '正在加载…') + '</div>'
   }
 
@@ -497,19 +502,27 @@
     currentMatch = match
     var preMatch = match.preMatch || {}
     var checklist = preMatch.checklist || []
-    var checkedCount = checklist.filter(function (item) { return item.checked }).length
+    if (!preMatchDraft || preMatchDraft.matchId !== String(match.matchId || '')) preMatchDraft = seedPreMatchDraft(match, checklist)
+    var checkedCount = checklist.filter(function (item) { return preMatchDraft.items[item.key] }).length
     var completeReady = preMatch.refereeArrived && preMatch.teamsArrived && preMatch.checklistComplete
+    var progress = preMatchProgress(preMatch)
     var steps = [
       ['报到与到场', true], ['阵容核验', !!preMatch.completed], ['赛前会议', false], ['赛前准备', false], ['开赛确认', false]
     ]
     app.innerHTML = '<section class="pre-match-hero"><button id="backButton" class="pre-match-back" type="button" aria-label="返回任务">返回</button><span>现场执行</span><h1>比赛报到与到场确认</h1></section>' +
       '<section class="pre-match-teams"><div class="pre-match-division">' + escapeHtml(match.divisionName || '比赛场次') + '</div><div class="pre-match-team-row"><strong>' + escapeHtml(match.homeTeamName) + '</strong><b>VS</b><strong>' + escapeHtml(match.awayTeamName) + '</strong></div><div class="pre-match-time"><span>' + escapeHtml(match.matchTimeText) + '</span><span>' + escapeHtml(match.venue) + '</span><span>' + escapeHtml(match.matchStatusText) + '</span></div></section>' +
       '<section class="pre-match-steps">' + steps.map(function (step, index) { return '<div class="pre-match-step' + preMatchStepClass(index === 0, step[1]) + '"><b>' + (index + 1) + '</b><span>' + step[0] + '</span></div>' }).join('') + '</section>' +
-      '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>裁判组报到</h2><span>' + (preMatch.refereeArrived ? '已确认' : '待确认') + '</span></div><p>仅本场获授权裁判可在抵达现场后确认报到。</p><button class="pre-match-action' + (preMatch.refereeArrived ? ' is-done' : '') + '" type="button" data-pre-match-operation="confirm_referee_arrival">' + (preMatch.refereeArrived ? '裁判已报到' : '确认本人已到场') + '</button></section>' +
-      '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>球队负责人报到</h2><span>' + (preMatch.teamsArrived ? '双方已确认' : '等待球队') + '</span></div><div class="pre-match-team-check"><span>' + escapeHtml(match.homeTeamName) + '（主队）</span><b>' + (preMatch.homeTeamArrived ? '负责人已确认' : '待负责人确认') + '</b></div><div class="pre-match-team-check"><span>' + escapeHtml(match.awayTeamName) + '（客队）</span><b>' + (preMatch.awayTeamArrived ? '负责人已确认' : '待负责人确认') + '</b></div></section>' +
-      '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>赛前检查清单</h2><span>' + checkedCount + '/' + checklist.length + '</span></div>' + checklist.map(function (item) { return '<button type="button" class="pre-match-check' + (item.checked ? ' is-checked' : '') + '" data-pre-match-operation="toggle_checklist" data-pre-match-item="' + escapeHtml(item.key) + '"><i aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span><b>' + (item.checked ? '已检查' : '待检查') + '</b></button>' }).join('') + '</section>' +
-      '<section class="pre-match-bottom"><button id="completePreMatch" class="pre-match-complete" type="button"' + (completeReady ? '' : ' disabled') + '>确认赛前检查，进入阵容核验</button><button id="preMatchIssue" class="pre-match-issue" type="button">报告无法开赛</button></section>'
+      '<section class="pre-match-sync" id="preMatchSync"><div class="pre-match-sync-text"><b id="preMatchProgressMain">' + escapeHtml(progress.main) + '</b><span id="preMatchProgressHint">' + escapeHtml(progress.hint) + '</span></div><button id="preMatchRefresh" class="pre-match-refresh" type="button">刷新</button></section>' +
+      '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>裁判组报到</h2><span id="preMatchRefereeState" class="status-chip ' + (preMatch.refereeArrived ? 'is-success' : 'is-warning') + '">' + (preMatch.refereeArrived ? '已确认' : '待确认') + '</span></div><p>仅本场获授权裁判可在抵达现场后确认报到。</p><button id="preMatchRefereeButton" class="pre-match-action' + (preMatch.refereeArrived ? ' is-done' : '') + '" type="button" data-pre-match-operation="confirm_referee_arrival">' + (preMatch.refereeArrived ? '裁判已报到' : '确认本人已到场') + '</button></section>' +
+      '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>球队负责人报到</h2><span id="preMatchTeamsState" class="status-chip ' + (preMatch.teamsArrived ? 'is-success' : 'is-warning') + '">' + (preMatch.teamsArrived ? '双方已确认' : '等待球队') + '</span></div><div class="pre-match-team-check"><span>' + escapeHtml(match.homeTeamName) + '（主队）</span><b id="preMatchHomeState" class="status-chip ' + (preMatch.homeTeamArrived ? 'is-success' : 'is-warning') + '">' + (preMatch.homeTeamArrived ? '负责人已确认' : '待负责人确认') + '</b></div><div class="pre-match-team-check"><span>' + escapeHtml(match.awayTeamName) + '（客队）</span><b id="preMatchAwayState" class="status-chip ' + (preMatch.awayTeamArrived ? 'is-success' : 'is-warning') + '">' + (preMatch.awayTeamArrived ? '负责人已确认' : '待负责人确认') + '</b></div></section>' +
+      '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>赛前检查清单</h2><span id="preMatchCheckCount">' + checkedCount + '/' + checklist.length + '</span></div>' + checklist.map(function (item) { var draftChecked = !!preMatchDraft.items[item.key]; return '<button type="button" class="pre-match-check' + (draftChecked ? ' is-checked' : '') + '" data-pre-match-check="' + escapeHtml(item.key) + '" aria-pressed="' + (draftChecked ? 'true' : 'false') + '"><i aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span><b>' + (draftChecked ? '已检查' : '待检查') + '</b></button>' }).join('') + '<p class="pre-match-check-hint">全部检查完成后，点下方「提交检查结果」一次性提交。</p></section>' +
+      '<section class="pre-match-bottom"><button id="submitPreMatchChecklist" class="pre-match-submit" type="button">提交检查结果</button><button id="completePreMatch" class="pre-match-complete" type="button"' + (completeReady ? '' : ' disabled') + '>确认赛前检查，进入阵容核验</button><button id="preMatchIssue" class="pre-match-issue" type="button">报告无法开赛</button></section>'
     document.getElementById('backButton').onclick = loadWorkbench
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pre-match-check]'), function (node) {
+      node.onclick = function () { togglePreMatchCheck(node, checklist) }
+    })
+    document.getElementById('submitPreMatchChecklist').onclick = function () { submitPreMatchChecklist(checklist) }
+    document.getElementById('preMatchRefresh').onclick = function () { refreshPreMatch(true) }
     Array.prototype.forEach.call(document.querySelectorAll('[data-pre-match-operation]'), function (node) {
       node.onclick = function () { updatePreMatch(node.getAttribute('data-pre-match-operation'), node.getAttribute('data-pre-match-item') || '') }
     })
@@ -519,6 +532,163 @@
       if (reason == null) return
       updatePreMatch('report_pre_match_issue', '', reason)
     }
+    startPreMatchPoll(match.matchId)
+  }
+
+  // 球队负责人可能在另一台手机上签到，裁判端需自动同步；轮询只读，不触发任何写操作
+  function stopPreMatchPoll() {
+    if (preMatchPollTimer) clearInterval(preMatchPollTimer)
+    preMatchPollTimer = null
+  }
+
+  function preMatchProgress(preMatch) {
+    var source = preMatch || {}
+    var home = source.homeTeamArrived
+    var away = source.awayTeamArrived
+    var main = (home ? '主队已签到' : '主队未签到') + ' · ' + (away ? '客队已签到' : '客队未签到')
+    var hint = '等待双方球队负责人签到'
+    if (source.completed) hint = '赛前检查已确认，可进入阵容核验'
+    else if (home && away && source.checklistComplete) hint = '双方已签到，可以确认赛前检查'
+    else if (home && away) hint = '双方已签到，请完成并提交赛前检查'
+    else if (home || away) hint = '等待另一支球队负责人签到'
+    return { main: main, hint: hint }
+  }
+
+  function preMatchSignature(preMatch) {
+    var source = preMatch || {}
+    return [!!source.refereeArrived, !!source.homeTeamArrived, !!source.awayTeamArrived, !!source.teamsArrived, !!source.checklistComplete, !!source.completed].join('|')
+  }
+
+  function startPreMatchPoll(matchId) {
+    stopPreMatchPoll()
+    var id = String(matchId || '')
+    if (!id) return
+    if (!preMatchVisibilityBound) {
+      preMatchVisibilityBound = true
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && preMatchPollTimer) refreshPreMatch(false)
+      })
+    }
+    preMatchPollTimer = setInterval(function () { refreshPreMatch(false) }, 12000)
+  }
+
+  // 只读刷新：保留未提交的勾选草稿与滚动位置，仅更新报到状态文案
+  function refreshPreMatch(manual) {
+    if (!currentMatch) return
+    var button = document.getElementById('preMatchRefresh')
+    if (preMatchRefreshing) { if (manual) toast('正在刷新，请稍候'); return }
+    var id = String(currentMatch.matchId || '')
+    if (!id) return
+    preMatchRefreshing = true
+    if (manual && button) { button.disabled = true; button.textContent = '刷新中…' }
+    workflow('getRefereeMatch', { matchId: id }).then(function (result) {
+      if (!result.success) throw new Error(result.message || '刷新失败')
+      var next = (result.data || {}).match || {}
+      if (String(next.matchId || '') !== id) throw new Error('比赛信息已变更，请返回任务重新进入')
+      if (!next.canManagePreMatch || (next.preMatch && next.preMatch.completed)) { stopPreMatchPoll(); return loadMatch(id) }
+      var changed = applyPreMatchSnapshot(next.preMatch || {})
+      if (manual && button) button.textContent = changed ? '已更新' : '已是最新'
+    }).catch(function (error) {
+      if (manual && button) button.textContent = '刷新失败'
+      if (manual) toast(error.message || '刷新失败')
+    }).then(function () {
+      preMatchRefreshing = false
+      if (!manual || !button || !button.isConnected) return
+      setTimeout(function () {
+        if (!button.isConnected) return
+        button.disabled = false
+        button.textContent = '刷新'
+      }, 1600)
+    })
+  }
+
+  function applyPreMatchSnapshot(preMatch) {
+    if (!currentMatch) return false
+    var changed = preMatchSignature(currentMatch.preMatch) !== preMatchSignature(preMatch)
+    currentMatch.preMatch = preMatch
+    var refereeState = document.getElementById('preMatchRefereeState')
+    if (refereeState) {
+      refereeState.className = 'status-chip ' + (preMatch.refereeArrived ? 'is-success' : 'is-warning')
+      refereeState.textContent = preMatch.refereeArrived ? '已确认' : '待确认'
+    }
+    var refereeButton = document.getElementById('preMatchRefereeButton')
+    if (refereeButton) {
+      if (preMatch.refereeArrived) refereeButton.classList.add('is-done')
+      else refereeButton.classList.remove('is-done')
+      refereeButton.textContent = preMatch.refereeArrived ? '裁判已报到' : '确认本人已到场'
+    }
+    var teamsState = document.getElementById('preMatchTeamsState')
+    if (teamsState) {
+      teamsState.className = 'status-chip ' + (preMatch.teamsArrived ? 'is-success' : 'is-warning')
+      teamsState.textContent = preMatch.teamsArrived ? '双方已确认' : '等待球队'
+    }
+    var homeState = document.getElementById('preMatchHomeState')
+    if (homeState) {
+      homeState.className = 'status-chip ' + (preMatch.homeTeamArrived ? 'is-success' : 'is-warning')
+      homeState.textContent = preMatch.homeTeamArrived ? '负责人已确认' : '待负责人确认'
+    }
+    var awayState = document.getElementById('preMatchAwayState')
+    if (awayState) {
+      awayState.className = 'status-chip ' + (preMatch.awayTeamArrived ? 'is-success' : 'is-warning')
+      awayState.textContent = preMatch.awayTeamArrived ? '负责人已确认' : '待负责人确认'
+    }
+    var completeButton = document.getElementById('completePreMatch')
+    if (completeButton) completeButton.disabled = !(preMatch.refereeArrived && preMatch.teamsArrived && preMatch.checklistComplete)
+    if (changed) {
+      var progress = preMatchProgress(preMatch)
+      var mainNode = document.getElementById('preMatchProgressMain')
+      if (mainNode) mainNode.textContent = progress.main
+      var hintNode = document.getElementById('preMatchProgressHint')
+      if (hintNode) hintNode.textContent = progress.hint
+      var syncNode = document.getElementById('preMatchSync')
+      if (syncNode) {
+        syncNode.classList.add('is-updated')
+        setTimeout(function () { if (syncNode.isConnected) syncNode.classList.remove('is-updated') }, 2500)
+      }
+    }
+    return changed
+  }
+
+  function seedPreMatchDraft(match, checklist) {
+    var items = {}
+    ;(checklist || []).forEach(function (item) { items[item.key] = !!item.checked })
+    return { matchId: String(match && match.matchId || ''), items: items, submitting: false }
+  }
+
+  function togglePreMatchCheck(node, checklist) {
+    if (!preMatchDraft) return
+    var key = node.getAttribute('data-pre-match-check')
+    var checked = !preMatchDraft.items[key]
+    preMatchDraft.items[key] = checked
+    node.className = 'pre-match-check' + (checked ? ' is-checked' : '')
+    node.setAttribute('aria-pressed', checked ? 'true' : 'false')
+    var stateNode = node.querySelector('b')
+    if (stateNode) stateNode.textContent = checked ? '已检查' : '待检查'
+    var countNode = document.getElementById('preMatchCheckCount')
+    if (countNode) countNode.textContent = checklist.filter(function (item) { return preMatchDraft.items[item.key] }).length + '/' + checklist.length
+  }
+
+  function submitPreMatchChecklist(checklist) {
+    if (!currentMatch || !preMatchDraft || preMatchDraft.submitting) return
+    var unchecked = (checklist || []).filter(function (item) { return !preMatchDraft.items[item.key] })
+    if (unchecked.length) {
+      toast('还有 ' + unchecked.length + ' 项未勾选：' + unchecked.map(function (item) { return item.label }).join('、'))
+      return
+    }
+    preMatchDraft.submitting = true
+    var button = document.getElementById('submitPreMatchChecklist')
+    if (button) { button.disabled = true; button.textContent = '正在提交检查结果…' }
+    loading('正在提交赛前检查结果…')
+    workflow('updatePreMatchState', { matchId: currentMatch.matchId, operation: 'submit_checklist', items: Object.assign({}, preMatchDraft.items) }).then(function (result) {
+      if (!result.success) throw new Error(result.message || '赛前检查提交失败')
+      preMatchDraft = null
+      toast(result.message || '赛前检查结果已提交')
+      loadMatch(currentMatch.matchId)
+    }).catch(function (error) {
+      if (preMatchDraft) preMatchDraft.submitting = false
+      if (button) { button.disabled = false; button.textContent = '重新提交检查结果' }
+      showError('赛前检查提交失败', error.message, function () { submitPreMatchChecklist(checklist) })
+    })
   }
 
   function updatePreMatch(operation, itemKey, reason) {
@@ -530,7 +700,8 @@
     }).catch(function (error) { showError('赛前确认保存失败', error.message, function () { loadMatch(currentMatch.matchId) }) })
   }
 
-  function lineupStatusText(status) {
+  function lineupStatusText(status, lightweight) {
+    if (lightweight) return { locked: '已人工确认并锁定', submitted: '待记录员人工确认', returned: '已退回修改', unclaimed: '尚未提交' }[status] || '尚未提交'
     return { submitted: '待第四官员初审', fourth_approved:'待主裁判确认', identity_check:'待助理裁判逐人核验', identity_verified:'身份核验完成', verified: '核验通过', locked: '已锁定', returned: '已退回修改', unclaimed: '尚未提交' }[status] || '尚未提交'
   }
 
@@ -545,21 +716,35 @@
     var verifiedCount = teams.filter(function (team) { return ['verified', 'locked'].indexOf(team.roster.status) >= 0 }).length
     function playerRow(player, teamStatus) {
       var state = ['verified', 'locked'].indexOf(teamStatus) >= 0 ? '核验通过' : (teamStatus === 'returned' ? '名单已退回' : '待现场核验')
-      return '<div class="lineup-player"><span class="lineup-number">' + escapeHtml(player.jerseyNumber || '—') + '</span><span class="lineup-player-name">' + escapeHtml(player.name) + '<small>' + (player.role === 'substitute' ? '替补' : '首发') + '</small></span><b class="lineup-player-state">' + escapeHtml(player.identityStatus || state) + '</b></div>'
+      var roleText = player.role === 'substitute' ? '替补' : '首发'
+      var positionText = String(player.positionText || '—')
+      return '<div class="lineup-player"><span class="lineup-number">' + escapeHtml(player.jerseyNumber || '待补') + '</span><span class="lineup-player-name">' + escapeHtml(player.name) + '<small>' + roleText + ' · ' + escapeHtml(positionText) + '</small></span><b class="lineup-player-state">' + escapeHtml(player.identityStatus || state) + '</b></div>'
     }
     function teamCard(team, expanded) {
       var roster = team.roster
       var status = roster.status || 'unclaimed'
+      var lightweight = match.isLightweightReferee === true
       var starters = (roster.players || []).filter(function (player) { return player.role !== 'substitute' })
       var substitutes = (roster.players || []).filter(function (player) { return player.role === 'substitute' })
-      var canMainConfirm = match.refereeRole === 'mainReferee' && roster.fourthConfirmed && !roster.mainConfirmed && status === 'fourth_approved'
-      var canReturn = match.refereeRole === 'mainReferee' && ['submitted','fourth_approved'].indexOf(status) >= 0
-      return '<section class="lineup-team-card' + (expanded ? ' is-expanded' : '') + '"><div class="lineup-team-heading"><div><span class="lineup-team-side">' + (team.side === 'home' ? '主队' : '客队') + '</span><h2>' + escapeHtml(team.name) + '</h2><small>' + escapeHtml(lineupStatusText(status)) + '</small></div><button type="button" class="lineup-expand" data-lineup-expand="' + team.side + '">' + (expanded ? '收起' : '展开') + '</button></div><div class="lineup-metrics"><span>首发 <b>' + starters.length + '</b> 人</span><span>替补 <b>' + substitutes.length + '</b> 人</span><span>共 <b>' + (roster.players || []).length + '</b> 人</span></div>' +
+      var canMainConfirm = !lightweight && match.refereeRole === 'mainReferee' && roster.fourthConfirmed && !roster.mainConfirmed && status === 'fourth_approved'
+      var canReturn = lightweight ? (match.refereeRole === 'fourthOfficial' && ['submitted','locked'].indexOf(status) >= 0) : (match.refereeRole === 'mainReferee' && ['submitted','fourth_approved'].indexOf(status) >= 0)
+      var actions = lightweight
+        ? '<div class="lineup-card-actions"><button type="button" class="lineup-return" data-lineup-stage="manual" data-lineup-decision="returned" data-lineup-side="' + team.side + '"' + (canReturn ? '' : ' disabled') + '>发现问题，退回球队修改</button></div>'
+        : '<div class="lineup-card-actions"><button type="button" class="lineup-pass" data-lineup-stage="main" data-lineup-decision="approved" data-lineup-side="' + team.side + '"' + (canMainConfirm ? '' : ' disabled') + '>主裁判确认阵容</button><button type="button" class="lineup-return" data-lineup-stage="main" data-lineup-decision="returned" data-lineup-side="' + team.side + '"' + (canReturn ? '' : ' disabled') + '>退回球队修改</button></div>'
+      return '<section class="lineup-team-card' + (expanded ? ' is-expanded' : '') + '"><div class="lineup-team-heading"><div><span class="lineup-team-side">' + (team.side === 'home' ? '主队' : '客队') + '</span><h2>' + escapeHtml(team.name) + '</h2><small>' + escapeHtml(lineupStatusText(status, lightweight)) + (roster.formationText ? ' · 阵型 ' + escapeHtml(roster.formationText) : '') + '</small></div><button type="button" class="lineup-expand" data-lineup-expand="' + team.side + '">' + (expanded ? '收起' : '展开') + '</button></div><div class="lineup-metrics"><span>首发 <b>' + starters.length + '</b> 人</span><span>替补 <b>' + substitutes.length + '</b> 人</span><span>共 <b>' + (roster.players || []).length + '</b> 人</span></div>' +
         (expanded ? '<div class="lineup-list-title">首发球员（' + starters.length + '人）</div><div class="lineup-players">' + (starters.length ? starters.map(function (player) { return playerRow(player, status) }).join('') : '<p class="lineup-empty">球队尚未提交本场首发阵容。</p>') + '</div>' + (substitutes.length ? '<div class="lineup-list-title">替补球员（' + substitutes.length + '人）</div><div class="lineup-players">' + substitutes.map(function (player) { return playerRow(player, status) }).join('') + '</div>' : '') : '') +
-        '<div class="lineup-card-actions"><button type="button" class="lineup-pass" data-lineup-stage="main" data-lineup-decision="approved" data-lineup-side="' + team.side + '"' + (canMainConfirm ? '' : ' disabled') + '>主裁判确认阵容</button><button type="button" class="lineup-return" data-lineup-stage="main" data-lineup-decision="returned" data-lineup-side="' + team.side + '"' + (canReturn ? '' : ' disabled') + '>退回球队修改</button></div></section>'
+        actions + '</section>'
     }
     var expandedSide = match.lineupExpandedSide === 'away' ? 'away' : 'home'
-    app.innerHTML = '<section class="lineup-hero"><button id="backButton" class="pre-match-back" type="button">返回</button><span>现场执行</span><h1>双方阵容及球员身份核验</h1><p>' + escapeHtml(match.matchTimeText) + ' · ' + escapeHtml(match.venue) + '</p></section><section class="lineup-steps"><span>赛前准备</span><b>2</b><strong>阵容核验</strong><span>赛前会议</span><span>设备检查</span><span>比赛开始</span></section><section class="lineup-notice">阵容由球队提交，裁判仅现场核验，不在此编辑首发或替补。</section>' + teams.map(function (team) { return teamCard(team, team.side === expandedSide) }).join('') + '<section class="lineup-bottom"><button id="lineupDone" type="button"' + (match.lineupsLocked ? '' : ' disabled') + '>完成核验并开始比赛</button><p>已完成 ' + verifiedCount + '/2 支球队核验。发现身份不符或名单异常时，请标记异常并退回球队修改。</p></section>'
+    var lightweight = match.isLightweightReferee === true
+    var heroTitle = lightweight ? '双方阵容（记录员人工确认）' : '双方阵容及球员身份核验'
+    var notice = lightweight
+      ? '轻量化裁判模式：记录员核对双方已提交的首发与替补名单，确认无误后一键人工确认双方阵容并锁定；本模式不做逐人身份核验。'
+      : '阵容由球队提交，裁判仅现场核验，不在此编辑首发或替补。'
+    var bottom = lightweight
+      ? '<section class="lineup-bottom"><button id="lineupManualConfirm" type="button"' + (match.canManualConfirmLineup ? '' : ' disabled') + '>人工确认双方阵容</button>' + (match.lineupsLocked ? '<button id="lineupDone" type="button">进入比赛</button><p>已由记录员' + (match.lineupManualConfirmedByMasked ? '（' + escapeHtml(match.lineupManualConfirmedByMasked) + '）' : '') + '人工确认双方阵容，阵容已锁定。</p>' : '<p>双方均提交首发后，记录员一键人工确认并锁定阵容；确认后即可开赛。</p>') + '</section>'
+      : '<section class="lineup-bottom"><button id="lineupDone" type="button"' + (match.lineupsLocked ? '' : ' disabled') + '>完成核验并开始比赛</button><p>已完成 ' + verifiedCount + '/2 支球队核验。发现身份不符或名单异常时，请标记异常并退回球队修改。</p></section>'
+    app.innerHTML = '<section class="lineup-hero"><button id="backButton" class="pre-match-back" type="button">返回</button><span>现场执行</span><h1>' + escapeHtml(heroTitle) + '</h1><p>' + escapeHtml(match.matchTimeText) + ' · ' + escapeHtml(match.venue) + '</p></section><section class="lineup-steps"><span>赛前准备</span><b>2</b><strong>阵容核验</strong><span>赛前会议</span><span>设备检查</span><span>比赛开始</span></section><section class="lineup-notice">' + escapeHtml(notice) + '</section>' + teams.map(function (team) { return teamCard(team, team.side === expandedSide) }).join('') + bottom
     document.getElementById('backButton').onclick = function () { renderPreMatch(match) }
     Array.prototype.forEach.call(document.querySelectorAll('[data-lineup-expand]'), function (node) {
       node.onclick = function () { match.lineupExpandedSide = node.getAttribute('data-lineup-expand'); renderLineupVerification(match) }
@@ -567,7 +752,20 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-lineup-decision]'), function (node) {
       node.onclick = function () { reviewLineupStageFromMatch(node.getAttribute('data-lineup-side'), node.getAttribute('data-lineup-stage'), node.getAttribute('data-lineup-decision')) }
     })
-    document.getElementById('lineupDone').onclick = function () { renderMatch(match) }
+    var manualButton = document.getElementById('lineupManualConfirm')
+    if (manualButton) manualButton.onclick = function () { manualConfirmLineup() }
+    var doneButton = document.getElementById('lineupDone')
+    if (doneButton) doneButton.onclick = function () { renderMatch(match) }
+  }
+
+  function manualConfirmLineup() {
+    if (!currentMatch) return
+    if (!window.confirm('确认双方提交的首发与替补名单与现场一致？确认后将锁定双方阵容并允许开赛。')) return
+    loading('正在人工确认双方阵容…')
+    workflow('confirmLineupStage', { matchId: currentMatch.matchId, decision: 'approved' }).then(function (result) {
+      if (!result.success) throw new Error(result.message || '人工确认失败')
+      toast(result.message || '已人工确认双方阵容'); loadMatch(currentMatch.matchId)
+    }).catch(function (error) { showError('人工确认阵容失败', error.message, function () { loadMatch(currentMatch.matchId) }) })
   }
 
   function reviewLineupStageFromMatch(side, stage, decision) {

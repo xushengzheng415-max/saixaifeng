@@ -131,11 +131,20 @@
 .pp-personal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px}
 .pp-personal-actions .pp-ins-cta{min-height:44px}
 .pp-personal-list{margin-top:16px;text-align:left}
-.pp-personal-card{margin-top:10px;padding:14px;border-radius:14px;background:#fff;border:1px solid #e6ede8;text-align:left}
+.pp-personal-card{display:block;width:100%;margin-top:10px;padding:14px;border-radius:14px;background:#fff;border:1px solid #e6ede8;text-align:left;font:inherit;color:inherit;cursor:pointer;box-shadow:0 2px 10px #173d2b0a}
+.pp-personal-card:active{transform:translateY(1px)}
 .pp-personal-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pp-personal-head strong{font-size:14px;color:#173d2b}
 .pp-personal-card .pp-ins-grid{margin-top:10px}
-.pp-personal-card .pp-ins-guide{margin:10px 0 0;font-size:11px;line-height:1.6;color:#849489}
+.pp-personal-more{display:flex;align-items:center;justify-content:space-between;margin:12px 0 0;font-size:11px;font-weight:600;color:#0b5a3f}
+.pp-personal-more i{font-style:normal;font-size:16px;line-height:1}
+.pp-policy-tip{display:flex;align-items:flex-start;gap:8px;margin:12px 0 0;padding:10px 12px;border-radius:11px;background:#fff8eb;border:1px solid #f3e2bf;font-size:11px;line-height:1.65;color:#8d650f;text-align:left}
+.pp-policy-tip i{flex:0 0 auto;width:16px;height:16px;margin-top:1px;border-radius:50%;background:#d4930f;color:#fff;font-size:11px;font-weight:700;font-style:normal;line-height:16px;text-align:center}
+.pp-policy-detail ul{list-style:none;margin:0;padding:0}
+.pp-policy-detail li{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px dashed #e6ede8;font-size:12px}
+.pp-policy-detail li:last-child{border-bottom:0}
+.pp-policy-detail li span{flex:0 0 auto;color:#849489}
+.pp-policy-detail li b{font-weight:600;color:#28452f;text-align:right;overflow-wrap:anywhere}
 .pp-foot-note{margin:18px 2px 0;font-size:10px;line-height:1.7;color:#9aa79d}
 .pp-pass-filter{display:flex;gap:8px;margin:14px 0 2px}
 .pp-pass-filter button{flex:1;min-height:36px;border-radius:999px;border:1px solid #d7e3db;background:#fff;color:#41614f;font-size:12px;font-weight:600}
@@ -194,6 +203,18 @@
 @keyframes ppPassIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1.02)}}
 body.pp-pass-presenting{overflow:hidden}
 .pp-pass-crest{position:absolute;right:10px;bottom:58px;width:118px;height:118px;object-fit:contain;opacity:.5;pointer-events:none;z-index:0;filter:drop-shadow(0 4px 10px #00000022)}
+.pp-pass-ins-fold{position:relative;z-index:1;margin-top:10px;border-radius:11px;border:1px solid #ffffff24;background:#ffffff0c}
+.pp-pass-ins-fold>summary{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;list-style:none}
+.pp-pass-ins-fold>summary::-webkit-details-marker{display:none}
+.pp-pass-ins-fold>summary::after{content:'▾';margin-left:auto;color:#cfe3d7;font-size:11px;transition:transform .18s ease}
+.pp-pass-ins-fold[open]>summary::after{transform:rotate(180deg)}
+.pp-pass-ins-tag{flex-shrink:0;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:1px;color:#e8c877;background:#e8c87724}
+.pp-pass-ins-fold>summary b{flex:1;min-width:0;color:#f2f8f4;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-pass-ins-fold>summary small{flex-shrink:0;color:#cfe3d7;font-size:11px}
+.pp-pass-ins-fold[open]>summary small{display:none}
+.pp-pass-ins-fold .pp-pass-insurance{margin-top:0;border:0;border-top:1px solid #ffffff24;border-radius:0 0 11px 11px;background:transparent}
+.pp-pass-ins-fold .pp-pass-insurance.ok{border-top-color:#e8c87744}
+.pp-pass-ins-fold .pp-pass-insurance.warn{border-top-color:#ffb07044}
 .pp-pass-insurance{position:relative;z-index:1;display:flex;flex-direction:column;gap:8px;margin-top:10px;padding:9px 12px;border-radius:11px;border:1px solid #ffffff24;background:#ffffff12}
 .pp-pass-insurance-main{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .pp-pass-insurance span{font-size:10px;letter-spacing:1.2px;font-weight:700;color:#e8c877;flex-shrink:0}

@@ -38,7 +38,7 @@
   ]
  }
  function mockPersonalPolicy(){
-  return {playerId:'p2',playerName:'郑晓峰',insuredName:'郑晓峰',productType:'人身意外伤害保险',policyNo:'PA2026010100123',coverStart:'2026-01-01',coverEnd:'2026-12-31',matchResult:'matched',reviewFlag:'ok',coverageOk:true}
+  return {playerId:'p2',playerName:'郑晓峰',insuredName:'郑晓峰',productType:'人身意外伤害保险',insurer:'安诚财产保险股份有限公司',policyNo:'PA2026010100123',coverStart:'2026-01-01',coverEnd:'2026-12-31',matchResult:'matched',reviewFlag:'ok',coverageOk:true}
  }
  function mockParticipation(){
   var BUY='https://anlan-dplatform-h5.cn-anlan.com/?channelCode=100998&goodsId=170&promotionId=144&tenantFrom=ba&thirdOrderNo=100998_261606&thirdOrderNoType=1&flag=aquarius'
@@ -196,6 +196,11 @@
   if(info.canUpload)actions.push('<button type="button" class="pp-ins-upload" data-insurance-upload="'+esc(item.id)+'">上传保单</button>')
   return '<div class="pp-pass-insurance '+tone+'"><div class="pp-pass-insurance-main"><span>保险</span><b>'+esc(info.text||'保险信息待确认')+'</b>'+(info.productType?'<small>'+esc(info.productType)+'</small>':'')+'</div>'+(actions.length?'<div class="pp-pass-insurance-actions">'+actions.join('')+'</div>':'')+'</div>'
  }
+ // 证面只留照片、组别/球衣号与资格状态；保单明细和操作收进点击展开，避免现场首屏加载过多内容
+ function passInsuranceFold(item){
+  var info=item.insurance||{},tone=participationTone(info.tone||'muted')
+  return '<details class="pp-pass-ins-fold"><summary><span class="pp-pass-ins-tag '+tone+'">保险</span><b>'+esc(info.text||'保险信息待确认')+'</b><small>查看明细</small></summary>'+passInsuranceBanner(item)+'</details>'
+ }
  function passQrPanel(item,opts){
   opts=opts||{}
   var pass=item.pass||{},qr=pass.qr||{},mode=pass.mode,cache=(state.passQrCache&&state.passQrCache[item.id])||null
@@ -241,7 +246,7 @@
     '<div><span>组别</span><b>'+esc(item.divisionName||'—')+'</b></div>'+
     (when?'<div class="wide"><span>赛期 / 场地</span><b>'+esc(when)+'</b></div>':'')+
    '</div>'+
-   passInsuranceBanner(item)+
+   passInsuranceFold(item)+
    '<div class="pp-pass-credential"><span>'+(mode==='youth'?'核验方式':'参赛证号')+'</span><b>'+esc(passNumberText(item))+'</b></div>'+
    passQrPanel(item,opts)+
    '<div class="pp-pass-foot"><span class="pp-state '+participationTone(eligible?'ok':item.stateTone)+'">'+esc(pass.stateText||item.stateText)+'</span>'+(eligible?'<span class="pp-pass-stamp">正式名单</span>':'')+'</div>'+
@@ -301,6 +306,10 @@
   }
  }
  // ---------- 个人保险：购买入口与个人保单（个人随时可买，参赛时自动调用） ----------
+ var POLICY_CLAIM_TIP='此类保险只有在运动中意外受伤才能正常理赔'
+ function policyClaimTip(){
+  return '<p class="pp-policy-tip"><i aria-hidden="true">!</i><span>'+POLICY_CLAIM_TIP+'</span></p>'
+ }
  function personalInsuranceActions(){
   var purchase=(state.participation&&state.participation.purchase)||{}
   return '<div class="pp-personal-actions">'+
@@ -308,26 +317,47 @@
    '<button type="button" class="pp-ins-cta upload" data-personal-upload="1">上传保险单</button>'+
   '</div>'
  }
- function personalInsuranceHome(){
+ function personalPoliciesSection(){
   var data=state.participation||{},policies=Array.isArray(data.personalPolicies)?data.personalPolicies:[]
-  return '<section class="pp-empty pp-personal">'+
-   '<strong>暂无保险资料</strong>'+
-   '<p>保险是个人随时可以买的：先买一份或把已有保单存到球员名下，报名参赛时直接调用，不用再传。</p>'+
+  var intro=policies.length
+   ?'<strong>我的保单</strong><p>个人随时可买，报名参赛时直接调用，不用再传。</p>'
+   :'<strong>暂无保险资料</strong><p>保险是个人随时可以买的：先买一份或把已有保单存到球员名下，报名参赛时直接调用，不用再传。</p>'
+  return '<section class="pp-empty pp-personal">'+intro+policyClaimTip()+
    (policies.length?'<div class="pp-personal-list">'+policies.map(personalPolicyCard).join('')+'</div>':'')+
-   personalInsuranceActions()+
   '</section>'
  }
- function personalPolicyCard(policy){
-  var cover=(policy.coverStart||policy.coverEnd)?((policy.coverStart||'?')+' — '+(policy.coverEnd||'?')):'待识别'
-  return '<article class="pp-personal-card">'+
+ function personalInsuranceHome(){
+  return personalPoliciesSection()+personalInsuranceActions()
+ }
+ function personalPolicyCard(policy,index){
+  var cover=(policy.coverStart||policy.coverEnd)?((policy.coverStart||'?')+' 至 '+(policy.coverEnd||'?')):'待识别'
+  return '<button type="button" class="pp-personal-card" data-policy-detail="'+(Number(index)||0)+'">'+
    '<div class="pp-personal-head"><strong>'+esc(policy.playerName||'球员')+'</strong><span class="pp-state ok">已保存</span></div>'+
    '<div class="pp-ins-grid">'+
     '<div><span>险种</span><b>'+esc(policy.productType||'待识别')+'</b></div>'+
     '<div><span>保单号</span><b>'+esc(policy.policyNo||'—')+'</b></div>'+
     '<div><span>保障期</span><b>'+esc(cover)+'</b></div>'+
    '</div>'+
-   '<p class="pp-ins-guide">已存为个人保单，有效期 '+esc(policy.coverStart||'待识别')+' 至 '+esc(policy.coverEnd||'待识别')+'；报名后按赛事日期核验，覆盖参赛当日即可提交，没有交集需重新购买上传。</p>'+
-  '</article>'
+   '<p class="pp-personal-more"><span>查看保单详情</span><i aria-hidden="true">›</i></p>'+
+  '</button>'
+ }
+ function openPolicyDetail(index){
+  var policies=(state.participation&&Array.isArray(state.participation.personalPolicies))?state.participation.personalPolicies:[]
+  var policy=policies[Number(index)||0]
+  if(!policy){toast('保单信息已失效，请刷新后重试');return}
+  modal('保单详情','<div class="pp-policy-detail">'+
+   '<ul>'+
+    '<li><span>球员</span><b>'+esc(policy.playerName||'球员')+'</b></li>'+
+    '<li><span>被保险人</span><b>'+esc(policy.insuredName||'—')+'</b></li>'+
+    '<li><span>保障起</span><b>'+esc(policy.coverStart||'—')+'</b></li>'+
+    '<li><span>保障止</span><b>'+esc(policy.coverEnd||'—')+'</b></li>'+
+    '<li><span>险种</span><b>'+esc(policy.productType||'未识别险种')+'</b></li>'+
+    (policy.insurer?'<li><span>承保</span><b>'+esc(policy.insurer)+'</b></li>':'')+
+    '<li><span>保单号</span><b>'+esc(policy.policyNo||'—')+'</b></li>'+
+   '</ul>'+
+   policyClaimTip()+
+   '<p class="me-modal-text muted">报名后按赛事日期核验保障期：覆盖参赛当日即可提交，没有交集需重新购买上传。平台只核验保单文字，不替代保险公司承保确认。</p>'+
+  '</div>',true)
  }
  function openPersonalBuy(){
   var purchase=(state.participation&&state.participation.purchase)||{}
@@ -471,7 +501,7 @@
   }else if(!items.length){
    body='<section class="pp-empty"><strong>'+(isPass?'暂无可出示的参赛证':'暂无参赛资料')+'</strong><p>球队报名并通过正式名单审核后，这里会显示参赛资料、电子参赛证与保险补件。</p></section>'
   }else if(isIns){
-   body=items.map(insuranceListCard).join('')+personalInsuranceActions()
+   body=personalPoliciesSection()+items.map(insuranceListCard).join('')+personalInsuranceActions()
   }else if(isPass){
    var eligible=items.filter(function(item){return item.pass&&item.pass.eligible})
    var waiting=items.filter(function(item){return !(item.pass&&item.pass.eligible)})
@@ -949,6 +979,7 @@
    '<li><span>险种</span><b>'+esc(draft.productType||'未识别险种')+'</b></li>'+
    (draft.insurer?'<li><span>承保</span><b>'+esc(draft.insurer)+'</b></li>':'')+
    '<li><span>保单号</span><b>'+esc(draft.policyNo||'—')+'</b></li></ul>'+
+   policyClaimTip()+
    '<small>'+esc(draft.disclaimer||'')+'</small></div>'
   if(actions)actions.hidden=false
  }
@@ -1011,6 +1042,7 @@
   else if(t.dataset.personalUpload){openPersonalInsurance()}
   else if(t.dataset.personalConfirm){confirmPersonalInsurance()}
   else if(t.dataset.personalApply){applyPersonalPolicy(t.dataset.personalApply)}
+  else if(t.dataset.policyDetail!=null){openPolicyDetail(t.dataset.policyDetail)}
   else if(t.dataset.personalPlayer){if(t.dataset.personalPlayer===state.personalPlayerId)return;state.personalPlayerId=t.dataset.personalPlayer;state.personalDraft=null;openPersonalInsurance()}
   else if(t.dataset.passClose){closePassPresent()}
   else if(t.dataset.memberBuy){membershipBuy(t.dataset.memberBuy)}

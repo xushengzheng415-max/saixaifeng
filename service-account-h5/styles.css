@@ -7,6 +7,23 @@
   --text: #132019;
   --muted: #65736c;
   --danger: #b42318;
+  /* 统一语义状态色：成功/已确认、警示/待确认、危险/异常、中性/未开始 */
+  --status-success-text: #0b5c39;
+  --status-success-main: #087a48;
+  --status-success-bg: #eaf7ee;
+  --status-success-line: #c6e4d1;
+  --status-warning-text: #8a5a00;
+  --status-warning-main: #b7791f;
+  --status-warning-bg: #fff4dd;
+  --status-warning-line: #f0d9a8;
+  --status-danger-text: #b42318;
+  --status-danger-main: #d92d20;
+  --status-danger-bg: #fef3f2;
+  --status-danger-line: #f7c9c5;
+  --status-neutral-text: #5f6b64;
+  --status-neutral-main: #8b978f;
+  --status-neutral-bg: #f0f3f1;
+  --status-neutral-line: #dde5e0;
   --shadow: 0 12px 32px rgba(8, 47, 37, .10);
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 }
@@ -479,24 +496,43 @@ button { cursor: pointer; }
 .pre-match-panel { margin-top: 12px; padding: 16px; border: 1px solid #dce8e2; border-radius: 16px; background: #fff; box-shadow: 0 8px 21px rgba(8, 47, 37, .05); }
 .pre-match-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .pre-match-panel-title h2 { margin: 0; font-size: 17px; }
-.pre-match-panel-title span { color: #087148; font-size: 12px; font-weight: 800; }
+.pre-match-panel-title span { font-size: 12px; font-weight: 800; }
+/* 统一状态胶囊：色相 + 实心/空心圆点同时区分，避免红绿弱辨识 */
+.status-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid transparent; border-radius: 99px; font-size: 12px; font-weight: 800; line-height: 1.45; white-space: nowrap; }
+.status-chip::before { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; content: ''; background: currentColor; }
+.status-chip.is-success { color: var(--status-success-text); border-color: var(--status-success-line); background: var(--status-success-bg); }
+.status-chip.is-warning { color: var(--status-warning-text); border-color: var(--status-warning-line); background: var(--status-warning-bg); }
+.status-chip.is-warning::before { width: 4px; height: 4px; border: 2px solid currentColor; background: transparent; }
+.status-chip.is-danger { color: var(--status-danger-text); border-color: var(--status-danger-line); background: var(--status-danger-bg); }
+.status-chip.is-neutral { color: var(--status-neutral-text); border-color: var(--status-neutral-line); background: var(--status-neutral-bg); }
+.status-chip.is-neutral::before { background: transparent; border: 2px solid currentColor; width: 4px; height: 4px; }
 .pre-match-panel > p { margin: 9px 0 12px; color: #75837c; font-size: 12px; line-height: 1.55; }
 .pre-match-action { width: 100%; padding: 11px; border: 1px solid #0b6b45; border-radius: 10px; color: #087148; background: #fff; font-weight: 800; }
 .pre-match-action.is-done { border-color: #d4eadb; color: #087148; background: #eff9f2; }
 .pre-match-team-check { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #edf2ef; font-size: 14px; }
-.pre-match-team-check b { color: #087148; font-size: 13px; }
+.pre-match-team-check b { font-size: 12px; }
 .pre-match-team-check + .pre-match-action { margin-top: 13px; }
 .pre-match-check { display: grid; grid-template-columns: 25px 1fr auto; align-items: center; width: 100%; gap: 7px; padding: 12px 0; border: 0; border-bottom: 1px solid #edf2ef; color: #273b30; background: transparent; text-align: left; }
 .pre-match-check:last-child { border-bottom: 0; }
 .pre-match-check i { display: grid; place-items: center; width: 21px; height: 21px; border: 1px solid #c9d8d0; border-radius: 5px; color: #fff; font-style: normal; }
-.pre-match-check.is-checked i { border-color: #087148; background: #087148; }
-.pre-match-check b { color: #7d8a84; font-size: 12px; }
-.pre-match-check.is-checked b { color: #087148; }
+.pre-match-check.is-checked i { border-color: var(--status-success-main); background: var(--status-success-main); }
+.pre-match-check b { color: var(--status-neutral-text); font-size: 12px; }
+.pre-match-check.is-checked b { color: var(--status-success-text); }
 .pre-match-bottom { display: grid; gap: 10px; margin: 18px 2px 0; }
 .pre-match-complete, .pre-match-issue { padding: 15px; border-radius: 13px; font-size: 16px; font-weight: 800; }
 .pre-match-complete { border: 0; color: #fff; background: #087148; }
 .pre-match-complete:disabled { cursor: not-allowed; background: #aebbb4; opacity: 1; }
-.pre-match-issue { border: 1px solid #e3564d; color: #d92d20; background: #fff; }
+.pre-match-issue { border: 1px solid var(--status-danger-main); color: var(--status-danger-text); background: var(--status-danger-bg); }
+.pre-match-check-hint { margin: 10px 0 0; color: #7d8a84; font-size: 12px; }
+.pre-match-sync { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 2px 0; padding: 12px 14px; border: 1px solid #d8e6dd; border-radius: 13px; background: #f2f8f4; transition: background .3s ease, border-color .3s ease; }
+.pre-match-sync.is-updated { border-color: #087148; background: #e2f3e9; }
+.pre-match-sync-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pre-match-sync-text b { color: #073b28; font-size: 14px; }
+.pre-match-sync-text span { color: #5f7368; font-size: 12px; }
+.pre-match-refresh { flex: 0 0 auto; padding: 8px 14px; border: 1px solid #087148; border-radius: 10px; color: #087148; background: #fff; font-size: 13px; font-weight: 700; }
+.pre-match-refresh:disabled { border-color: #aebbb4; color: #7d8a84; cursor: not-allowed; }
+.pre-match-submit { padding: 15px; border: 1px solid #087148; border-radius: 13px; color: #087148; background: #fff; font-size: 16px; font-weight: 800; }
+.pre-match-submit:disabled { border-color: #aebbb4; color: #7d8a84; cursor: not-allowed; }
 .lineup-hero { margin: -18px -14px 0; padding: 22px 20px 22px; color: #fff; background: #042d20 url('./assets/referee-workbench-stadium-v1.png') center 36% / cover no-repeat; }
 .lineup-hero h1 { margin: 0; font-size: 24px; }
 .lineup-hero > span { color: #c7ead9; font-size: 12px; letter-spacing: .8px; }
@@ -526,7 +562,7 @@ button { cursor: pointer; }
 .lineup-card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
 .lineup-pass, .lineup-return { padding: 12px 5px; border-radius: 11px; font-weight: 800; }
 .lineup-pass { border: 1px solid #087148; color: #087148; background: #effaf3; }
-.lineup-return { border: 1px solid #d99a10; color: #966211; background: #fffaf0; }
+.lineup-return { border: 1px solid var(--status-warning-main); color: var(--status-warning-text); background: var(--status-warning-bg); }
 .lineup-pass:disabled, .lineup-return:disabled { cursor: not-allowed; border-color: #dce6e0; color: #9aa8a0; background: #f6f8f7; opacity: 1; }
 .lineup-bottom { margin: 17px 2px 0; }
 .lineup-bottom button { width: 100%; padding: 15px; border: 0; border-radius: 13px; color: #fff; background: #087148; font-size: 16px; font-weight: 800; }
@@ -665,9 +701,9 @@ button { cursor: pointer; }
 .task:active { transform: scale(.99); box-shadow: 0 6px 14px rgba(8, 47, 37, .11); }
 .task-card-top, .task-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .task-state, .task-role { display: inline-flex; align-items: center; min-height: 25px; padding: 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 800; }
-.task-state-pending { color: #966211; background: #fff5df; }
-.task-state-live { color: #087148; background: #e7f9ee; }
-.task-state-finished { color: #728078; background: #f0f3f1; }
+.task-state-pending { color: var(--status-warning-text); background: var(--status-warning-bg); }
+.task-state-live { color: var(--status-success-text); background: var(--status-success-bg); }
+.task-state-finished { color: var(--status-neutral-text); background: var(--status-neutral-bg); }
 .task-role { max-width: 55%; overflow: hidden; color: #527164; background: #f1f7f3; text-overflow: ellipsis; white-space: nowrap; }
 .task-tournament { display: block; overflow: hidden; margin-top: 14px; color: #0b6b45; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .task h2 { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; margin: 11px 0 14px; color: #173126; font-size: 18px; line-height: 1.35; }
