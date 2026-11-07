@@ -63,7 +63,7 @@
             </span>
           </div>
           <div class="row-status">
-            <el-tag :type="statusType(row.status)" effect="light">{{ row.statusLabel }}</el-tag>
+            <el-tag :type="statusType(row.status)" :class="statusToneClass(statusType(row.status))" effect="light">{{ row.statusLabel }}</el-tag>
             <small v-if="row.reviewNote">{{ row.reviewNote }}</small>
           </div>
           <div class="row-actions">
@@ -100,6 +100,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Refresh, WarningFilled } from '@element-plus/icons-vue'
 import { callFunction } from '../../utils/cloud'
+import { statusToneClass } from '../../utils/statusTone'
 
 const route = useRoute()
 const router = useRouter()
@@ -130,7 +131,7 @@ function formatTime(value) {
 }
 
 function statusType(status) {
-  return ({ pending: 'warning', under_review: 'primary', needs_more_info: 'warning', approved: 'success', rejected: 'danger' })[status] || 'info'
+  return ({ pending: 'warning', under_review: 'warning', needs_more_info: 'warning', approved: 'success', rejected: 'danger' })[status] || 'info'
 }
 
 function proofTypeLabel(type) {

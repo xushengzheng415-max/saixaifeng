@@ -56,7 +56,7 @@
         :loading="saving"
       >开始比赛</el-button>
       <el-button
-        v-if="['scheduled', 'ongoing', 'finished', 'completed', 'ended'].includes(String(match.status || '').toLowerCase()) && match.resultType !== 'forfeit'"
+        v-if="['scheduled', 'postponed', 'ongoing', 'finished', 'completed', 'ended'].includes(String(match.status || '').toLowerCase()) && match.resultType !== 'forfeit'"
         type="danger"
         size="small"
         @click="openForfeitDialog"
@@ -84,11 +84,11 @@
         :loading="saving"
       >重置为未开始</el-button>
       <el-button
-        v-if="match.status === 'scheduled'"
+        v-if="canPostpone"
         type="warning"
         size="small"
-        @click="updateStatus('postponed')"
-        :loading="saving"
+        @click="openPostponeDialog"
+        :loading="postponing"
       >延期</el-button>
     </div>
 
@@ -445,6 +445,38 @@
       </template>
     </el-dialog>
 
+    <!-- 延期弹窗 -->
+    <el-dialog v-model="postponeDialogVisible" title="比赛延期" width="520px" class="postpone-dialog">
+      <el-form :model="postponeForm" label-width="96px">
+        <el-form-item label="延期方式">
+          <el-radio-group v-model="postponeForm.mode">
+            <el-radio label="fixed">固定延期时间</el-radio>
+            <el-radio label="end">排到所有比赛最后</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <template v-if="postponeForm.mode === 'fixed'">
+          <el-form-item label="比赛日期" required>
+            <el-date-picker v-model="postponeForm.matchDate" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" placeholder="选择延期日期" style="width:100%;" />
+          </el-form-item>
+          <el-form-item label="开赛时间" required>
+            <el-time-select v-model="postponeForm.matchTime" start="06:00" step="00:15" end="23:00" format="HH:mm" placeholder="选择开赛时间" style="width:100%;" />
+          </el-form-item>
+          <el-form-item label="场地" required>
+            <el-select v-model="postponeForm.venue" filterable allow-create default-first-option placeholder="选择或填写场地" style="width:100%;">
+              <el-option v-for="item in venueOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+        </template>
+        <div v-else class="postpone-hint">
+          以本赛事原定最后一个比赛日之后的下一周为统一基准：按本场原定星期几落到该周的同一天，开赛时间与场地沿用本场原定值。该时段空闲时直接使用；仅当同日期、同一时段、同场地已被占用时才按周顺延（最多 8 周）。同一轮多场延期会各自落在同一个基准周内，不会重复后移，具体落点由服务端计算并回显。
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="postponeDialogVisible = false">取消</el-button>
+        <el-button type="warning" @click="confirmPostpone" :loading="postponing">确认延期</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 结束比赛 / 录入比分弹窗 -->
     <el-dialog v-model="finishDialogVisible" title="结束比赛 · 录入比分" width="560px" class="finish-dialog">
       <div class="finish-score-input">
@@ -553,7 +585,7 @@
     <!-- 裁判组编辑弹窗 -->
     <el-dialog v-model="refereeDialogVisible" title="编辑裁判组" width="520px">
       <el-form :model="refereeForm" label-width="110px" size="default">
-        <el-alert :title="`${currentMatchFormatLabel}固定安排4人；只有操作负责人可以进入手机端执法`" type="info" :closable="false" style="margin-bottom:16px;" />
+        <el-alert :title="lightweightReferee ? '轻量化裁判模式：本场只安排 1 名记录员（即第四官员），该记录员同时为操作负责人，也只有操作负责人可以进入手机端执法' : `${currentMatchFormatLabel}固定安排4人；只有操作负责人可以进入手机端执法`" type="info" :closable="false" style="margin-bottom:16px;" />
         <el-form-item v-for="role in refereeRoleOptions" :key="role.key" :label="role.label" required>
           <el-select v-model="refereeForm[role.key]" :placeholder="`请选择${role.label}`" style="width:100%;" filterable>
             <el-option v-for="r in referees" :key="r._id" :label="`${r.name}（${r.phone || '-'}）`" :value="r._id" />
@@ -623,7 +655,7 @@
 
     <!-- 添加比赛事件弹窗 -->
     <el-dialog v-model="eventDialogVisible" title="添加比赛事件" width="680px" class="event-dialog">
-      <el-form v-loading="eventPlayersLoading" :model="eventForm" label-position="top" class="event-form">
+      <el-form :model="eventForm" label-position="top" class="event-form">
         <div class="event-form-grid">
           <el-form-item label="时间（分钟）" required>
             <el-select v-model="eventForm.minute" filterable placeholder="先选择比赛分钟" style="width:100%">
@@ -663,9 +695,9 @@
             <header><div><strong>换人名单</strong><span>每次最多5组</span></div><el-button size="small" plain type="primary" :disabled="eventForm.substitutions.length >= 5" @click="addSubstitutionRow"><el-icon><Plus /></el-icon>增加一组</el-button></header>
             <div v-for="(row,index) in eventForm.substitutions" :key="index" class="substitution-row">
               <span class="substitution-index">{{ index + 1 }}</span>
-              <el-select v-model="row.outId" filterable clearable placeholder="选择当前在场球员"><el-option v-for="player in substitutionOutOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-select v-model="row.outId" filterable clearable :loading="eventPlayersLoading" placeholder="选择当前在场球员"><el-option v-for="player in substitutionOutOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
               <el-icon class="substitution-arrow"><Right /></el-icon>
-              <el-select v-model="row.inId" filterable clearable placeholder="选择可用替补"><el-option v-for="player in substitutionInOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-select v-model="row.inId" filterable clearable :loading="eventPlayersLoading" placeholder="选择可用替补"><el-option v-for="player in substitutionInOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
               <el-button v-if="eventForm.substitutions.length > 1" text type="danger" circle aria-label="删除这组换人" @click="removeSubstitutionRow(index)"><el-icon><Delete /></el-icon></el-button>
             </div>
           </section>
@@ -681,12 +713,12 @@
             :description="eventOnFieldTip.description"
           />
           <el-form-item :label="eventPlayerFieldLabel" required>
-            <el-select v-model="eventForm.playerName" filterable clearable :disabled="!eventMinuteSelected" :placeholder="eventPlayerPlaceholder" style="width:100%">
+            <el-select v-model="eventForm.playerName" filterable clearable :loading="eventPlayersLoading" :disabled="!eventMinuteSelected" :placeholder="eventPlayerPlaceholder" style="width:100%">
               <el-option v-for="player in eventPlayerOptions" :key="player.value" :label="player.label" :value="player.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="助攻球员" v-if="eventForm.type === 'goal'">
-            <el-select v-model="eventForm.assistName" filterable clearable :disabled="!eventMinuteSelected" placeholder="选择助攻球员（可选）" style="width:100%">
+            <el-select v-model="eventForm.assistName" filterable clearable :loading="eventPlayersLoading" :disabled="!eventMinuteSelected" placeholder="选择助攻球员（可选）" style="width:100%">
               <el-option v-for="player in eventAssistOptions" :key="player.value" :label="player.label" :value="player.value" />
             </el-select>
           </el-form-item>
@@ -1160,6 +1192,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl, rosterExceptionBoard, uploadImageViaWebApi } from '../../utils/cloud'
+import { crewRoles, isLightweightReferee } from '../../utils/refereeMode'
 import { isDemoMode } from '../../utils/demoMode'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
@@ -1607,28 +1640,18 @@ const currentMatchFormatLabel = computed(() => {
   const number = String(currentMatchFormat.value).match(/\d+/)?.[0] || '11'
   return `${number}人制`
 })
-const refereeRoleOptions = computed(() => /^(5|6)/.test(String(currentMatchFormat.value))
-  ? [
-      { key: 'mainReferee', label: '主裁判' },
-      { key: 'secondReferee', label: '第二裁判' },
-      { key: 'thirdReferee', label: '第三裁判' },
-      { key: 'timekeeper', label: '计时员' }
-    ]
-  : [
-      { key: 'mainReferee', label: '主裁判' },
-      { key: 'assistant1', label: '第一助理裁判' },
-      { key: 'assistant2', label: '第二助理裁判' },
-      { key: 'fourthOfficial', label: '第四官员' }
-    ])
+const refereeRoleOptions = computed(() => crewRoles(substitutionTournament.value, currentMatchFormat.value))
+const lightweightReferee = computed(() => isLightweightReferee(substitutionTournament.value))
 const selectedCrewOptions = computed(() => {
   const ids = refereeRoleOptions.value.map(role => refereeForm.value[role.key]).filter(Boolean)
   return referees.value.filter(referee => ids.includes(referee._id))
 })
 const operationRefereeName = computed(() => {
   const id = match.value.operationRefereeId
+  if (!id) return ''
   for (const role of refereeRoleOptions.value) {
     const referee = refereeCrew.value[role.key]
-    if (referee?._id === id) return referee.name
+    if (referee && String(referee._id || '') === String(id)) return referee.name || ''
   }
   return ''
 })
@@ -1892,9 +1915,24 @@ async function loadMatch() {
     if (!m.matchSequence && !m.sequence) {
       calculateMatchSequence(m)
     }
+    prefetchEventPlayers()
   } catch (err) {
     ElMessage.error('加载比赛失败: ' + err.message)
   }
+}
+
+// 详情页打开后预热两队球员名单，避免首次点“添加事件”时再等一轮网络。
+function prefetchEventPlayers() {
+  const targets = [
+    [homePlayers, match.value.homeTeamId],
+    [awayPlayers, match.value.awayTeamId]
+  ]
+  targets.forEach(([target, teamId]) => {
+    if (!teamId || target.value.length) return
+    loadTeamPlayers(teamId).then(players => {
+      if (players.length && !target.value.length) target.value = players
+    })
+  })
 }
 
 // 自动计算场序（按比赛日期时间排序）
@@ -1990,6 +2028,89 @@ async function loadTeamLogos(homeId, awayId) {
     }
   } catch (e) {
     console.warn('加载队徽失败:', e)
+  }
+}
+
+// 延期：改期能力复用 updateMatch 的 postponeMatch 动作，不改动其他字段。
+const postponeDialogVisible = ref(false)
+const postponing = ref(false)
+const postponeForm = ref({ mode:'fixed', matchDate:'', matchTime:'', venue:'' })
+const canPostpone = computed(() => {
+  const status = String(match.value.status || '')
+  return ['scheduled','postponed','pending','not_started','upcoming'].includes(status) &&
+    !isRefereeEvidenceLocked.value &&
+    !(Array.isArray(match.value.events) ? match.value.events.length : 0)
+})
+
+function openPostponeDialog() {
+  if (!ensureEvidenceEditable()) return
+  if (Array.isArray(match.value.events) && match.value.events.length) {
+    ElMessage.warning('本场已录入比赛事件，不能延期')
+    return
+  }
+  postponeForm.value = {
+    mode: 'fixed',
+    matchDate: match.value.matchDate || '',
+    matchTime: match.value.matchTime || '',
+    venue: match.value.venue || ''
+  }
+  postponeDialogVisible.value = true
+}
+
+function postponeDateLabel(dateText) {
+  const matched = String(dateText || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matched) return String(dateText || '')
+  return `${Number(matched[2])} 月 ${Number(matched[3])} 日`
+}
+
+function postponeResultText(target = {}) {
+  const weekday = target.weekdayText ? `（${target.weekdayText}）` : ''
+  const venue = target.venue ? ` · ${target.venue}` : ''
+  let text = `已延期至 ${postponeDateLabel(target.matchDate)}${weekday} ${target.matchTime || ''}${venue}`
+  if (Number(target.shiftWeeks) > 0) text += `，原定场地已被占用，顺延 ${Number(target.shiftWeeks)} 周`
+  if (target.fallbackReason) text += `。${target.fallbackReason}`
+  return text
+}
+
+async function confirmPostpone() {
+  if (postponing.value) return
+  const form = postponeForm.value
+  if (form.mode === 'fixed') {
+    if (!form.matchDate) { ElMessage.warning('请选择延期日期'); return }
+    if (!form.matchTime) { ElMessage.warning('请选择开赛时间'); return }
+    if (!String(form.venue || '').trim()) { ElMessage.warning('请选择延期场地'); return }
+  }
+  postponing.value = true
+  try {
+    const payload = {
+      action: 'postponeMatch',
+      matchId,
+      mode: form.mode
+    }
+    if (form.mode === 'fixed') {
+      payload.matchDate = form.matchDate
+      payload.matchTime = form.matchTime
+      payload.venue = String(form.venue).trim()
+    }
+    const result = await callFunction('updateMatch', payload)
+    if (!result?.success) throw new Error(result?.message || result?.error || '延期未保存，请重试')
+    const target = result.data || {}
+    match.value.status = 'scheduled'
+    match.value.matchDate = target.matchDate || match.value.matchDate
+    match.value.matchTime = target.matchTime || match.value.matchTime
+    match.value.venue = target.venue || match.value.venue
+    if (target.postponedFrom) match.value.postponedFrom = target.postponedFrom
+    match.value.postponedAt = new Date().toISOString()
+    if (target.postponeCount) match.value.postponeCount = target.postponeCount
+    postponeDialogVisible.value = false
+    ElMessage.success({
+      message: postponeResultText(target),
+      duration: 6000
+    })
+  } catch (err) {
+    ElMessage.error('延期失败: ' + (err?.message || '请重试'))
+  } finally {
+    postponing.value = false
   }
 }
 
@@ -2243,7 +2364,7 @@ async function saveMatchEdit() {
       ? (allTeams.value.find(t => t.teamId === f.awayTeamId)?.teamName || match.value.awayTeamName || '')
       : (match.value.awayTeamName || '')
 
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId: f._id,
       data: {
         matchDate: f.matchDate,
@@ -2261,6 +2382,7 @@ async function saveMatchEdit() {
         updateTime: new Date()
       }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛信息未保存，请重试')
     ElMessage.success('保存成功')
     editDialogVisible.value = false
     loadMatch()
@@ -2293,6 +2415,8 @@ async function openAddEventDialog() {
     ])
     homePlayers.value = home
     awayPlayers.value = away
+  } catch (error) {
+    ElMessage.error('加载球员名单失败：' + (error?.message || '请稍后重试'))
   } finally {
     eventPlayersLoading.value = false
   }
@@ -2427,7 +2551,7 @@ async function openRefereeDialog() {
   
   const form = { operationRefereeId: match.value.operationRefereeId || match.value.refereeRecordKeeperId || '' }
   refereeRoleOptions.value.forEach(role => { form[role.key] = c[role.key]?._id || findIdByName(c[role.key]?.name) })
-  const defaultOperatorRole = /^(5|6)/.test(String(currentMatchFormat.value)) ? 'timekeeper' : 'fourthOfficial'
+  const defaultOperatorRole = lightweightReferee.value ? 'fourthOfficial' : (/^(5|6)/.test(String(currentMatchFormat.value)) ? 'timekeeper' : 'fourthOfficial')
   form.operationRefereeId = form.operationRefereeId || form[defaultOperatorRole]
   refereeForm.value = form
   refereeDialogVisible.value = true
@@ -2438,9 +2562,9 @@ async function saveRefereeCrew() {
   saving.value = true
   try {
     const roleIds = refereeRoleOptions.value.map(role => refereeForm.value[role.key])
-    if (roleIds.some(id => !id)) throw new Error('请完整安排4名裁判')
-    if (new Set(roleIds).size !== 4) throw new Error('同一名裁判不能重复担任多个岗位')
-    if (!roleIds.includes(refereeForm.value.operationRefereeId)) throw new Error('操作负责人必须从本场裁判中选择')
+    if (roleIds.some(id => !id)) throw new Error(lightweightReferee.value ? '请指派记录员' : '请完整安排4名裁判')
+    if (new Set(roleIds).size !== roleIds.length) throw new Error('同一名裁判不能重复担任多个岗位')
+    if (!roleIds.includes(refereeForm.value.operationRefereeId)) throw new Error(lightweightReferee.value ? '操作负责人必须为本场记录员' : '操作负责人必须从本场裁判中选择')
     const data = {}
     refereeRoleOptions.value.forEach(role => { data[role.key] = refereeForm.value[role.key] })
     const result = await callFunction('updateMatch', {
@@ -2867,10 +2991,11 @@ async function handleVisualLineupSave(data) {
       updateData.updateTime = new Date()
     }
 
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: updateData
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '阵容未保存，请重试')
 
     // 更新本地数据
     if (!match.value.lineups) match.value.lineups = {}
@@ -3405,6 +3530,7 @@ onMounted(() => {
 .event-form { min-height: 310px; padding: 2px 4px 0; }
 .event-form-grid { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 14px; }
 .event-on-field-tip { margin-bottom: 14px; }
+.postpone-hint { margin: 0 0 6px; padding: 12px 14px; border-radius: 10px; background: #fff7e6; color: #8a5a00; font-size: 13px; line-height: 1.6; }
 .event-form :deep(.el-form-item) { margin-bottom: 18px; }
 .event-form :deep(.el-form-item__label) { height: auto; margin-bottom: 7px; color: #34443b; font-weight: 600; line-height: 1.4; }
 .event-team-item { padding: 12px 14px; border: 1px solid #e3e9e5; border-radius: 7px; background: #f8faf9; }

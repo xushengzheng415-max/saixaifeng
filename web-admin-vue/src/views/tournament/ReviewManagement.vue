@@ -35,7 +35,7 @@
         <div class="review-header">
           <div class="review-title">
             <span class="team-name">{{ req.teamName || '未知球队' }}</span>
-            <el-tag :type="getStatusType(req.status)" size="small">
+            <el-tag :type="getStatusType(req.status)" :class="statusToneClass(getStatusType(req.status))" size="small">
               {{ getStatusText(req.status) }}
             </el-tag>
           </div>
@@ -130,6 +130,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction } from '../../utils/cloud'
+import { statusToneClass } from '../../utils/statusTone'
 
 const route = useRoute()
 const loading = ref(false)

@@ -941,7 +941,7 @@ function divisionProgressLabel(division) { if (division.status === 'completed') 
 function matchDate(match) { return formatDate(match.matchDate || match.date || match.startTime).slice(5).replace(/\./g, '-') }
 function matchTime(match) { const value = match.matchTime || match.time || match.startTime; if (!value) return '时间待定'; if (typeof value === 'string' && value.includes('T')) return value.slice(11, 16); return String(value).slice(0, 5) }
 function teamName(match, side) { return match[`${side}TeamName`] || match[`${side}Name`] || (side === 'home' ? '主队待定' : '客队待定') }
-function matchStatus(status) { return ({ ongoing: '进行中', in_progress: '进行中', live: '进行中', completed: '已结束', finished: '已结束', scheduled: '未开始', pending: '未开始' })[status] || '待确认' }
+function matchStatus(status) { return ({ ongoing: '进行中', in_progress: '进行中', live: '进行中', completed: '已结束', finished: '已结束', scheduled: '未开始', pending: '未开始', postponed: '延期', cancelled: '已取消' })[status] || '待确认' }
 onMounted(loadConsole)
 </script>
 
@@ -955,9 +955,10 @@ onMounted(loadConsole)
 .head-copy h1 { overflow:hidden; margin:0; color:#17241d; font-size:16px; font-weight:650; letter-spacing:.2px; text-overflow:ellipsis; white-space:nowrap; }
 .head-meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:3px 0 0; color:#7c8a82; font-size:12px; }
 .head-meta i { color:#c3ccc6; font-style:normal; }
-.head-state { padding:1px 7px; border-radius:999px; color:#21844d; font-size:11px; background:#eef8f1; }
-.state-draft { color:#77857c; background:#f1f4f2; }
-.state-completed,.state-finished { color:#77857c; background:#f1f4f2; }
+.head-state { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:999px; color:var(--sxf-status-success-text); font-size:11px; background:var(--sxf-status-success-bg); }
+.head-state::before { flex:0 0 auto; width:5px; height:5px; border-radius:50%; content:''; background:currentColor; }
+.state-draft,.state-completed,.state-finished { color:var(--sxf-status-neutral-text); background:var(--sxf-status-neutral-bg); }
+.state-draft::before,.state-completed::before,.state-finished::before { width:3px; height:3px; border:2px solid currentColor; border-radius:50%; content:''; background:transparent; }
 .head-actions { display:flex; flex:0 0 auto; gap:8px; }
 
 .console-main { display:grid; grid-template-columns:minmax(0,1fr) 304px; align-items:stretch; gap:14px; height:calc(100vh - 168px); min-height:520px; }
@@ -1043,8 +1044,13 @@ onMounted(loadConsole)
 .match-list time { flex:0 0 38px; color:#078545; font-size:11px; }
 .match-text { flex:1; overflow:hidden; color:#33473b; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
 .match-text b { color:#a7b3ab; font-size:9px; }
-.match-state { padding:1px 5px; border-radius:4px; color:#75837b; font-size:10px; white-space:nowrap; background:#f1f4f2; }
-.match-ongoing,.match-in_progress,.match-live { color:#078547; background:#e8f8ee; }
+.match-state { display:inline-flex; align-items:center; gap:3px; padding:1px 5px; border-radius:4px; color:var(--sxf-status-neutral-text); font-size:10px; white-space:nowrap; background:var(--sxf-status-neutral-bg); }
+.match-state::before { flex:0 0 auto; width:4px; height:4px; border:1px solid currentColor; border-radius:50%; content:''; background:transparent; }
+.match-ongoing,.match-in_progress,.match-live { color:var(--sxf-status-success-text); background:var(--sxf-status-success-bg); }
+.match-ongoing::before,.match-in_progress::before,.match-live::before { border:0; background:currentColor; }
+.match-cancelled { color:var(--sxf-status-danger-text); background:var(--sxf-status-danger-bg); }
+.match-cancelled::before { border:0; background:currentColor; }
+.match-postponed { color:var(--sxf-status-warning-text); background:var(--sxf-status-warning-bg); }
 .overview-row { display:flex; gap:10px; }
 .overview-row button { display:flex; flex:1; min-width:0; flex-direction:column; gap:1px; padding:8px 0; border:0; border-radius:8px; text-align:left; background:transparent; cursor:pointer; }
 .overview-row button:hover { background:#f7fbf8; }

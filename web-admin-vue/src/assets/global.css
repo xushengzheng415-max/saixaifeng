@@ -21,6 +21,90 @@
   box-sizing: border-box;
 }
 
+/* 统一状态语义色：成功/已确认、警示/待确认、危险/异常、中性/未开始 */
+:root {
+  --sxf-status-success-text: #0b5c39;
+  --sxf-status-success-main: #087a48;
+  --sxf-status-success-bg: #eaf7ee;
+  --sxf-status-success-line: #c6e4d1;
+  --sxf-status-warning-text: #8a5a00;
+  --sxf-status-warning-main: #b7791f;
+  --sxf-status-warning-bg: #fff4dd;
+  --sxf-status-warning-line: #f0d9a8;
+  --sxf-status-danger-text: #b42318;
+  --sxf-status-danger-main: #d92d20;
+  --sxf-status-danger-bg: #fef3f2;
+  --sxf-status-danger-line: #f7c9c5;
+  --sxf-status-neutral-text: #5f6b64;
+  --sxf-status-neutral-main: #8b978f;
+  --sxf-status-neutral-bg: #f0f3f1;
+  --sxf-status-neutral-line: #dde5e0;
+}
+
+/* 状态胶囊：色相之外再用实心点 / 空心圈区分，避免红绿弱辨识 */
+.sxf-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.sxf-status::before {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  content: '';
+  background: currentColor;
+}
+
+.sxf-status--warning::before,
+.sxf-status--neutral::before {
+  width: 4px;
+  height: 4px;
+  border: 2px solid currentColor;
+  background: transparent;
+}
+
+.el-tag.sxf-status--success {
+  --el-tag-bg-color: var(--sxf-status-success-bg);
+  --el-tag-border-color: var(--sxf-status-success-line);
+  --el-tag-text-color: var(--sxf-status-success-text);
+}
+
+.el-tag.sxf-status--warning {
+  --el-tag-bg-color: var(--sxf-status-warning-bg);
+  --el-tag-border-color: var(--sxf-status-warning-line);
+  --el-tag-text-color: var(--sxf-status-warning-text);
+}
+
+.el-tag.sxf-status--danger {
+  --el-tag-bg-color: var(--sxf-status-danger-bg);
+  --el-tag-border-color: var(--sxf-status-danger-line);
+  --el-tag-text-color: var(--sxf-status-danger-text);
+}
+
+.el-tag.sxf-status--neutral {
+  --el-tag-bg-color: var(--sxf-status-neutral-bg);
+  --el-tag-border-color: var(--sxf-status-neutral-line);
+  --el-tag-text-color: var(--sxf-status-neutral-text);
+}
+
+/* 纯文字状态（无胶囊底） */
+.sxf-status-text {
+  font-size: 13px;
+}
+
+.sxf-status-text--neutral {
+  color: var(--sxf-status-neutral-text);
+}
+
+.sxf-status-text--warning {
+  color: var(--sxf-status-warning-text);
+}
+
 html, body, #app {
   height: 100%;
   color: #1f2937;

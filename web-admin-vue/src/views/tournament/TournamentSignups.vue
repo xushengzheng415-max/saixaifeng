@@ -36,7 +36,7 @@
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">
+            <el-tag :type="getStatusType(row.status)" :class="statusToneClass(getStatusType(row.status))" size="small">
               {{ statusLabels[row.status] || row.status }}
             </el-tag>
           </template>
@@ -48,11 +48,11 @@
               <el-button type="danger" size="small" @click="rejectSignup(row)">拒绝</el-button>
             </template>
             <template v-else-if="row.status === 'invited'">
-              <span style="color: #909399; font-size: 13px;">等待球队确认</span>
+              <span class="sxf-status-text sxf-status-text--neutral">等待球队确认</span>
               <el-button type="danger" size="small" link @click="cancelInvite(row)">取消</el-button>
             </template>
             <template v-else>
-              <span style="color: #909399; font-size: 13px;">已处理</span>
+              <span class="sxf-status-text sxf-status-text--neutral">已处理</span>
             </template>
           </template>
         </el-table-column>
@@ -71,6 +71,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { queryById, queryList, updateRecord, deleteRecord } from '../../utils/cloud'
+import { statusToneClass } from '../../utils/statusTone'
 
 const route = useRoute()
 const tournamentId = route.params.id
